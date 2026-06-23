@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: web
+      target: combined
     restart: always
     environment:
       - NODE_ENV=production
@@ -23,7 +23,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-      target: server
+      target: combined
     restart: always
     environment:
       - NODE_ENV=production
