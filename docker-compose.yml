@@ -4,7 +4,8 @@ services:
   web:
     build:
       context: .
-      dockerfile: ./apps/web/Dockerfile
+      dockerfile: ./Dockerfile
+      target: web
     restart: always
     environment:
       - NODE_ENV=production
@@ -21,7 +22,8 @@ services:
   server:
     build:
       context: .
-      dockerfile: ./apps/server/Dockerfile
+      dockerfile: ./Dockerfile
+      target: server
     restart: always
     environment:
       - NODE_ENV=production

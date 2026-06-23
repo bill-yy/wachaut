@@ -11,7 +11,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 
 # Build both apps
-ENV VITE_WS_URL=wss://wachaut.billytech.es
+ENV VITE_WS_URL=wss://api-wachaut.billytech.es
 RUN pnpm --filter @wachaut/web build
 RUN pnpm --filter @wachaut/server build
 
