@@ -1,11 +1,13 @@
-version: '3.8'
+name: wachaut
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: ./apps/web/Dockerfile
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm build && node build"
     restart: always
+    volumes:
+      - ./:/app
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -20,10 +22,12 @@ services:
       - dokploy-network
 
   server:
-    build:
-      context: .
-      dockerfile: ./apps/server/Dockerfile
+    image: node:22-alpine
+    working_dir: /app/apps/server
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm build && node dist/index.js"
     restart: always
+    volumes:
+      - ./:/app
     environment:
       - NODE_ENV=production
       - PORT=3001
