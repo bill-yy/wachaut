@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   web:
-    image: ghcr.io/bill-yy/wachaut/web:latest
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
     restart: always
     environment:
       - NODE_ENV=production
@@ -17,7 +19,9 @@ services:
       - dokploy-network
 
   server:
-    image: ghcr.io/bill-yy/wachaut/server:latest
+    build:
+      context: .
+      dockerfile: ./apps/server/Dockerfile
     restart: always
     environment:
       - NODE_ENV=production

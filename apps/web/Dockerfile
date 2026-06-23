@@ -3,6 +3,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
+COPY apps/server/package.json ./apps/server/
 COPY packages/shared-types/package.json ./packages/shared-types/
 RUN pnpm install --frozen-lockfile
 COPY . .
@@ -17,4 +18,5 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/node_modules ./node_modules
 EXPOSE 3000
 ENV NODE_ENV=production
+ENV PORT=3000
 CMD ["node", "build"]
