@@ -20,8 +20,7 @@ FROM node:22-alpine AS web
 WORKDIR /app
 COPY --from=builder /app/apps/web/build ./build
 COPY --from=builder /app/apps/web/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/web/node_modules ./node_modules
+RUN sed -i '/@wachaut\/shared-types/d' package.json && npm install --omit=dev
 EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -32,8 +31,7 @@ FROM node:22-alpine AS server
 WORKDIR /app
 COPY --from=builder /app/apps/server/dist ./dist
 COPY --from=builder /app/apps/server/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/server/node_modules ./node_modules
+RUN sed -i '/@wachaut\/shared-types/d' package.json && npm install --omit=dev
 EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
