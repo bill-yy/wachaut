@@ -56,8 +56,8 @@ importers:
         version: 4.8.3
     devDependencies:
       '@sveltejs/adapter-node':
-        specifier: ^5.0.0
-        version: 5.5.6(@sveltejs/kit@2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))
+        specifier: 5.5.4
+        version: 5.5.4(@sveltejs/kit@2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))
       '@sveltejs/kit':
         specifier: ^2.9.0
         version: 2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3))
@@ -561,15 +561,6 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-replace@6.0.3':
-    resolution: {integrity: sha512-J4RZarRvQAm5IF0/LwUUg+obsm+xZhYnbMXmXROyoSE1ATJe3oXSb9L5MMppdxP2ylNSjv6zFBwKYjcKMucVfA==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-
   '@rollup/pluginutils@5.4.0':
     resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
     engines: {node: '>=14.0.0'}
@@ -715,8 +706,8 @@ packages:
     peerDependencies:
       acorn: ^8.9.0
 
-  '@sveltejs/adapter-node@5.5.6':
-    resolution: {integrity: sha512-OSclz7clrNzpks+CHoPVmc/eZ/+Kz/0VSf4t65TIrw+FXPBXGuqtHOCMITel2ovbyKrx05MQ4HiUj4X0nhueWA==}
+  '@sveltejs/adapter-node@5.5.4':
+    resolution: {integrity: sha512-45X92CXW+2J8ZUzPv3eLlKWEzINKiiGeFWTjyER4ZN4sGgNoaoeSkCY/QYNxHpPXy71QPsctwccBo9jJs0ySPQ==}
     peerDependencies:
       '@sveltejs/kit': ^2.4.0
 
@@ -2136,13 +2127,6 @@ snapshots:
     optionalDependencies:
       rollup: 4.62.2
 
-  '@rollup/plugin-replace@6.0.3(rollup@4.62.2)':
-    dependencies:
-      '@rollup/pluginutils': 5.4.0(rollup@4.62.2)
-      magic-string: 0.30.21
-    optionalDependencies:
-      rollup: 4.62.2
-
   '@rollup/pluginutils@5.4.0(rollup@4.62.2)':
     dependencies:
       '@types/estree': 1.0.9
@@ -2234,12 +2218,11 @@ snapshots:
     dependencies:
       acorn: 8.17.0
 
-  '@sveltejs/adapter-node@5.5.6(@sveltejs/kit@2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))':
+  '@sveltejs/adapter-node@5.5.4(@sveltejs/kit@2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))':
     dependencies:
       '@rollup/plugin-commonjs': 29.0.3(rollup@4.62.2)
       '@rollup/plugin-json': 6.1.0(rollup@4.62.2)
       '@rollup/plugin-node-resolve': 16.0.3(rollup@4.62.2)
-      '@rollup/plugin-replace': 6.0.3(rollup@4.62.2)
       '@sveltejs/kit': 2.67.0(@sveltejs/vite-plugin-svelte@4.0.4(svelte@5.56.4(@typescript-eslint/types@8.62.0))(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3)))(svelte@5.56.4(@typescript-eslint/types@8.62.0))(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.0)(tsx@4.22.4)(yaml@1.10.3))
       rollup: 4.62.2
 
