@@ -4,17 +4,11 @@ WORKDIR /app
 # Install pnpm
 RUN npm install -g pnpm
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/server/package.json ./apps/server/
-COPY packages/shared-types/package.json ./packages/shared-types/
+# Copy all files first (works with any build context)
+COPY . .
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
-
-# Copy source code
-COPY . .
 
 # Build both apps
 ENV VITE_WS_URL=wss://wachaut.billytech.es
