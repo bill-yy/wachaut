@@ -1,13 +1,12 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
-RUN npm install -g pnpm
-COPY package.json pnpm-workspace.yaml ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/server/package.json ./apps/server/
-COPY packages/shared-types/package.json ./packages/shared-types/
-RUN pnpm install --frozen-lockfile
+
+# Copy all files
 COPY . .
-RUN pnpm --filter @wachaut/server build
+
+# Install dependencies and build
+RUN npm install
+RUN npm run build --workspace=@wachaut/server
 
 FROM node:22-alpine
 WORKDIR /app
