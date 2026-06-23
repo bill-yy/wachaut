@@ -2,10 +2,7 @@ version: '3.8'
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
+    image: ghcr.io/bill-yy/wachaut/web:latest
     restart: always
     environment:
       - NODE_ENV=production
@@ -20,10 +17,7 @@ services:
       - dokploy-network
 
   server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
+    image: ghcr.io/bill-yy/wachaut/server:latest
     restart: always
     environment:
       - NODE_ENV=production
