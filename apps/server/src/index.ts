@@ -8,7 +8,7 @@ const fastify = Fastify({
 
 // Enable CORS
 await fastify.register(cors, {
-  origin: true,
+  origin: ['https://wachaut.billytech.es', 'https://api-wachaut.billytech.es'],
   credentials: true
 });
 
@@ -46,7 +46,7 @@ setInterval(() => {
 // Socket.IO setup
 const io = new Server(fastify.server, {
   cors: {
-    origin: true,
+    origin: ['https://wachaut.billytech.es', 'https://api-wachaut.billytech.es'],
     credentials: true
   }
 });

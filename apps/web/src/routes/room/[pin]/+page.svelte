@@ -50,7 +50,7 @@
 		error = '';
 
 		try {
-			const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
+			const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
 			socket = io(wsUrl, { transports: ['websocket'] });
 
 			socket.on('connect', () => {

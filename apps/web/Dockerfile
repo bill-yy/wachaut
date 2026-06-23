@@ -7,7 +7,7 @@ COPY apps/server/package.json ./apps/server/
 COPY packages/shared-types/package.json ./packages/shared-types/
 RUN pnpm install --frozen-lockfile
 COPY . .
-ENV VITE_WS_URL=wss://wachaut.billytech.es
+ENV VITE_WS_URL=wss://api-wachaut.billytech.es
 RUN pnpm --filter @wachaut/web build
 
 FROM node:22-alpine
