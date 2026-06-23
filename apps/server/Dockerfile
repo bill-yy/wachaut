@@ -10,10 +10,12 @@ RUN pnpm --filter @wachaut/server build
 
 FROM node:22-alpine
 WORKDIR /app
-RUN npm install -g pnpm
 COPY --from=builder /app/apps/server/dist ./dist
 COPY --from=builder /app/apps/server/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/node_modules ./node_modules
 EXPOSE 3001
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV HOST=0.0.0.0
 CMD ["node", "dist/index.js"]
