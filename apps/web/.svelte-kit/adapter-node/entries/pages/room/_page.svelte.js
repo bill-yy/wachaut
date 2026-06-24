@@ -8,26 +8,23 @@ import "../../../chunks/state.svelte.js";
 import "socket.io-client";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    let isSharing = false;
+    let state = {
+      isSharing: false
+    };
     onDestroy(() => {
       stopSharing();
     });
     function stopSharing() {
-      isSharing = false;
+      state.isSharing = false;
     }
     head("ek3c68", $$renderer2, ($$renderer3) => {
       $$renderer3.title(($$renderer4) => {
-        $$renderer4.push(`<title>${escape_html(isSharing ? "Compartiendo pantalla - Wachaut" : "Sala de Wachaut")}</title>`);
+        $$renderer4.push(`<title>${escape_html(state.isSharing ? "Compartiendo pantalla - Wachaut" : "Sala de Wachaut")}</title>`);
       });
     });
-    $$renderer2.push(`<main class="flex min-h-screen flex-col bg-slate-50">`);
     {
       $$renderer2.push("<!--[0-->");
-      $$renderer2.push(`<div class="flex flex-1 flex-col items-center justify-center"><div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100"><div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-600"></div></div> <p class="text-lg font-semibold text-slate-700">Preparando sala...</p> <p class="mt-2 text-sm text-slate-400">Un momento</p></div>`);
-    }
-    $$renderer2.push(`<!--]--></main> `);
-    {
-      $$renderer2.push("<!--[-1-->");
+      $$renderer2.push(`<main class="flex min-h-screen flex-col items-center justify-center bg-slate-50"><div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100"><div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-600"></div></div> <p class="text-lg font-semibold text-slate-700">Preparando sala...</p> <p class="mt-2 text-sm text-slate-400">Un momento</p></main>`);
     }
     $$renderer2.push(`<!--]-->`);
   });
