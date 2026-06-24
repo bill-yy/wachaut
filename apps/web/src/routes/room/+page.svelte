@@ -232,10 +232,18 @@
       localStream = stream;
       isSharing = true;
 
-      // Notify all connected viewers
-      if (socket && connected) {
-        socket.emit('host:sharing-started', { roomId });
+      // Wait for DOM update so videoPreview exists
+      await tick();
+      if (videoPreview) {
+        videoPreview.srcObject = stream;
+        videoPreview.play().catch(() => {});
       }
+
+      // Add tracks to ALL existing peer connections
+      // This triggers onnegotiationneeded → renegotiation → viewers get ontrack
+      peers.forEach((pc) => {
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      });
 
       stream.getVideoTracks()[0].onended = () => {
         stopSharing();
