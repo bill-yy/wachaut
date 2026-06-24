@@ -4,8 +4,9 @@
 	import { goto } from '$app/navigation';
 	import { Monitor, Copy, Check, Share2, StopCircle, Users, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, Radio, AlertTriangle, Loader2 } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
+	import { browser } from '$app/environment';
 
-	// Room state
+	// Room state - initialized with safe defaults for SSR
 	let roomId = $state('');
 	let pin = $state('');
 	let isSharing = $state(false);
@@ -22,6 +23,7 @@
 	let roomUrl = $state('');
 	let isLoading = $state(true);
 	let showLeaveConfirm = $state(false);
+	let isClient = $state(false);
 
 	// TURN/STUN servers
 	const iceServers = [
@@ -29,13 +31,18 @@
 		{ urls: 'stun:stun1.l.google.com:19302' }
 	];
 
-	onMount(() => {
-		// Generate room ID (opaque, unique) and PIN (password)
+	// Initialize room data - only runs on client
+	function initRoom() {
+		if (!browser) return;
 		roomId = crypto.randomUUID();
 		pin = Math.floor(100000 + Math.random() * 900000).toString();
-		// URL uses the opaque roomId, not the PIN
 		roomUrl = `${window.location.origin}/room/${roomId}`;
 		isLoading = false;
+		isClient = true;
+	}
+
+	onMount(() => {
+		initRoom();
 
 		// Connect to signaling server
 		const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
@@ -243,6 +250,16 @@
 </svelte:head>
 
 <main class="flex min-h-screen flex-col bg-slate-50">
+	{#if !isClient}
+		<!-- SSR Loading State -->
+		<div class="flex flex-1 flex-col items-center justify-center">
+			<div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+				<div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-slate-600"></div>
+			</div>
+			<p class="text-lg font-semibold text-slate-700">Preparando sala...</p>
+			<p class="mt-2 text-sm text-slate-400">Un momento</p>
+		</div>
+	{:else}
 	<!-- Header -->
 	<header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 px-4 py-3 backdrop-blur-xl">
 		<div class="mx-auto flex max-w-6xl items-center justify-between">
@@ -415,6 +432,7 @@
 			</div>
 		</div>
 	</div>
+	{/if}
 </main>
 
 <!-- Leave Confirmation Modal -->
