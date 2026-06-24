@@ -37,7 +37,7 @@
   let videoPreview = $state(null);
 
   // WebRTC
-  let peers = $state(new Map());
+  let peers = new Map();
   let localStream = $state(null);
 
   // Chat
