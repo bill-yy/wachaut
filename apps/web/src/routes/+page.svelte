@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Monitor, Users, ArrowRight, Shield, Zap, Globe, ChevronRight, Radio, Wifi, Link2 } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
+	import { writable } from 'svelte/store';
 
-	let isCreating = $state(false);
+	const isCreating = writable(false);
 
 	async function createRoom() {
-		isCreating = true;
+		isCreating.set(true);
 		try {
 			await goto('/room');
 		} catch (err) {
@@ -65,8 +66,8 @@
 
 			<!-- Primary Actions -->
 			<div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
-				<button onclick={createRoom} disabled={isCreating} class="btn-primary gap-2 px-8 py-4 text-base">
-					{#if isCreating}
+				<button onclick={createRoom} disabled={$isCreating} class="btn-primary gap-2 px-8 py-4 text-base">
+					{#if $isCreating}
 						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
 						Creando sala...
 					{:else}

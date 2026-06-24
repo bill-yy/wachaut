@@ -1,7 +1,8 @@
-import { s as sanitize_props, a as spread_props, b as slot, h as head, c as attr } from "../../chunks/root.js";
+import { s as sanitize_props, a as spread_props, b as slot, h as head, c as attr, d as store_get, u as unsubscribe_stores } from "../../chunks/root.js";
 import "@sveltejs/kit/internal";
 import "../../chunks/exports.js";
 import "../../chunks/utils.js";
+import { w as writable } from "../../chunks/index.js";
 import "@sveltejs/kit/internal/server";
 import "../../chunks/state.svelte.js";
 import { M as Monitor } from "../../chunks/monitor.js";
@@ -319,7 +320,8 @@ function Zap($$renderer, $$props) {
 }
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    let isCreating = false;
+    var $$store_subs;
+    const isCreating = writable(false);
     head("1uha8ag", $$renderer2, ($$renderer3) => {
       $$renderer3.title(($$renderer4) => {
         $$renderer4.push(`<title>Wachaut — Comparte tu pantalla al instante</title>`);
@@ -330,8 +332,11 @@ function _page($$renderer, $$props) {
     Monitor($$renderer2, { class: "h-4.5 w-4.5 text-white" });
     $$renderer2.push(`<!----></div> <span class="text-lg font-bold text-slate-800">Wachaut</span></div> <div class="flex items-center gap-2"><span class="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600"><span class="relative flex h-2 w-2"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span> <span class="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span></span> Servicio activo</span></div></div></nav> <section class="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center"><div class="mx-auto max-w-xl animate-slide-up"><div class="mb-6 flex justify-center"><div class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-xs font-medium text-blue-600">`);
     Wifi($$renderer2, { class: "h-3.5 w-3.5" });
-    $$renderer2.push(`<!----> Conexión directa P2P</div></div> <h1 class="mb-4 text-5xl font-extrabold tracking-tight text-slate-800 sm:text-6xl">Comparte tu pantalla</h1> <p class="mb-2 text-lg text-slate-500">Sin registro, sin complicaciones. Crea una sala y comparte el enlace.</p> <p class="mb-10 text-sm text-slate-400">Hasta 5 espectadores · Audio incluido · Funciona en cualquier navegador</p> <div class="flex flex-col gap-3 sm:flex-row sm:justify-center"><button${attr("disabled", isCreating, true)} class="btn-primary gap-2 px-8 py-4 text-base">`);
-    {
+    $$renderer2.push(`<!----> Conexión directa P2P</div></div> <h1 class="mb-4 text-5xl font-extrabold tracking-tight text-slate-800 sm:text-6xl">Comparte tu pantalla</h1> <p class="mb-2 text-lg text-slate-500">Sin registro, sin complicaciones. Crea una sala y comparte el enlace.</p> <p class="mb-10 text-sm text-slate-400">Hasta 5 espectadores · Audio incluido · Funciona en cualquier navegador</p> <div class="flex flex-col gap-3 sm:flex-row sm:justify-center"><button${attr("disabled", store_get($$store_subs ??= {}, "$isCreating", isCreating), true)} class="btn-primary gap-2 px-8 py-4 text-base">`);
+    if (store_get($$store_subs ??= {}, "$isCreating", isCreating)) {
+      $$renderer2.push("<!--[0-->");
+      $$renderer2.push(`<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div> Creando sala...`);
+    } else {
       $$renderer2.push("<!--[-1-->");
       Radio($$renderer2, { class: "h-5 w-5" });
       $$renderer2.push(`<!----> Crear una sala `);
@@ -351,6 +356,7 @@ function _page($$renderer, $$props) {
     $$renderer2.push(`<!----></div></div> <h3 class="mb-2 text-sm font-bold text-slate-800">Desde el navegador</h3> <p class="text-sm leading-relaxed text-slate-500">No necesitas instalar nada. Funciona en Chrome, Firefox, Edge y Safari.</p></div> <div class="card text-center"><div class="mb-4 flex justify-center"><div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">`);
     Shield($$renderer2, { class: "h-6 w-6 text-emerald-500" });
     $$renderer2.push(`<!----></div></div> <h3 class="mb-2 text-sm font-bold text-slate-800">Privado y seguro</h3> <p class="text-sm leading-relaxed text-slate-500">Conexión directa entre vosotros. Sin servidores de por medio viendo tu contenido.</p></div></div></div></section> <footer class="border-t border-slate-200/60 bg-white/30 px-4 py-8 text-center backdrop-blur-sm"><p class="text-xs text-slate-400">Wachaut — Comparte tu pantalla con amigos · Hecho con codigo</p></footer></main>`);
+    if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }
 export {
