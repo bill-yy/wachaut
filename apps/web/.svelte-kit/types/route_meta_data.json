@@ -1,5 +1,7 @@
 {
 	"/": [],
-	"/room": [],
+	"/room": [
+		"src/routes/room/+page.ts"
+	],
 	"/room/[roomId]": []
 }

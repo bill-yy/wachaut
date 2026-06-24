@@ -152,6 +152,12 @@
       "_state.svelte.js"
     ]
   },
+  "src/routes/room/+page.ts": {
+    "file": "entries/pages/room/_page.ts.js",
+    "name": "entries/pages/room/_page.ts",
+    "src": "src/routes/room/+page.ts",
+    "isEntry": true
+  },
   "src/routes/room/[roomId]/+page.svelte": {
     "file": "entries/pages/room/_roomId_/_page.svelte.js",
     "name": "entries/pages/room/_roomId_/_page.svelte",
