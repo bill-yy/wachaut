@@ -497,7 +497,9 @@
             autoplay
             muted
             playsinline
-            class="w-full h-full object-contain"
+            onclick={() => { if (videoEl) { videoEl.muted = false; isMuted = false; } }}
+            class="w-full h-full object-contain cursor-pointer"
+            title="Haz clic para activar audio"
           ></video>
 
           <!-- Live Badge -->

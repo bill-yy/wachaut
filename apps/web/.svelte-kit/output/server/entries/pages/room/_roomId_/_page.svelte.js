@@ -202,7 +202,7 @@ function _page($$renderer, $$props) {
 			$$renderer.push(`<!----></div> <h2 class="text-lg font-semibold text-slate-700 mb-2">Esperando al anfitrión</h2> <p class="text-sm text-slate-500 mb-6">El anfitrión comenzará a compartir pronto</p> <button class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors text-sm font-medium">Salir de la sala</button></div></div>`);
 		} else if (status === "live") {
 			$$renderer.push("<!--[3-->");
-			$$renderer.push(`<div class="relative"><div class="relative rounded-2xl overflow-hidden bg-black shadow-xl aspect-video" role="region" aria-label="Video en vivo"><video autoplay="" muted="" playsinline="" class="w-full h-full object-contain"></video> <div class="absolute top-4 left-4 flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-semibold"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> EN VIVO</div> `);
+			$$renderer.push(`<div class="relative"><div class="relative rounded-2xl overflow-hidden bg-black shadow-xl aspect-video" role="region" aria-label="Video en vivo"><video autoplay="" muted="" playsinline="" class="w-full h-full object-contain cursor-pointer" title="Haz clic para activar audio"></video> <div class="absolute top-4 left-4 flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-semibold"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> EN VIVO</div> `);
 			$$renderer.push("<!--[-1-->");
 			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-center gap-3 mt-4"><!--[-->`);
 			const each_array = ensure_array_like(reactionEmojis);
