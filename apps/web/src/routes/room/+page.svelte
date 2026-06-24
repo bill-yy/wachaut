@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { Monitor, Copy, Check, Share2, StopCircle, Users, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, AlertTriangle } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
 
@@ -139,7 +138,7 @@
 		stopSharing();
 		socket?.emit('host:close-room', { roomId });
 		socket?.disconnect();
-		goto('/');
+		window.location.href = '/';
 	}
 </script>
 
@@ -147,7 +146,7 @@
 	<title>Sala de Wachaut</title>
 </svelte:head>
 
-<!-- Loading overlay: covers everything until socket connects -->
+<!-- Loading overlay -->
 <div class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-50 transition-opacity duration-500" class:opacity-0={isReady} class:pointer-events-none={isReady}>
 	<div class="text-center">
 		<div class="mb-4 inline-flex h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-800"></div>
@@ -155,7 +154,7 @@
 	</div>
 </div>
 
-<!-- Room: always rendered, hidden during loading -->
+<!-- Room: always rendered -->
 <main class="min-h-screen flex-col bg-slate-50 transition-opacity duration-500" class:flex={isReady} class:hidden={!isReady} class:opacity-0={!isReady}>
 	<header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 px-4 py-3 backdrop-blur-xl">
 		<div class="mx-auto flex max-w-6xl items-center justify-between">

@@ -159,10 +159,6 @@
     "isEntry": true,
     "imports": [
       "_index.js",
-      "_exports.js",
-      "_utils.js",
-      "_root.js",
-      "_state.svelte.js",
       "_monitor.js"
     ]
   },

@@ -1,10 +1,4 @@
 import { f as current_component, a as sanitize_props, b as spread_props, s as slot, h as head, c as attr, g as escape_html, p as pop, e as push, i as stringify } from "../../../chunks/index.js";
-import "@sveltejs/kit/internal";
-import "../../../chunks/exports.js";
-import "../../../chunks/utils.js";
-import "@sveltejs/kit/internal/server";
-import "../../../chunks/root.js";
-import "../../../chunks/state.svelte.js";
 import "socket.io-client";
 import { I as Icon, M as Monitor } from "../../../chunks/monitor.js";
 function onDestroy(fn) {
