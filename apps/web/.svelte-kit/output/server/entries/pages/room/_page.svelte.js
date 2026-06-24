@@ -289,13 +289,25 @@ function _page($$renderer, $$props) {
 						pc.close();
 						peers.delete(data.viewerId);
 					}
+					pendingCandidates.delete(data.viewerId);
 				}
 			});
 			socket.on("viewer:signal", async (data) => {
 				const pc = peers.get(data.viewerId);
 				if (!pc) return;
-				if (data.signal.type === "answer") await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
-				else if (data.signal.candidate) await pc.addIceCandidate(new RTCIceCandidate(data.signal));
+				if (data.signal.type === "answer") {
+					await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+					const queued = pendingCandidates.get(data.viewerId) || [];
+					for (const candidate of queued) await pc.addIceCandidate(candidate);
+					pendingCandidates.delete(data.viewerId);
+				} else if (data.signal.candidate) {
+					const candidate = new RTCIceCandidate(data.signal);
+					if (pc.remoteDescription) await pc.addIceCandidate(candidate);
+					else {
+						if (!pendingCandidates.has(data.viewerId)) pendingCandidates.set(data.viewerId, []);
+						pendingCandidates.get(data.viewerId).push(candidate);
+					}
+				}
 			});
 			socket.on("chat:history", (data) => {
 				if (data?.messages) chatMessages = data.messages.map((m) => ({
@@ -314,6 +326,7 @@ function _page($$renderer, $$props) {
 			});
 		}
 		let iceServers = null;
+		let pendingCandidates = /* @__PURE__ */ new Map();
 		async function fetchIceServers() {
 			if (iceServers) return iceServers;
 			try {

@@ -31,6 +31,7 @@
   let peer = $state(null);
   let pendingStream = $state(null);
   let iceServers = $state(null);
+  let pendingCandidates = [];
 
   async function fetchIceServers() {
     if (iceServers) return iceServers;
@@ -121,7 +122,7 @@
 
   // --- Functions ---
 
-  function connect() {
+  async function connect() {
     if (!pin || pin.length < 4) {
       errorMessage = 'Ingresa un PIN válido';
       status = 'error';
@@ -129,6 +130,9 @@
     }
 
     status = 'connecting';
+
+    // Preload ICE servers before joining so peer creation is synchronous
+    await fetchIceServers();
 
     const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
     socket = io(wsUrl, {
@@ -187,8 +191,7 @@
     // WebRTC signaling — server protocol: { signal } objects
     socket.on('host:signal', async (data) => {
       if (!peer) {
-        const servers = await fetchIceServers();
-        peer = new RTCPeerConnection({ iceServers: servers });
+        peer = new RTCPeerConnection({ iceServers });
 
         peer.ontrack = (event) => {
           if (event.streams && event.streams[0]) {
@@ -230,6 +233,11 @@
       if (sig.type === 'offer') {
         try {
           await peer.setRemoteDescription(new RTCSessionDescription(sig));
+          // Apply any candidates that arrived before the offer
+          for (const candidate of pendingCandidates) {
+            await peer.addIceCandidate(candidate);
+          }
+          pendingCandidates = [];
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
           socket.emit('viewer:signal', { signal: peer.localDescription });
@@ -238,7 +246,12 @@
         }
       } else if (sig.candidate) {
         try {
-          await peer.addIceCandidate(new RTCIceCandidate(sig));
+          const candidate = new RTCIceCandidate(sig);
+          if (peer.remoteDescription) {
+            await peer.addIceCandidate(candidate);
+          } else {
+            pendingCandidates.push(candidate);
+          }
         } catch (err) {
           console.error('Error adding ICE candidate:', err);
         }
@@ -250,6 +263,7 @@
         peer.close();
         peer = null;
       }
+      pendingCandidates = [];
       if (videoEl) {
         videoEl.srcObject = null;
       }
@@ -263,6 +277,7 @@
         peer.close();
         peer = null;
       }
+      pendingCandidates = [];
     });
 
     socket.on('room:closed', () => {
@@ -272,6 +287,7 @@
         peer.close();
         peer = null;
       }
+      pendingCandidates = [];
     });
 
     socket.on('disconnect', () => {
@@ -287,6 +303,7 @@
       peer.close();
       peer = null;
     }
+    pendingCandidates = [];
     cleanupSocket();
     if (videoEl) {
       videoEl.srcObject = null;

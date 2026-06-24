@@ -248,6 +248,7 @@
       if (data.viewerId) {
         const pc = peers.get(data.viewerId);
         if (pc) { pc.close(); peers.delete(data.viewerId); }
+        pendingCandidates.delete(data.viewerId);
       }
     });
 
@@ -257,8 +258,22 @@
       if (!pc) return;
       if (data.signal.type === 'answer') {
         await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+        // Apply queued candidates
+        const queued = pendingCandidates.get(data.viewerId) || [];
+        for (const candidate of queued) {
+          await pc.addIceCandidate(candidate);
+        }
+        pendingCandidates.delete(data.viewerId);
       } else if (data.signal.candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(data.signal));
+        const candidate = new RTCIceCandidate(data.signal);
+        if (pc.remoteDescription) {
+          await pc.addIceCandidate(candidate);
+        } else {
+          if (!pendingCandidates.has(data.viewerId)) {
+            pendingCandidates.set(data.viewerId, []);
+          }
+          pendingCandidates.get(data.viewerId).push(candidate);
+        }
       }
     });
 
@@ -287,6 +302,7 @@
 
   // ─── WebRTC ──────────────────────────────────────────────────────────
   let iceServers = $state(null);
+  let pendingCandidates = new Map(); // viewerId -> RTCIceCandidate[]
 
   async function fetchIceServers() {
     if (iceServers) return iceServers;
@@ -412,6 +428,7 @@
 
     peers.forEach(pc => pc.close());
     peers = new Map();
+    pendingCandidates.clear();
 
     if (socket && connected) {
       socket.emit('host:sharing-stopped', { roomId });
