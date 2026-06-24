@@ -1,13 +1,5 @@
-import { v as increment_write_version, D as DIRTY, w as set_signal_status, C as CLEAN, U as UNOWNED, x as DERIVED, y as schedule_effect, z as active_reaction, A as untracking, B as is_runes, E as BLOCK_EFFECT, F as derived_sources, G as state_unsafe_mutation, H as active_effect, I as BRANCH_EFFECT, R as ROOT_EFFECT, J as untracked_writes, K as set_untracked_writes, M as MAYBE_DIRTY, L as HYDRATION_ERROR, N as get_next_sibling, O as define_property, P as set_active_reaction, Q as set_active_effect, S as is_array, T as init_operations, V as get_first_child, W as HYDRATION_START, X as HYDRATION_END, Y as hydration_failed, Z as clear_text_content, _ as array_from, $ as component_root, a0 as is_passive_event, a1 as create_text, a2 as branch, a3 as push, a4 as component_context, a5 as pop, a6 as LEGACY_PROPS, a7 as get, a8 as flush_sync, a9 as render, b as push$1, aa as setContext, p as pop$1 } from "./index.js";
-function equals(value) {
-  return value === this.v;
-}
-function safe_not_equal(a, b) {
-  return a != a ? b == b : a !== b || a !== null && typeof a === "object" || typeof a === "function";
-}
-function safe_equals(value) {
-  return !safe_not_equal(value, this.v);
-}
+import { i as increment_write_version, D as DIRTY, c as set_signal_status, C as CLEAN, U as UNOWNED, d as DERIVED, e as schedule_effect, f as active_reaction, j as untracking, k as is_runes, B as BLOCK_EFFECT, l as derived_sources, m as state_unsafe_mutation, o as active_effect, q as BRANCH_EFFECT, R as ROOT_EFFECT, r as untracked_writes, t as set_untracked_writes, M as MAYBE_DIRTY, H as HYDRATION_ERROR, v as get_next_sibling, w as define_property, x as set_active_reaction, y as set_active_effect, z as is_array, A as init_operations, E as get_first_child, F as HYDRATION_START, G as HYDRATION_END, I as hydration_failed, J as clear_text_content, K as array_from, L as component_root, N as create_text, O as branch, P as push, Q as component_context, S as pop, T as LEGACY_PROPS, V as get, W as flush_sync, X as render, a as push$1, Y as setContext, p as pop$1 } from "./index.js";
+import { a as safe_equals, e as equals } from "./equality.js";
 function hydration_mismatch(location) {
   {
     console.warn(`https://svelte.dev/e/hydration_mismatch`);
@@ -197,6 +189,10 @@ function assign_nodes(start, end) {
     effect.nodes_start = start;
     effect.nodes_end = end;
   }
+}
+const PASSIVE_EVENTS = ["touchstart", "touchmove"];
+function is_passive_event(name) {
+  return PASSIVE_EVENTS.includes(name);
 }
 function mount(component, options) {
   return _mount(component, options);
@@ -502,6 +498,5 @@ function Root($$payload, $$props) {
 }
 const root = asClassComponent(Root);
 export {
-  root as r,
-  safe_not_equal as s
+  root as r
 };

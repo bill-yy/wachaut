@@ -28,7 +28,6 @@
     "prettier": "^3.3.0",
     "prettier-plugin-svelte": "^3.2.0",
     "prettier-plugin-tailwindcss": "^0.6.0",
-    "svelte": "^5.20.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.0",
@@ -38,6 +37,7 @@
   "dependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@wachaut/shared-types": "workspace:*",
-    "socket.io-client": "^4.8.0"
+    "socket.io-client": "^4.8.0",
+    "svelte": "5.20.0"
   }
 }

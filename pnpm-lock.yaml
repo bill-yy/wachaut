@@ -57,6 +57,9 @@ importers:
       socket.io-client:
         specifier: ^4.8.0
         version: 4.8.3
+      svelte:
+        specifier: 5.20.0
+        version: 5.20.0
     devDependencies:
       '@sveltejs/adapter-node':
         specifier: 5.5.4
@@ -100,9 +103,6 @@ importers:
       prettier-plugin-tailwindcss:
         specifier: ^0.6.0
         version: 0.6.14(prettier-plugin-svelte@3.5.2(prettier@3.8.4)(svelte@5.20.0))(prettier@3.8.4)
-      svelte:
-        specifier: ^5.20.0
-        version: 5.20.0
       svelte-check:
         specifier: ^4.0.0
         version: 4.7.0(picomatch@4.0.4)(svelte@5.20.0)(typescript@5.9.3)

@@ -16,10 +16,12 @@
     "src": "../../node_modules/.pnpm/@sveltejs+kit@2.67.0_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.20.0_vite@6.4.3_@types+node@_jsqcedzt7neqho6lpzt53pfjlm/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
     "isEntry": true,
     "imports": [
+      "_escaping.js",
       "_index.js",
       "_state.svelte.js",
       "_exports.js",
       "_utils.js",
+      "_index2.js",
       "_root.js"
     ]
   },
@@ -34,6 +36,7 @@
       "_server.js",
       "_exports.js",
       "_utils.js",
+      "_index2.js",
       "_internal.js"
     ]
   },
@@ -48,13 +51,17 @@
       "_internal.js"
     ]
   },
+  "_equality.js": {
+    "file": "chunks/equality.js",
+    "name": "equality"
+  },
+  "_escaping.js": {
+    "file": "chunks/escaping.js",
+    "name": "escaping"
+  },
   "_exports.js": {
     "file": "chunks/exports.js",
-    "name": "exports",
-    "imports": [
-      "_index.js",
-      "_root.js"
-    ]
+    "name": "exports"
   },
   "_false.js": {
     "file": "chunks/false.js",
@@ -65,6 +72,14 @@
     "name": "index",
     "imports": [
       "_false.js"
+    ]
+  },
+  "_index2.js": {
+    "file": "chunks/index2.js",
+    "name": "index",
+    "imports": [
+      "_index.js",
+      "_equality.js"
     ]
   },
   "_internal.js": {
@@ -79,7 +94,8 @@
     "file": "chunks/root.js",
     "name": "root",
     "imports": [
-      "_index.js"
+      "_index.js",
+      "_equality.js"
     ]
   },
   "_server.js": {
@@ -106,13 +122,6 @@
       "_utils.js"
     ]
   },
-  "_volume-x.js": {
-    "file": "chunks/volume-x.js",
-    "name": "volume-x",
-    "imports": [
-      "_index.js"
-    ]
-  },
   "src/routes/+layout.svelte": {
     "file": "entries/pages/_layout.svelte.js",
     "name": "entries/pages/_layout.svelte",
@@ -122,7 +131,7 @@
       "_index.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BP6VX_kk.css"
+      "_app/immutable/assets/_layout.BFRVDnKC.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -140,8 +149,10 @@
       "_index.js",
       "_exports.js",
       "_utils.js",
+      "_index2.js",
       "_root.js",
-      "_state.svelte.js"
+      "_state.svelte.js",
+      "_escaping.js"
     ]
   },
   "src/routes/room/+page.svelte": {
@@ -151,11 +162,8 @@
     "isEntry": true,
     "imports": [
       "_index.js",
-      "_volume-x.js",
-      "_exports.js",
-      "_utils.js",
-      "_root.js",
-      "_state.svelte.js"
+      "_index2.js",
+      "_escaping.js"
     ]
   },
   "src/routes/room/+page.ts": {
@@ -171,14 +179,11 @@
     "isEntry": true,
     "imports": [
       "_index.js",
-      "_volume-x.js",
       "_exports.js",
       "_utils.js",
       "_root.js",
-      "_state.svelte.js"
-    ],
-    "css": [
-      "_app/immutable/assets/_page.bGqH_t-c.css"
+      "_state.svelte.js",
+      "_escaping.js"
     ]
   },
   "virtual:__sveltekit/env": {

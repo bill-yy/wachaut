@@ -1,10 +1,24 @@
-import { h as head, a as attr, s as store_get, u as unsubscribe_stores, p as pop, b as push } from "../../chunks/index.js";
+import { h as head, s as store_get, u as unsubscribe_stores, p as pop, a as push } from "../../chunks/index.js";
 import "@sveltejs/kit/internal";
-import { w as writable } from "../../chunks/exports.js";
+import "../../chunks/exports.js";
 import "../../chunks/utils.js";
+import { w as writable } from "../../chunks/index2.js";
 import "@sveltejs/kit/internal/server";
 import "../../chunks/root.js";
 import "../../chunks/state.svelte.js";
+import { e as escape_html } from "../../chunks/escaping.js";
+const replacements = {
+  translate: /* @__PURE__ */ new Map([
+    [true, "yes"],
+    [false, "no"]
+  ])
+};
+function attr(name, value, is_boolean = false) {
+  if (value == null || !value && is_boolean || value === "" && name === "class") return "";
+  const normalized = name in replacements && replacements[name].get(value) || value;
+  const assignment = is_boolean ? "" : `="${escape_html(normalized, true)}"`;
+  return ` ${name}${assignment}`;
+}
 function _page($$payload, $$props) {
   push();
   var $$store_subs;
