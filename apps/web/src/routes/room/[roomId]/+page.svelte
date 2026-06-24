@@ -154,7 +154,7 @@
       ];
     });
 
-    // WebRTC signaling
+    // WebRTC signaling — server protocol: { signal } objects
     socket.on('host:signal', async (data) => {
       if (!peer) {
         peer = new RTCPeerConnection({
@@ -166,12 +166,12 @@
 
         peer.ontrack = (event) => {
           if (event.streams && event.streams[0]) {
-            const stream = event.streams[0];
+            const remoteStream = event.streams[0];
             if (videoEl) {
-              videoEl.srcObject = stream;
+              videoEl.srcObject = remoteStream;
               videoEl.play().catch(() => {});
             } else {
-              pendingStream = stream;
+              pendingStream = remoteStream;
             }
             status = 'live';
           }
@@ -179,10 +179,7 @@
 
         peer.onicecandidate = (event) => {
           if (event.candidate && socket) {
-            socket.emit('viewer:signal', {
-              type: 'ice-candidate',
-              candidate: event.candidate
-            });
+            socket.emit('viewer:signal', { signal: event.candidate });
           }
         };
 
@@ -194,25 +191,22 @@
         };
       }
 
-      if (data.type === 'offer') {
+      // data.signal is RTCSessionDescriptionInit or RTCIceCandidateInit
+      const sig = data.signal;
+      if (!sig) return;
+
+      if (sig.type === 'offer') {
         try {
-          await peer.setRemoteDescription(
-            new RTCSessionDescription(data.offer)
-          );
+          await peer.setRemoteDescription(new RTCSessionDescription(sig));
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
-          socket.emit('viewer:signal', {
-            type: 'answer',
-            answer: peer.localDescription
-          });
+          socket.emit('viewer:signal', { signal: peer.localDescription });
         } catch (err) {
           console.error('Error handling offer:', err);
         }
-      } else if (data.type === 'ice-candidate' && data.candidate) {
+      } else if (sig.candidate) {
         try {
-          await peer.addIceCandidate(
-            new RTCIceCandidate(data.candidate)
-          );
+          await peer.addIceCandidate(new RTCIceCandidate(sig));
         } catch (err) {
           console.error('Error adding ICE candidate:', err);
         }
