@@ -128,7 +128,7 @@
       "_index.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.DhO5F3Ti.css"
+      "_app/immutable/assets/_layout.BN8J_EwK.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -161,7 +161,6 @@
       "_index.js",
       "_exports.js",
       "_utils.js",
-      "_index2.js",
       "_root.js",
       "_state.svelte.js",
       "_monitor.js"

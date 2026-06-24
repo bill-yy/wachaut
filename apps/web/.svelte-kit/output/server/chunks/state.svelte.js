@@ -1,4 +1,4 @@
-import { q as noop } from "./index.js";
+import { t as noop } from "./index.js";
 import "./exports.js";
 import "@sveltejs/kit/internal/server";
 import "./root.js";

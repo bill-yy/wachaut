@@ -1,4 +1,4 @@
-import { o as getContext, g as escape_html, p as pop, e as push } from "../../chunks/index.js";
+import { q as getContext, g as escape_html, p as pop, e as push } from "../../chunks/index.js";
 import "../../chunks/state.svelte.js";
 import "@sveltejs/kit/internal";
 import "../../chunks/exports.js";
