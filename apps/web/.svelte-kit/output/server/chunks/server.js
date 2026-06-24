@@ -4166,6 +4166,13 @@ function spread_props(props) {
 	return merged_props;
 }
 /**
+* @param {unknown} value
+* @returns {string}
+*/
+function stringify(value) {
+	return typeof value === "string" ? value : value == null ? "" : value + "";
+}
+/**
 * @param {any} value
 * @param {string | undefined} [hash]
 * @param {Record<string, boolean>} [directives]
@@ -4173,6 +4180,14 @@ function spread_props(props) {
 function attr_class(value, hash, directives) {
 	var result = to_class(value, hash, directives);
 	return result ? ` class="${escape_html(result, true)}"` : "";
+}
+/**
+* @param {any} value
+* @param {Record<string,any>|[Record<string,any>,Record<string,any>]} [directives]
+*/
+function attr_style(value, directives) {
+	var result = to_style(value, directives);
+	return result ? ` style="${escape_html(result, true)}"` : "";
 }
 /**
 * @template V
@@ -4280,4 +4295,4 @@ function derived(fn) {
 	};
 }
 //#endregion
-export { hydrating as $, is_passive_event as A, create_text as B, hydratable_clobbering as C, attr as D, getAbortSignal as E, get as F, set as G, get_next_sibling as H, set_active_effect as I, component_context as J, flushSync as K, set_active_reaction as L, writable as M, active_effect as N, clsx as O, active_reaction as P, hydrate_node as Q, component_root as R, ssr_context as S, lifecycle_function_unavailable as T, init_operations as U, get_first_child as V, mutable_source as W, push$1 as X, pop$1 as Y, async_mode_flag as Z, createContext as _, element as a, HYDRATION_ERROR as at, hasContext as b, render as c, LEGACY_PROPS as ct, slot as d, define_property as dt, set_hydrate_node as et, spread_props as f, fallback as ft, get_render_context as g, get_user_code_location as h, derived as i, state_proxy_unmount as it, readable as j, escape_html as k, rest_props as l, STATE_SYMBOL as lt, unsubscribe_stores as m, run as mt, attributes as n, hydration_mismatch as nt, ensure_array_like as o, hydration_failed as ot, store_get as p, noop as pt, boundary as q, bind_props as r, lifecycle_double_unmount as rt, head as s, experimental_async_required as st, attr_class as t, set_hydrating as tt, sanitize_props as u, array_from as ut, getAllContexts as v, hydratable_serialization_failed as w, setContext as x, getContext as y, clear_text_content as z };
+export { async_mode_flag as $, clsx as A, component_root as B, setContext as C, lifecycle_function_unavailable as D, hydratable_serialization_failed as E, active_effect as F, init_operations as G, create_text as H, active_reaction as I, flushSync as J, mutable_source as K, get as L, is_passive_event as M, readable as N, getAbortSignal as O, writable as P, push$1 as Q, set_active_effect as R, hasContext as S, hydratable_clobbering as T, get_first_child as U, clear_text_content as V, get_next_sibling as W, component_context as X, boundary as Y, pop$1 as Z, get_user_code_location as _, derived as a, lifecycle_double_unmount as at, getAllContexts as b, head as c, hydration_failed as ct, sanitize_props as d, STATE_SYMBOL as dt, hydrate_node as et, slot as f, array_from as ft, unsubscribe_stores as g, run as gt, stringify as h, noop as ht, bind_props as i, hydration_mismatch as it, escape_html as j, attr as k, render as l, experimental_async_required as lt, store_get as m, fallback as mt, attr_style as n, set_hydrate_node as nt, element as o, state_proxy_unmount as ot, spread_props as p, define_property as pt, set as q, attributes as r, set_hydrating as rt, ensure_array_like as s, HYDRATION_ERROR as st, attr_class as t, hydrating as tt, rest_props as u, LEGACY_PROPS as ut, get_render_context as v, ssr_context as w, getContext as x, createContext as y, set_active_reaction as z };

@@ -1,6 +1,6 @@
 import "./internal2.js";
 import { t as uneval } from "./uneval.js";
-import { $ as hydrating, A as is_passive_event, B as create_text, E as getAbortSignal, F as get, G as set, H as get_next_sibling, I as set_active_effect, J as component_context, K as flushSync, L as set_active_reaction, N as active_effect, P as active_reaction, Q as hydrate_node, R as component_root, S as ssr_context, T as lifecycle_function_unavailable, U as init_operations, V as get_first_child, W as mutable_source, X as push, Y as pop, Z as async_mode_flag, _ as createContext, at as HYDRATION_ERROR, b as hasContext, c as render, ct as LEGACY_PROPS, dt as define_property, et as set_hydrate_node, g as get_render_context, i as derived, mt as run, nt as hydration_mismatch, ot as hydration_failed, pt as noop, q as boundary, st as experimental_async_required, tt as set_hydrating, ut as array_from, v as getAllContexts, w as hydratable_serialization_failed, x as setContext, y as getContext, z as clear_text_content } from "./server.js";
+import { $ as async_mode_flag, B as component_root, C as setContext, D as lifecycle_function_unavailable, E as hydratable_serialization_failed, F as active_effect, G as init_operations, H as create_text, I as active_reaction, J as flushSync, K as mutable_source, L as get, M as is_passive_event, O as getAbortSignal, Q as push, R as set_active_effect, S as hasContext, U as get_first_child, V as clear_text_content, W as get_next_sibling, X as component_context, Y as boundary, Z as pop, a as derived, b as getAllContexts, ct as hydration_failed, et as hydrate_node, ft as array_from, gt as run, ht as noop, it as hydration_mismatch, l as render, lt as experimental_async_required, nt as set_hydrate_node, pt as define_property, q as set, rt as set_hydrating, st as HYDRATION_ERROR, tt as hydrating, ut as LEGACY_PROPS, v as get_render_context, w as ssr_context, x as getContext, y as createContext, z as set_active_reaction } from "./server.js";
 //#region \0rolldown/runtime.js
 var __defProp = Object.defineProperty;
 var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);
@@ -714,7 +714,7 @@ var options = {
 		app: ({ head, body, assets, nonce, env }) => "<!DOCTYPE html>\n<html lang=\"es\">\n	<head>\n		<meta charset=\"utf-8\" />\n		<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n		<meta name=\"description\" content=\"Wachaut - Comparte tu pantalla con amigos sin registro\" />\n		<title>Wachaut</title>\n		" + head + "\n	</head>\n	<body data-sveltekit-preload-data=\"hover\">\n		<div style=\"display: contents\">" + body + "</div>\n	</body>\n</html>\n",
 		error: error_template_default
 	},
-	version_hash: "i5p3we"
+	version_hash: "1skbo1"
 };
 async function get_hooks() {
 	let handle;

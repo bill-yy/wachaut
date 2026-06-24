@@ -112,6 +112,14 @@
       "_uneval.js"
     ]
   },
+  "_triangle-alert.js": {
+    "file": "chunks/triangle-alert.js",
+    "name": "triangle-alert",
+    "imports": [
+      "_server.js",
+      "_monitor.js"
+    ]
+  },
   "_uneval.js": {
     "file": "chunks/uneval.js",
     "name": "uneval"
@@ -124,6 +132,14 @@
       "_uneval.js"
     ]
   },
+  "_wifi.js": {
+    "file": "chunks/wifi.js",
+    "name": "wifi",
+    "imports": [
+      "_server.js",
+      "_monitor.js"
+    ]
+  },
   "src/routes/+layout.svelte": {
     "file": "entries/pages/_layout.svelte.js",
     "name": "entries/pages/_layout.svelte",
@@ -133,7 +149,7 @@
       "_server.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.CNpRr14H.css"
+      "_app/immutable/assets/_layout.pK31SF6Y.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -150,7 +166,8 @@
     "imports": [
       "_server.js",
       "_monitor.js",
-      "_navigation.js"
+      "_navigation.js",
+      "_wifi.js"
     ]
   },
   "src/routes/room/+page.svelte": {
@@ -162,7 +179,11 @@
       "_internal.js",
       "_server.js",
       "_monitor.js",
-      "_navigation.js"
+      "_navigation.js",
+      "_triangle-alert.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.CWgnREoX.css"
     ]
   },
   "src/routes/room/[roomId]/+page.svelte": {
@@ -174,7 +195,9 @@
       "_internal.js",
       "_server.js",
       "_client.js",
-      "_monitor.js"
+      "_monitor.js",
+      "_triangle-alert.js",
+      "_wifi.js"
     ]
   },
   "virtual:__sveltekit/env": {
