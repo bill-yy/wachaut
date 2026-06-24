@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Monitor, Copy, Check, Share2, StopCircle, Users, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, AlertTriangle, Eye, Link2 } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
@@ -44,17 +44,15 @@
 
 		socket.on('viewer:joined', async ({ viewerId }: { viewerId: string }) => {
 			viewerCount = viewerCount + 1;
-			await createPeerConnection(viewerId, true);
+			await createPeerConnection(viewerId);
 		});
 
 		socket.on('viewer:signal', async ({ viewerId, signal }: { viewerId: string; signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
 			const peer = peers.get(viewerId);
 			if (!peer) return;
-			if (signal.type === 'offer') {
+
+			if (signal.type === 'answer') {
 				await peer.setRemoteDescription(new RTCSessionDescription(signal));
-				const answer = await peer.createAnswer();
-				await peer.setLocalDescription(answer);
-				socket?.emit('host:signal', { viewerId, signal: answer });
 			} else if (signal.candidate) {
 				await peer.addIceCandidate(new RTCIceCandidate(signal));
 			}
@@ -76,7 +74,7 @@
 		socket?.disconnect();
 	});
 
-	async function createPeerConnection(viewerId: string, isOffer: boolean) {
+	async function createPeerConnection(viewerId: string) {
 		const peer = new RTCPeerConnection({ iceServers });
 		peers.set(viewerId, peer);
 
@@ -91,16 +89,26 @@
 			}
 		};
 
+		// KEY FIX: renegotiate when tracks are added/removed
+		peer.onnegotiationneeded = async () => {
+			try {
+				const offer = await peer.createOffer();
+				await peer.setLocalDescription(offer);
+				socket?.emit('host:signal', { viewerId, signal: peer.localDescription! });
+			} catch (err) {
+				console.error('Negotiation error:', err);
+			}
+		};
+
 		// Add existing stream tracks if already sharing
 		if (stream) {
 			stream.getTracks().forEach(track => peer.addTrack(track, stream!));
 		}
 
-		if (isOffer) {
-			const offer = await peer.createOffer();
-			await peer.setLocalDescription(offer);
-			socket?.emit('host:signal', { viewerId, signal: offer });
-		}
+		// Create initial offer (may or may not have tracks)
+		const offer = await peer.createOffer();
+		await peer.setLocalDescription(offer);
+		socket?.emit('host:signal', { viewerId, signal: peer.localDescription! });
 
 		return peer;
 	}
@@ -115,7 +123,6 @@
 			isSharing = true;
 			errorMsg = '';
 
-			// Wait for next tick so videoPreview element exists in DOM
 			await tick();
 
 			if (videoPreview) {
@@ -123,7 +130,8 @@
 				videoPreview.play().catch(() => {});
 			}
 
-			// Add tracks to all existing peer connections
+			// Add tracks to ALL existing peer connections
+			// This will trigger onnegotiationneeded → renegotiation → viewer gets ontrack
 			peers.forEach((peer) => {
 				stream!.getTracks().forEach(track => peer.addTrack(track, stream!));
 			});
@@ -199,11 +207,6 @@
 		socket?.emit('host:close-room', { roomId });
 		socket?.disconnect();
 		goto('/');
-	}
-
-	// Svelte 5 tick replacement
-	function tick(): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, 0));
 	}
 </script>
 

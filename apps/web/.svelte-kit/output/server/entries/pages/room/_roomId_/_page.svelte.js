@@ -87,7 +87,7 @@ function _page($$renderer, $$props) {
 			});
 		});
 		$$renderer.push(`<main class="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4"><div class="mb-8 flex items-center gap-2.5"><div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 shadow-lg shadow-slate-800/20">`);
-		Monitor($$renderer, { class: "h-4.5 w-4.5 text-white" });
+		Monitor($$renderer, { class: "h-4 w-4 text-white" });
 		$$renderer.push(`<!----></div> <span class="text-lg font-bold text-slate-800">Wachaut</span></div> `);
 		$$renderer.push("<!--[0-->");
 		$$renderer.push(`<div class="w-full max-w-sm animate-slide-up"><div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"><div class="mb-6 flex justify-center"><div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">`);

@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { page } from '$app/stores';
-	import { Monitor, Lock, Users, Wifi, WifiOff, AlertTriangle, Maximize, Minimize, Volume2, VolumeX } from 'lucide-svelte';
+	import { Monitor, Lock, Wifi, WifiOff, AlertTriangle, Maximize, Minimize, Volume2, VolumeX } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
 
 	// --- State ---
 	let pinInput = $state('');
 	let status = $state<'idle' | 'connecting' | 'auth' | 'waiting' | 'live' | 'error' | 'disconnected'>('idle');
 	let errorMsg = $state('');
-	let viewerCount = $state(0);
 	let isFullscreen = $state(false);
 	let isMuted = $state(false);
 
@@ -18,7 +17,7 @@
 	// --- WebRTC ---
 	let socket: ReturnType<typeof io> | null = null;
 	let peer: RTCPeerConnection | null = null;
-	let currentStream: MediaStream | null = null;
+	let pendingStream: MediaStream | null = null;
 
 	const iceServers = [
 		{ urls: 'stun:stun.l.google.com:19302' },
@@ -27,9 +26,27 @@
 
 	const roomId = $derived($page.params.roomId);
 
+	// When videoEl becomes available and we have a pending stream, attach it
+	$effect(() => {
+		if (videoEl && pendingStream) {
+			videoEl.srcObject = pendingStream;
+			videoEl.play().catch(() => {});
+			pendingStream = null;
+		}
+	});
+
 	function setError(msg: string) {
 		errorMsg = msg;
 		status = 'error';
+	}
+
+	function attachStream(stream: MediaStream) {
+		if (videoEl) {
+			videoEl.srcObject = stream;
+			videoEl.play().catch(() => {});
+		} else {
+			pendingStream = stream;
+		}
 	}
 
 	function connect() {
@@ -65,6 +82,7 @@
 		});
 
 		socket.on('host:signal', async ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
+			// Create peer on first signal (the offer)
 			if (!peer) {
 				peer = new RTCPeerConnection({ iceServers });
 
@@ -75,29 +93,30 @@
 				};
 
 				peer.ontrack = (event) => {
-					currentStream = event.streams[0];
-					if (videoEl) {
-						videoEl.srcObject = currentStream;
-						videoEl.play().catch(() => {});
+					// Use the first track's stream (they share the same MediaStream)
+					const remoteStream = event.streams[0];
+					if (remoteStream) {
+						attachStream(remoteStream);
+						status = 'live';
 					}
-					status = 'live';
 				};
 
 				peer.onconnectionstatechange = () => {
-					if (peer?.connectionState === 'failed') {
+					const state = peer?.connectionState;
+					if (state === 'failed') {
 						setError('La conexión se ha perdido.');
-					}
-					if (peer?.connectionState === 'disconnected') {
+					} else if (state === 'disconnected') {
 						status = 'disconnected';
 					}
 				};
 			}
 
+			// Handle offer (initial or renegotiation)
 			if (signal.type === 'offer') {
 				await peer.setRemoteDescription(new RTCSessionDescription(signal));
 				const answer = await peer.createAnswer();
 				await peer.setLocalDescription(answer);
-				socket?.emit('viewer:signal', { signal: answer });
+				socket?.emit('viewer:signal', { signal: peer.localDescription! });
 			} else if (signal.candidate) {
 				await peer.addIceCandidate(new RTCIceCandidate(signal));
 			}
@@ -105,13 +124,13 @@
 
 		socket.on('host:stopped-sharing', () => {
 			status = 'waiting';
-			currentStream = null;
 			if (videoEl) videoEl.srcObject = null;
+			pendingStream = null;
 		});
 
 		socket.on('host:disconnected', () => {
-			status = 'disconnected';
 			setError('El anfitrión se ha desconectado.');
+			socket?.disconnect();
 		});
 
 		socket.on('room:closed', () => {
@@ -150,7 +169,7 @@
 	function disconnect() {
 		peer?.close();
 		peer = null;
-		currentStream = null;
+		pendingStream = null;
 		socket?.disconnect();
 		socket = null;
 		status = 'idle';
@@ -170,7 +189,7 @@
 	<!-- Header -->
 	<div class="mb-8 flex items-center gap-2.5">
 		<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 shadow-lg shadow-slate-800/20">
-			<Monitor class="h-4.5 w-4.5 text-white" />
+			<Monitor class="h-4 w-4 text-white" />
 		</div>
 		<span class="text-lg font-bold text-slate-800">Wachaut</span>
 	</div>
