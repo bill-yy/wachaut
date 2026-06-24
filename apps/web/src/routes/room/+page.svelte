@@ -198,7 +198,7 @@
       if (pc.connectionState === 'failed') { pc.close(); peers.delete(viewerId); }
     };
 
-    // Renegotiate when tracks are added
+    // Renegotiate when tracks are added — this is the ONLY way we send offers
     pc.onnegotiationneeded = async () => {
       try {
         const offer = await pc.createOffer();
@@ -210,14 +210,11 @@
     };
 
     // Add existing stream tracks if already sharing
+    // If sharing, this triggers onnegotiationneeded → offer with tracks
+    // If NOT sharing, no tracks → no offer sent (viewer stays at "waiting")
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
-
-    // Create initial offer
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('host:signal', { viewerId, signal: pc.localDescription });
 
     peers.set(viewerId, pc);
   }

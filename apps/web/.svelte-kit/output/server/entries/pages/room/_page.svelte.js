@@ -333,12 +333,6 @@ function _page($$renderer, $$props) {
 					console.error("Negotiation error:", e);
 				}
 			};
-			const offer = await pc.createOffer();
-			await pc.setLocalDescription(offer);
-			socket.emit("host:signal", {
-				viewerId,
-				signal: pc.localDescription
-			});
 			peers.set(viewerId, pc);
 		}
 		initSocket();
