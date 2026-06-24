@@ -1,6 +1,7 @@
+import "../../chunks/internal.js";
 import { c as head, d as sanitize_props, f as slot, k as attr, p as spread_props } from "../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../chunks/monitor.js";
-import { t as Link_2 } from "../../chunks/navigation.js";
+import { n as Link_2 } from "../../chunks/navigation.js";
 import { t as Wifi } from "../../chunks/wifi.js";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-right.svelte
 function Arrow_right($$renderer, $$props) {
@@ -257,7 +258,9 @@ function _page($$renderer, $$props) {
 		Globe($$renderer, { class: "h-5 w-5 text-blue-500" });
 		$$renderer.push(`<!----></div></div> <h3 class="mb-2 text-sm font-bold text-slate-800">Desde el navegador</h3> <p class="text-sm leading-relaxed text-slate-500">No necesitas instalar nada. Funciona en Chrome, Firefox, Edge y Safari.</p></div> <div class="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md"><div class="mb-4 flex justify-center"><div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">`);
 		Shield($$renderer, { class: "h-5 w-5 text-emerald-500" });
-		$$renderer.push(`<!----></div></div> <h3 class="mb-2 text-sm font-bold text-slate-800">Privado y seguro</h3> <p class="text-sm leading-relaxed text-slate-500">Conexión directa entre vosotros. Sin servidores de por medio.</p></div></div></div></section> <footer class="border-t border-slate-200/60 px-4 py-8 text-center" style="background: rgba(255,255,255,0.2);"><p class="text-xs text-slate-400">Wachaut — Comparte tu pantalla con amigos</p></footer></main>`);
+		$$renderer.push(`<!----></div></div> <h3 class="mb-2 text-sm font-bold text-slate-800">Privado y seguro</h3> <p class="text-sm leading-relaxed text-slate-500">Conexión directa entre vosotros. Sin servidores de por medio.</p></div></div></div></section> <footer class="border-t border-slate-200/60 px-4 py-8 text-center" style="background: rgba(255,255,255,0.2);"><p class="text-xs text-slate-400">Wachaut — Comparte tu pantalla con amigos</p></footer> `);
+		$$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--></main>`);
 	});
 }
 //#endregion

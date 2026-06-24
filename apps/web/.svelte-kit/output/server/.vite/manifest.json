@@ -149,7 +149,7 @@
       "_server.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.9fm11jEg.css"
+      "_app/immutable/assets/_layout.ScoxpJy6.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -164,6 +164,7 @@
     "src": "src/routes/+page.svelte",
     "isEntry": true,
     "imports": [
+      "_internal.js",
       "_server.js",
       "_monitor.js",
       "_navigation.js",
@@ -183,7 +184,7 @@
       "_triangle-alert.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.CWgnREoX.css"
+      "_app/immutable/assets/_page.DrAm8rXH.css"
     ]
   },
   "src/routes/room/[roomId]/+page.svelte": {

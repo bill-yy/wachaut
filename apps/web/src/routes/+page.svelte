@@ -1,8 +1,47 @@
 <script lang="ts">
-	import { Monitor, ArrowRight, Shield, Zap, Globe, Radio, Wifi, Link2, ChevronRight } from 'lucide-svelte';
+	import { Monitor, ArrowRight, Shield, Zap, Globe, Radio, Wifi, Link2, ChevronRight, Users } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
 	let isCreating = $state(false);
+let showOnboarding = $state(false);
+let onboardingStep = $state(0);
+
+onMount(() => {
+	if (!localStorage.getItem('wachaut-onboarded')) {
+		showOnboarding = true;
+	}
+});
+
+function completeOnboarding() {
+	localStorage.setItem('wachaut-onboarded', 'true');
+	showOnboarding = false;
+	onboardingStep = 0;
+}
+
+const onboardingSteps = [
+	{
+		icon: Monitor,
+		title: 'Comparte tu pantalla',
+		description: 'Haz clic en "Compartir mi pantalla" y selecciona qué quieres mostrar.',
+		color: 'bg-blue-50',
+		iconColor: 'text-blue-500'
+	},
+	{
+		icon: Link2,
+		title: 'Comparte el enlace',
+		description: 'Copia el enlace y el PIN, y envíalos a quien quieras que vea tu pantalla.',
+		color: 'bg-amber-50',
+		iconColor: 'text-amber-500'
+	},
+	{
+		icon: Users,
+		title: '¡Listo!',
+		description: 'Tus amigos entran con el PIN y ven tu pantalla en tiempo real.',
+		color: 'bg-emerald-50',
+		iconColor: 'text-emerald-500'
+	}
+];
 
 	async function shareScreen() {
 		isCreating = true;
@@ -157,4 +196,68 @@
 	<footer class="border-t border-slate-200/60 px-4 py-8 text-center" style="background: rgba(255,255,255,0.2);">
 		<p class="text-xs text-slate-400">Wachaut — Comparte tu pantalla con amigos</p>
 	</footer>
+
+	{#if showOnboarding}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+			onclick={(e) => { if (e.target === e.currentTarget) completeOnboarding(); }}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Onboarding"
+		>
+			<div class="mx-4 w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
+				<!-- Step indicator dots -->
+				<div class="mb-8 flex justify-center gap-2">
+					{#each onboardingSteps as _, i}
+						<div
+							class="h-2 rounded-full transition-all duration-300 {i === onboardingStep ? 'w-8 bg-slate-800' : 'w-2 bg-slate-200'}"
+						></div>
+					{/each}
+				</div>
+
+				<!-- Content with transition -->
+				<div class="text-center">
+					<div class="mb-6 flex justify-center">
+						<div class="flex h-20 w-20 items-center justify-center rounded-2xl {onboardingSteps[onboardingStep].color} transition-colors duration-300">
+							<svelte:component this={onboardingSteps[onboardingStep].icon} class="h-10 w-10 {onboardingSteps[onboardingStep].iconColor}" />
+						</div>
+					</div>
+
+					<h2 class="mb-3 text-2xl font-bold text-slate-800">
+						{onboardingSteps[onboardingStep].title}
+					</h2>
+					<p class="mb-8 text-sm leading-relaxed text-slate-500">
+						{onboardingSteps[onboardingStep].description}
+					</p>
+
+					<!-- Action buttons -->
+					<div class="flex flex-col gap-3">
+						{#if onboardingStep < onboardingSteps.length - 1}
+							<button
+								onclick={() => onboardingStep++}
+								class="btn-primary w-full gap-2 px-6 py-3"
+							>
+								Siguiente
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						{:else}
+							<button
+								onclick={completeOnboarding}
+								class="btn-primary w-full gap-2 px-6 py-3"
+							>
+								Entendido
+							</button>
+						{/if}
+
+						<button
+							onclick={completeOnboarding}
+							class="text-sm text-slate-400 transition-colors hover:text-slate-600"
+						>
+							Saltar
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 </main>

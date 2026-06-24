@@ -1,1 +1,0 @@
-import{it as e}from"./BUd-FSwx.js";e();

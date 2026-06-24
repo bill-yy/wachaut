@@ -1,7 +1,7 @@
 import "../../../chunks/internal.js";
 import { d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
-import { t as Link_2 } from "../../../chunks/navigation.js";
+import { n as Link_2, t as Users } from "../../../chunks/navigation.js";
 import { i as Message_circle, n as Share_2, r as Send, t as Triangle_alert } from "../../../chunks/triangle-alert.js";
 import { io } from "socket.io-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-left.svelte
@@ -155,49 +155,6 @@ function Settings($$renderer, $$props) {
 	]));
 }
 //#endregion
-//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/users.svelte
-function Users($$renderer, $$props) {
-	/**
-	* @license lucide-svelte v0.460.1 - ISC
-	*
-	* This source code is licensed under the ISC license.
-	* See the LICENSE file in the root directory of this source tree.
-	*/
-	Icon($$renderer, spread_props([
-		{ name: "users" },
-		sanitize_props($$props),
-		{
-			/**
-			* @component @name Users
-			* @description Lucide SVG icon component, renders SVG Element with children.
-			*
-			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTYgMjF2LTJhNCA0IDAgMCAwLTQtNEg2YTQgNCAwIDAgMC00IDR2MiIgLz4KICA8Y2lyY2xlIGN4PSI5IiBjeT0iNyIgcj0iNCIgLz4KICA8cGF0aCBkPSJNMjIgMjF2LTJhNCA0IDAgMCAwLTMtMy44NyIgLz4KICA8cGF0aCBkPSJNMTYgMy4xM2E0IDQgMCAwIDEgMCA3Ljc1IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/users
-			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-			*
-			* @param {Object} props - Lucide icons props and any valid SVG attribute
-			* @returns {FunctionalComponent} Svelte component
-			*
-			*/
-			iconNode: [
-				["path", { "d": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }],
-				["circle", {
-					"cx": "9",
-					"cy": "7",
-					"r": "4"
-				}],
-				["path", { "d": "M22 21v-2a4 4 0 0 0-3-3.87" }],
-				["path", { "d": "M16 3.13a4 4 0 0 1 0 7.75" }]
-			],
-			children: ($$renderer) => {
-				$$renderer.push(`<!--[-->`);
-				slot($$renderer, $$props, "default", {}, null);
-				$$renderer.push(`<!--]-->`);
-			},
-			$$slots: { default: true }
-		}
-	]));
-}
-//#endregion
 //#region src/routes/room/+page.svelte
 function _page($$renderer, $$props) {
 	$$renderer.component(($$renderer) => {
@@ -210,6 +167,46 @@ function _page($$renderer, $$props) {
 		let chatInput = "";
 		let activeReactions = /* @__PURE__ */ new Map();
 		let reactionIdCounter = 0;
+		let showFirstViewerCelebration = false;
+		let confettiParticles = [];
+		function triggerFirstViewerCelebration() {
+			showFirstViewerCelebration = true;
+			const colors = [
+				"#ef4444",
+				"#f59e0b",
+				"#10b981",
+				"#3b82f6",
+				"#8b5cf6",
+				"#ec4899",
+				"#06b6d4"
+			];
+			const emojis = [
+				"🎉",
+				"🎊",
+				"✨",
+				"🥳",
+				"👋",
+				"🙌"
+			];
+			const particles = [];
+			for (let i = 0; i < 40; i++) particles.push({
+				id: i,
+				x: Math.random() * 100,
+				delay: Math.random() * .5,
+				duration: 1.5 + Math.random() * 1.5,
+				rotation: Math.random() * 360,
+				size: 6 + Math.random() * 10,
+				color: colors[Math.floor(Math.random() * colors.length)],
+				type: Math.random() > .3 ? "rect" : "emoji",
+				emoji: emojis[Math.floor(Math.random() * emojis.length)],
+				borderRadius: Math.random() > .5 ? "50%" : "2px"
+			});
+			confettiParticles = particles;
+			setTimeout(() => {
+				showFirstViewerCelebration = false;
+				confettiParticles = [];
+			}, 3500);
+		}
 		let qualityPreset = "normal";
 		const presets = {
 			low: {
@@ -279,8 +276,10 @@ function _page($$renderer, $$props) {
 				}, 5e3);
 			});
 			socket.on("viewer:joined", (data) => {
+				const wasEmpty = viewerCount === 0;
 				viewerCount = viewerCount + 1;
 				if (data.viewerId) createPeerConnection(data.viewerId);
+				if (wasEmpty) triggerFirstViewerCelebration();
 			});
 			socket.on("viewer:left", (data) => {
 				viewerCount = Math.max(0, viewerCount - 1);
@@ -347,6 +346,22 @@ function _page($$renderer, $$props) {
 			$$renderer.push(`<!----> <span class="text-sm font-medium svelte-ek3c68">${escape_html(error)}</span></div>`);
 		} else $$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> `);
+		if (showFirstViewerCelebration) {
+			$$renderer.push("<!--[0-->");
+			$$renderer.push(`<div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease] svelte-ek3c68"><!--[-->`);
+			const each_array = ensure_array_like(confettiParticles);
+			for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
+				let p = each_array[$$index];
+				$$renderer.push(`<div class="absolute svelte-ek3c68"${attr_style(` left: ${stringify(p.x)}%; top: -20px; width: ${stringify(p.size)}px; height: ${stringify(p.size)}px; background: ${stringify(p.type === "rect" ? p.color : "transparent")}; border-radius: ${stringify(p.borderRadius)}; animation: confettiFall ${stringify(p.duration)}s ease-in ${stringify(p.delay)}s forwards; opacity: 0; transform: rotate(${stringify(p.rotation)}deg); font-size: ${stringify(p.size * 1.5)}px; line-height: 1; `)}>`);
+				if (p.type === "emoji") {
+					$$renderer.push("<!--[0-->");
+					$$renderer.push(`${escape_html(p.emoji)}`);
+				} else $$renderer.push("<!--[-1-->");
+				$$renderer.push(`<!--]--></div>`);
+			}
+			$$renderer.push(`<!--]--> <div class="fixed inset-0 flex items-center justify-center svelte-ek3c68"><div class="bg-white/95 backdrop-blur-md rounded-3xl px-8 py-6 shadow-2xl border border-slate-200 text-center animate-[celebrationPop_0.5s_cubic-bezier(0.175,0.885,0.32,1.275)] svelte-ek3c68"><div class="text-5xl mb-3 svelte-ek3c68">🎉</div> <h2 class="text-xl font-bold text-slate-800 mb-1 svelte-ek3c68">¡Primer espectador!</h2> <p class="text-sm text-slate-500 svelte-ek3c68">Alguien está viendo tu pantalla</p> <div class="mt-3 flex items-center justify-center gap-1.5 svelte-ek3c68"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse svelte-ek3c68"></div> <span class="text-xs text-green-600 font-medium svelte-ek3c68">En vivo</span></div></div></div></div>`);
+		} else $$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--> `);
 		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <div class="min-h-screen bg-slate-50 flex flex-col svelte-ek3c68"><header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 svelte-ek3c68"><div class="flex items-center gap-3 svelte-ek3c68"><button class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Volver">`);
 		Arrow_left($$renderer, { class: "w-5 h-5 text-slate-600" });
@@ -371,9 +386,9 @@ function _page($$renderer, $$props) {
 		$$renderer.push(`<!--]--> `);
 		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <!--[-->`);
-		const each_array = ensure_array_like([...activeReactions.values()]);
-		for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
-			let reaction = each_array[$$index];
+		const each_array_1 = ensure_array_like([...activeReactions.values()]);
+		for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
+			let reaction = each_array_1[$$index_1];
 			$$renderer.push(`<div class="absolute text-4xl pointer-events-none select-none svelte-ek3c68"${attr_style(`left: ${stringify(reaction.x)}%; bottom: 80px; animation: floatUp 3s ease-out forwards;`)}>${escape_html(reaction.emoji)}</div>`);
 		}
 		$$renderer.push(`<!--]--></div> <aside class="w-full lg:w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden svelte-ek3c68"><div class="p-4 border-b border-slate-100 space-y-3 svelte-ek3c68"><h3 class="font-semibold text-slate-800 text-sm uppercase tracking-wider svelte-ek3c68">Información de sala</h3> <div class="bg-slate-50 rounded-xl p-3 svelte-ek3c68"><div class="flex items-center justify-between mb-1 svelte-ek3c68"><span class="text-xs text-slate-500 font-medium svelte-ek3c68">PIN de acceso</span> <button class="p-1 hover:bg-slate-200 rounded-lg active:scale-95 transition-all svelte-ek3c68" title="Copiar PIN">`);
@@ -393,6 +408,8 @@ function _page($$renderer, $$props) {
 		$$renderer.push(`<!----> Compartir pantalla</button>`);
 		$$renderer.push(`<!--]--> `);
 		$$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--> `);
+		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all svelte-ek3c68">`);
 		Arrow_left($$renderer, { class: "w-4 h-4" });
 		$$renderer.push(`<!----> Cerrar sala</button></div> <div class="flex-1 flex flex-col overflow-hidden min-h-0 svelte-ek3c68"><div class="px-4 py-3 flex items-center justify-between border-b border-slate-100 svelte-ek3c68"><div class="flex items-center gap-2 svelte-ek3c68">`);
@@ -406,9 +423,9 @@ function _page($$renderer, $$props) {
 		} else {
 			$$renderer.push("<!--[-1-->");
 			$$renderer.push(`<!--[-->`);
-			const each_array_3 = ensure_array_like(chatMessages);
-			for (let $$index_3 = 0, $$length = each_array_3.length; $$index_3 < $$length; $$index_3++) {
-				let msg = each_array_3[$$index_3];
+			const each_array_4 = ensure_array_like(chatMessages);
+			for (let $$index_4 = 0, $$length = each_array_4.length; $$index_4 < $$length; $$index_4++) {
+				let msg = each_array_4[$$index_4];
 				$$renderer.push(`<div${attr_class(`flex flex-col ${msg.sender === "Anfitrión" ? "items-end" : "items-start"}`, "svelte-ek3c68")}><div class="flex items-center gap-1.5 mb-0.5 svelte-ek3c68"><span${attr_class(`text-[10px] font-semibold ${msg.sender === "Anfitrión" ? "text-slate-600" : "text-blue-500"}`, "svelte-ek3c68")}>${escape_html(msg.sender)}</span> <span class="text-[10px] text-slate-300 svelte-ek3c68">${escape_html(msg.timestamp instanceof Date ? msg.timestamp.toLocaleTimeString("es-ES", {
 					hour: "2-digit",
 					minute: "2-digit"

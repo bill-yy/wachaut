@@ -18,7 +18,9 @@
     Link2,
     MessageCircle,
     Send,
-    Settings
+    Settings,
+    Circle,
+    Square
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
 
@@ -50,6 +52,47 @@
   // Reactions
   let activeReactions = $state(new Map());
   let reactionIdCounter = $state(0);
+
+  // First viewer celebration
+  let showFirstViewerCelebration = $state(false);
+  let confettiParticles = $state([]);
+  // ─── First Viewer Celebration ────────────────────────────────────
+  function triggerFirstViewerCelebration() {
+    showFirstViewerCelebration = true;
+
+    // Generate confetti particles
+    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const emojis = ['🎉', '🎊', '✨', '🥳', '👋', '🙌'];
+    const particles = [];
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 0.5,
+        duration: 1.5 + Math.random() * 1.5,
+        rotation: Math.random() * 360,
+        size: 6 + Math.random() * 10,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        type: Math.random() > 0.3 ? 'rect' : 'emoji',
+        emoji: emojis[Math.floor(Math.random() * emojis.length)],
+        borderRadius: Math.random() > 0.5 ? '50%' : '2px'
+      });
+    }
+    confettiParticles = particles;
+
+    // Auto-dismiss after 3.5 seconds
+    setTimeout(() => {
+      showFirstViewerCelebration = false;
+      confettiParticles = [];
+    }, 3500);
+  }
+
+  // Recording
+  let isRecording = $state(false);
+  let mediaRecorder = $state(null);
+  let recordedChunks = $state([]);
+  let recordingDuration = $state(0);
+  let recordingInterval = $state(null);
 
   // Quality Settings
   let qualityPreset = $state('normal');
@@ -94,6 +137,52 @@
   function handleSendReaction(emoji) {
     if (!socket || !connected) return;
     socket.emit('reaction:send', { emoji, roomId });
+  }
+
+  // ─── Recording ──────────────────────────────────────────────────────
+  function formatDuration(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  function startRecording() {
+    if (!localStream) return;
+    recordedChunks = [];
+    const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm;codecs=vp8,opus';
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm';
+    }
+    mediaRecorder = new MediaRecorder(localStream, options);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wachaut-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      recordedChunks = [];
+    };
+    mediaRecorder.start(1000);
+    isRecording = true;
+    recordingDuration = 0;
+    recordingInterval = setInterval(() => { recordingDuration++; }, 1000);
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording = false;
+    clearInterval(recordingInterval);
+    recordingInterval = null;
   }
 
   // ─── Chat ────────────────────────────────────────────────────────────
@@ -144,9 +233,13 @@
 
     // Viewers
     socket.on('viewer:joined', (data) => {
+      const wasEmpty = viewerCount === 0;
       viewerCount = viewerCount + 1;
       if (data.viewerId) {
         createPeerConnection(data.viewerId);
+      }
+      if (wasEmpty) {
+        triggerFirstViewerCelebration();
       }
     });
 
@@ -281,6 +374,7 @@
   }
 
   function stopSharing() {
+    if (isRecording) stopRecording();
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
@@ -358,6 +452,45 @@
   <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-red-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]">
     <AlertTriangle class="w-4 h-4" />
     <span class="text-sm font-medium">{error}</span>
+  </div>
+{/if}
+<!-- First Viewer Celebration -->
+{#if showFirstViewerCelebration}
+  <div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease]">
+    <!-- Confetti particles -->
+    {#each confettiParticles as p (p.id)}
+      <div
+        class="absolute"
+        style="
+          left: {p.x}%;
+          top: -20px;
+          width: {p.size}px;
+          height: {p.size}px;
+          background: {p.type === 'rect' ? p.color : 'transparent'};
+          border-radius: {p.borderRadius};
+          animation: confettiFall {p.duration}s ease-in {p.delay}s forwards;
+          opacity: 0;
+          transform: rotate({p.rotation}deg);
+          font-size: {p.size * 1.5}px;
+          line-height: 1;
+        "
+      >
+        {#if p.type === 'emoji'}{p.emoji}{/if}
+      </div>
+    {/each}
+
+    <!-- Celebration message -->
+    <div class="fixed inset-0 flex items-center justify-center">
+      <div class="bg-white/95 backdrop-blur-md rounded-3xl px-8 py-6 shadow-2xl border border-slate-200 text-center animate-[celebrationPop_0.5s_cubic-bezier(0.175,0.885,0.32,1.275)]">
+        <div class="text-5xl mb-3">🎉</div>
+        <h2 class="text-xl font-bold text-slate-800 mb-1">¡Primer espectador!</h2>
+        <p class="text-sm text-slate-500">Alguien está viendo tu pantalla</p>
+        <div class="mt-3 flex items-center justify-center gap-1.5">
+          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span class="text-xs text-green-600 font-medium">En vivo</span>
+        </div>
+      </div>
+    </div>
   </div>
 {/if}
 
@@ -485,6 +618,24 @@
               <Maximize class="w-5 h-5 text-white" />
             {/if}
           </button>
+          {#if isRecording}
+            <button
+              onclick={stopRecording}
+              class="p-2.5 bg-red-500/80 rounded-xl hover:bg-red-500 active:scale-95 transition-all flex items-center gap-1.5"
+              title="Detener grabación"
+            >
+              <div class="w-2.5 h-2.5 bg-red-400 rounded-full animate-[pulseRecord_1s_ease-in-out_infinite]"></div>
+              <span class="text-red-300 text-xs font-medium">{formatDuration(recordingDuration)}</span>
+            </button>
+          {:else}
+            <button
+              onclick={startRecording}
+              class="p-2.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
+              title="Grabar sesión"
+            >
+              <Circle class="w-5 h-5 text-red-400" />
+            </button>
+          {/if}
           <button
             onclick={stopSharing}
             class="p-2.5 bg-red-500/80 rounded-xl hover:bg-red-500 active:scale-95 transition-all"
@@ -610,7 +761,29 @@
           </button>
         {/if}
 
-        <!-- Reaction Buttons (visible when sharing) -->
+        <!-- Recording Button (visible when sharing) -->
+        {#if isSharing}
+          {#if isRecording}
+            <button
+              onclick={stopRecording}
+              class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 active:scale-95 transition-all"
+            >
+              <Square class="w-4 h-4" />
+              <div class="w-2 h-2 bg-white rounded-full animate-[pulseRecord_1s_ease-in-out_infinite]"></div>
+              Detener grabación
+              <span class="text-red-200 text-xs">{formatDuration(recordingDuration)}</span>
+            </button>
+          {:else}
+            <button
+              onclick={startRecording}
+              class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
+            >
+              <Circle class="w-4 h-4 text-red-500" />
+              Grabar sesión
+            </button>
+          {/if}
+        {/if}
+
         {#if isSharing}
           <div class="flex items-center justify-center gap-2 pt-2">
             {#each ['👍', '👎', '❓', '🎉'] as emoji}
@@ -738,5 +911,48 @@
       opacity: 1;
       transform: scale(1);
     }
+  }
+
+  @keyframes pulseRecord {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.3); }
+  }
+
+  @keyframes confettiFall {
+    0% {
+      opacity: 1;
+      transform: translateY(0) rotate(0deg) scale(1);
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(100vh) rotate(720deg) scale(0.3);
+    }
+  }
+
+  @keyframes celebrationPop {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+    70% {
+      transform: scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes celebrationFadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
   }
 </style>
