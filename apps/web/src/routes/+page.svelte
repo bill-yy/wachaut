@@ -121,12 +121,12 @@ const onboardingSteps = [
 						<ChevronRight class="h-4 w-4 opacity-60" />
 					{/if}
 				</button>
-				<p class="mt-3 text-xs text-slate-400">Funciona en Chrome, Firefox, Edge y Safari</p>
 				<a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">
 					<Link2 class="h-5 w-5" />
 					Tengo un enlace
 				</a>
 			</div>
+            <p class="mt-3 text-xs text-slate-400">Funciona en Chrome, Firefox, Edge y Safari</p>
 
 			<!-- Join card -->
 			<div id="join" class="mt-10">
