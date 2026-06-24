@@ -1,9 +1,10 @@
-import { s as sanitize_props, a as spread_props, b as slot, o as head, p as store_get, m as escape_html, q as attr, t as attr_class, u as unsubscribe_stores } from "../../../../chunks/root.js";
+import { a as sanitize_props, b as spread_props, s as slot, m as head, o as store_get, l as escape_html, p as attr, q as attr_class, u as unsubscribe_stores } from "../../../../chunks/index.js";
 import { o as onDestroy, A as Arrow_left, V as Volume_x, a as Volume_2, M as Minimize, b as Maximize } from "../../../../chunks/volume-x.js";
 import "@sveltejs/kit/internal";
 import { w as writable } from "../../../../chunks/exports.js";
 import "../../../../chunks/utils.js";
 import "@sveltejs/kit/internal/server";
+import "../../../../chunks/root.js";
 import "../../../../chunks/state.svelte.js";
 import "socket.io-client";
 import { I as Icon } from "../../../../chunks/Icon.js";

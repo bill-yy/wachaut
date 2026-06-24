@@ -5,6 +5,6 @@ export const universal = {
   "ssr": false
 };
 export const universal_id = "src/routes/+layout.ts";
-export const imports = ["_app/immutable/nodes/0.if8CAgAU.js","_app/immutable/chunks/CCDnRL06.js"];
-export const stylesheets = ["_app/immutable/assets/0.B6hHsAqR.css"];
+export const imports = ["_app/immutable/nodes/0.NAcHnhSH.js","_app/immutable/chunks/QQhrDb5k.js","_app/immutable/chunks/BGFjQKWo.js"];
+export const stylesheets = [];
 export const fonts = [];
