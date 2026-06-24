@@ -198,25 +198,23 @@
       if (pc.connectionState === 'failed') { pc.close(); peers.delete(viewerId); }
     };
 
-    // Renegotiate when tracks are added — this is the ONLY way we send offers
-    pc.onnegotiationneeded = async () => {
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('host:signal', { viewerId, signal: pc.localDescription });
-      } catch (e) {
-        console.error('Negotiation error:', e);
-      }
-    };
-
     // Add existing stream tracks if already sharing
-    // If sharing, this triggers onnegotiationneeded → offer with tracks
-    // If NOT sharing, no tracks → no offer sent (viewer stays at "waiting")
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
 
     peers.set(viewerId, pc);
+
+    // If already sharing, send offer immediately
+    if (localStream) {
+      await sendOffer(pc, viewerId);
+    }
+  }
+
+  async function sendOffer(pc, viewerId) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('host:signal', { viewerId, signal: pc.localDescription });
   }
 
   // ─── Screen Sharing ─────────────────────────────────────────────────
@@ -236,11 +234,11 @@
         videoPreview.play().catch(() => {});
       }
 
-      // Add tracks to ALL existing peer connections
-      // This triggers onnegotiationneeded → renegotiation → viewers get ontrack
-      peers.forEach((pc) => {
+      // Add tracks to ALL existing peers and send offers explicitly
+      for (const [viewerId, pc] of peers) {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
-      });
+        await sendOffer(pc, viewerId);
+      }
 
       stream.getVideoTracks()[0].onended = () => {
         stopSharing();

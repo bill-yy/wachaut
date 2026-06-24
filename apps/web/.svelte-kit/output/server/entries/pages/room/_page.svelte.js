@@ -321,18 +321,6 @@ function _page($$renderer, $$props) {
 					peers.delete(viewerId);
 				}
 			};
-			pc.onnegotiationneeded = async () => {
-				try {
-					const offer = await pc.createOffer();
-					await pc.setLocalDescription(offer);
-					socket.emit("host:signal", {
-						viewerId,
-						signal: pc.localDescription
-					});
-				} catch (e) {
-					console.error("Negotiation error:", e);
-				}
-			};
 			peers.set(viewerId, pc);
 		}
 		initSocket();
