@@ -17,7 +17,8 @@
     Eye,
     Link2,
     MessageCircle,
-    Send
+    Send,
+    Settings
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
 
@@ -49,6 +50,15 @@
   // Reactions
   let activeReactions = $state(new Map());
   let reactionIdCounter = $state(0);
+
+  // Quality Settings
+  let qualityPreset = $state('normal');
+  let showSettings = $state(false);
+  const presets = {
+    low: { label: 'Liviano', resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_000_000, desc: 'Ideal para conexiones lentas' },
+    normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 2_500_000, desc: 'Uso general' },
+    high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
+  };
 
   // Room info
   const roomId = crypto.randomUUID();
@@ -220,8 +230,14 @@
   // ─── Screen Sharing ─────────────────────────────────────────────────
   async function startSharing() {
     try {
+      const preset = presets[qualityPreset];
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' },
+        video: {
+          cursor: 'always',
+          width: { ideal: preset.resolution.width },
+          height: { ideal: preset.resolution.height },
+          frameRate: { ideal: preset.fps }
+        },
         audio: true
       });
       localStream = stream;
@@ -238,6 +254,21 @@
       for (const [viewerId, pc] of peers) {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
         await sendOffer(pc, viewerId);
+      }
+
+      // Apply bitrate limit to all video senders
+      for (const [viewerId, pc] of peers) {
+        const senders = pc.getSenders();
+        for (const sender of senders) {
+          if (sender.track?.kind === 'video') {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = preset.bitrate;
+            await sender.setParameters(params);
+          }
+        }
       }
 
       stream.getVideoTracks()[0].onended = () => {
@@ -523,6 +554,45 @@
       <!-- Actions Section -->
       <div class="p-4 border-b border-slate-100 space-y-2">
         {#if !isSharing}
+          <!-- Quality Settings Toggle -->
+          <button
+            onclick={() => { showSettings = !showSettings; }}
+            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
+          >
+            <Settings class="w-4 h-4" />
+            Configurar calidad
+            <span class="text-xs text-slate-400 ml-auto">{presets[qualityPreset].label}</span>
+          </button>
+
+          <!-- Quality Settings Panel -->
+          {#if showSettings}
+            <div class="space-y-2 p-3 bg-slate-50 rounded-xl">
+              {#each Object.entries(presets) as [key, preset]}
+                <button
+                  onclick={() => { qualityPreset = key; showSettings = false; }}
+                  class="w-full text-left p-3 rounded-xl border-2 transition-all {qualityPreset === key
+                    ? 'border-slate-800 bg-white shadow-sm'
+                    : 'border-slate-200 bg-white hover:border-slate-300'}"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-semibold text-slate-800 text-sm">{preset.label}</span>
+                    {#if qualityPreset === key}
+                      <div class="w-2 h-2 bg-slate-800 rounded-full"></div>
+                    {/if}
+                  </div>
+                  <p class="text-xs text-slate-500 mb-1.5">{preset.desc}</p>
+                  <div class="flex items-center gap-3 text-[10px] text-slate-400">
+                    <span>{preset.resolution.width}x{preset.resolution.height}</span>
+                    <span>•</span>
+                    <span>{preset.fps} FPS</span>
+                    <span>•</span>
+                    <span>{(preset.bitrate / 1_000_000).toFixed(1)} Mbps</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
           <button
             onclick={startSharing}
             class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-xl font-medium text-sm hover:bg-slate-700 active:scale-95 transition-all"

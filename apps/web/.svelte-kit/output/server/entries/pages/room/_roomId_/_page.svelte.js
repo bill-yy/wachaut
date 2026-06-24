@@ -2,9 +2,43 @@ import { i as onDestroy } from "../../../../chunks/internal.js";
 import { a as derived, d as sanitize_props, f as slot, g as unsubscribe_stores, h as stringify, j as escape_html, k as attr, m as store_get, p as spread_props, s as ensure_array_like, t as attr_class, x as getContext } from "../../../../chunks/server.js";
 import "../../../../chunks/client.js";
 import { n as Icon, t as Monitor } from "../../../../chunks/monitor.js";
-import { n as Send, r as Message_circle, t as Triangle_alert } from "../../../../chunks/triangle-alert.js";
+import { i as Message_circle, n as Share_2, r as Send, t as Triangle_alert } from "../../../../chunks/triangle-alert.js";
 import { t as Wifi } from "../../../../chunks/wifi.js";
 import "socket.io-client";
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/activity.svelte
+function Activity($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "activity" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name Activity
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMjIgMTJoLTIuNDhhMiAyIDAgMCAwLTEuOTMgMS40NmwtMi4zNSA4LjM2YS4yNS4yNSAwIDAgMS0uNDggMEw5LjI0IDIuMThhLjI1LjI1IDAgMCAwLS40OCAwbC0yLjM1IDguMzZBMiAyIDAgMCAxIDQuNDkgMTJIMiIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/activity
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [["path", { "d": "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" }]],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/lock.svelte
 function Lock($$renderer, $$props) {
 	/**
@@ -131,6 +165,12 @@ function _page($$renderer, $$props) {
 		let chatOpen = false;
 		let chatMessages = [];
 		let chatInput = "";
+		let connectionStats = {
+			resolution: "",
+			fps: "",
+			bitrate: ""
+		};
+		let statsInterval = null;
 		const reactionEmojis = [
 			"👍",
 			"👎",
@@ -155,6 +195,7 @@ function _page($$renderer, $$props) {
 			return "bg-slate-500";
 		});
 		function disconnect() {
+			stopStatsPolling();
 			if (peer) {
 				peer.close();
 				peer = null;
@@ -165,12 +206,23 @@ function _page($$renderer, $$props) {
 			chatMessages = [];
 			chatOpen = false;
 			errorMessage = "";
+			connectionStats = {
+				resolution: "",
+				fps: "",
+				bitrate: ""
+			};
 		}
 		function cleanupSocket() {
 			if (socket) {
 				socket.removeAllListeners();
 				socket.disconnect();
 				socket = null;
+			}
+		}
+		function stopStatsPolling() {
+			if (statsInterval) {
+				clearInterval(statsInterval);
+				statsInterval = null;
 			}
 		}
 		function formatTime(timestamp) {
@@ -180,6 +232,7 @@ function _page($$renderer, $$props) {
 			});
 		}
 		onDestroy(() => {
+			stopStatsPolling();
 			disconnect();
 		});
 		$$renderer.push(`<div class="min-h-screen bg-slate-50"><header class="bg-white border-b border-slate-200 px-4 py-3 shadow-sm"><div class="max-w-5xl mx-auto flex items-center justify-between"><div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800">`);
@@ -204,13 +257,27 @@ function _page($$renderer, $$props) {
 			$$renderer.push("<!--[3-->");
 			$$renderer.push(`<div class="relative"><div class="relative rounded-2xl overflow-hidden bg-black shadow-xl aspect-video" role="region" aria-label="Video en vivo"><video autoplay="" muted="" playsinline="" class="w-full h-full object-contain cursor-pointer" title="Haz clic para activar audio"></video> <div class="absolute top-4 left-4 flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-semibold"><span class="w-2 h-2 bg-white rounded-full animate-pulse"></span> EN VIVO</div> `);
 			$$renderer.push("<!--[-1-->");
-			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-center gap-3 mt-4"><!--[-->`);
+			$$renderer.push(`<!--]--></div> `);
+			if (connectionStats.resolution) {
+				$$renderer.push("<!--[0-->");
+				$$renderer.push(`<div class="flex items-center justify-center gap-2 mt-3 px-2 text-xs text-slate-400">`);
+				Activity($$renderer, { class: "w-3 h-3" });
+				$$renderer.push(`<!----> <span>${escape_html(connectionStats.resolution)} · ${escape_html(connectionStats.fps)} fps</span> `);
+				if (connectionStats.bitrate) {
+					$$renderer.push("<!--[0-->");
+					$$renderer.push(`<span>· ${escape_html(connectionStats.bitrate)}</span>`);
+				} else $$renderer.push("<!--[-1-->");
+				$$renderer.push(`<!--]--></div>`);
+			} else $$renderer.push("<!--[-1-->");
+			$$renderer.push(`<!--]--> <div class="flex items-center justify-center gap-3 mt-4"><!--[-->`);
 			const each_array = ensure_array_like(reactionEmojis);
 			for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
 				let emoji = each_array[$$index];
 				$$renderer.push(`<button${attr_class(`w-12 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-xl hover:bg-slate-100 hover:border-slate-300 transition-all duration-200 ${animatingReaction === emoji ? "scale-125" : ""}`)} title="Enviar reacción">${escape_html(emoji)}</button>`);
 			}
-			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-between mt-4 px-2"><div class="flex items-center gap-2 text-sm text-slate-500"><span${attr_class(`w-2 h-2 rounded-full ${stringify(statusColor())}`)}></span> <span>${escape_html(getStatusLabel(status))}</span></div> <button class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium">Salir</button></div></div>`);
+			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-between mt-4 px-2"><div class="flex items-center gap-2 text-sm text-slate-500"><span${attr_class(`w-2 h-2 rounded-full ${stringify(statusColor())}`)}></span> <span>${escape_html(getStatusLabel(status))}</span></div> <div class="flex items-center gap-2"><button class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium flex items-center gap-1.5" title="Compartir enlace">`);
+			Share_2($$renderer, { class: "w-3.5 h-3.5" });
+			$$renderer.push(`<!----> Compartir</button> <button class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium">Salir</button></div></div></div>`);
 		} else if (status === "error") {
 			$$renderer.push("<!--[4-->");
 			$$renderer.push(`<div class="flex items-center justify-center" style="min-height: 60vh;"><div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200"><div class="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">`);

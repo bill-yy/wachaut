@@ -242,10 +242,10 @@ function _page($$renderer, $$props) {
 		$$renderer.push(`<!----> Conexión directa P2P</div> <h1 class="mb-4 text-5xl font-extrabold tracking-tight text-slate-800 sm:text-6xl">Comparte tu pantalla</h1> <p class="mb-2 text-lg text-slate-500">Sin registro, sin complicaciones.</p> <p class="mb-10 text-sm text-slate-400">Hasta 5 espectadores · Audio incluido · Funciona en cualquier navegador</p> <div class="flex flex-col gap-3 sm:flex-row sm:justify-center"><button${attr("disabled", isCreating, true)} class="btn-primary gap-2 px-8 py-4 text-base">`);
 		$$renderer.push("<!--[-1-->");
 		Radio($$renderer, { class: "h-5 w-5" });
-		$$renderer.push(`<!----> Crear una sala `);
+		$$renderer.push(`<!----> Compartir mi pantalla `);
 		Chevron_right($$renderer, { class: "h-4 w-4 opacity-60" });
 		$$renderer.push(`<!---->`);
-		$$renderer.push(`<!--]--></button> <a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">`);
+		$$renderer.push(`<!--]--></button> <p class="mt-3 text-xs text-slate-400">Funciona en Chrome, Firefox, Edge y Safari</p> <a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">`);
 		Link_2($$renderer, { class: "h-5 w-5" });
 		$$renderer.push(`<!----> Tengo un enlace</a></div> <div id="join" class="mt-10"><div class="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div class="mb-3 flex items-center gap-3"><div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100">`);
 		Link_2($$renderer, { class: "h-4 w-4 text-slate-500" });

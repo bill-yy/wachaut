@@ -4,7 +4,7 @@
 
 	let isCreating = $state(false);
 
-	async function createRoom() {
+	async function shareScreen() {
 		isCreating = true;
 		try {
 			await goto('/room');
@@ -72,16 +72,17 @@
 
 			<!-- CTA buttons -->
 			<div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
-				<button onclick={createRoom} disabled={isCreating} class="btn-primary gap-2 px-8 py-4 text-base">
+				<button onclick={shareScreen} disabled={isCreating} class="btn-primary gap-2 px-8 py-4 text-base">
 					{#if isCreating}
 						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
-						Creando sala...
+						Compartiendo...
 					{:else}
 						<Radio class="h-5 w-5" />
-						Crear una sala
+						Compartir mi pantalla
 						<ChevronRight class="h-4 w-4 opacity-60" />
 					{/if}
 				</button>
+				<p class="mt-3 text-xs text-slate-400">Funciona en Chrome, Firefox, Edge y Safari</p>
 				<a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">
 					<Link2 class="h-5 w-5" />
 					Tengo un enlace

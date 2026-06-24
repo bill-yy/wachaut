@@ -2,7 +2,7 @@ import "../../../chunks/internal.js";
 import { d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
 import { t as Link_2 } from "../../../chunks/navigation.js";
-import { n as Send, r as Message_circle, t as Triangle_alert } from "../../../chunks/triangle-alert.js";
+import { i as Message_circle, n as Share_2, r as Send, t as Triangle_alert } from "../../../chunks/triangle-alert.js";
 import { io } from "socket.io-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-left.svelte
 function Arrow_left($$renderer, $$props) {
@@ -117,8 +117,8 @@ function Eye($$renderer, $$props) {
 	]));
 }
 //#endregion
-//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/share-2.svelte
-function Share_2($$renderer, $$props) {
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/settings.svelte
+function Settings($$renderer, $$props) {
 	/**
 	* @license lucide-svelte v0.460.1 - ISC
 	*
@@ -126,49 +126,25 @@ function Share_2($$renderer, $$props) {
 	* See the LICENSE file in the root directory of this source tree.
 	*/
 	Icon($$renderer, spread_props([
-		{ name: "share-2" },
+		{ name: "settings" },
 		sanitize_props($$props),
 		{
 			/**
-			* @component @name Share2
+			* @component @name Settings
 			* @description Lucide SVG icon component, renders SVG Element with children.
 			*
-			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjUiIHI9IjMiIC8+CiAgPGNpcmNsZSBjeD0iNiIgY3k9IjEyIiByPSIzIiAvPgogIDxjaXJjbGUgY3g9IjE4IiBjeT0iMTkiIHI9IjMiIC8+CiAgPGxpbmUgeDE9IjguNTkiIHgyPSIxNS40MiIgeTE9IjEzLjUxIiB5Mj0iMTcuNDkiIC8+CiAgPGxpbmUgeDE9IjE1LjQxIiB4Mj0iOC41OSIgeTE9IjYuNTEiIHkyPSIxMC40OSIgLz4KPC9zdmc+Cg==) - https://lucide.dev/icons/share-2
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTIuMjIgMmgtLjQ0YTIgMiAwIDAgMC0yIDJ2LjE4YTIgMiAwIDAgMS0xIDEuNzNsLS40My4yNWEyIDIgMCAwIDEtMiAwbC0uMTUtLjA4YTIgMiAwIDAgMC0yLjczLjczbC0uMjIuMzhhMiAyIDAgMCAwIC43MyAyLjczbC4xNS4xYTIgMiAwIDAgMSAxIDEuNzJ2LjUxYTIgMiAwIDAgMS0xIDEuNzRsLS4xNS4wOWEyIDIgMCAwIDAtLjczIDIuNzNsLjIyLjM4YTIgMiAwIDAgMCAyLjczLjczbC4xNS0uMDhhMiAyIDAgMCAxIDIgMGwuNDMuMjVhMiAyIDAgMCAxIDEgMS43M1YyMGEyIDIgMCAwIDAgMiAyaC40NGEyIDIgMCAwIDAgMi0ydi0uMThhMiAyIDAgMCAxIDEtMS43M2wuNDMtLjI1YTIgMiAwIDAgMSAyIDBsLjE1LjA4YTIgMiAwIDAgMCAyLjczLS43M2wuMjItLjM5YTIgMiAwIDAgMC0uNzMtMi43M2wtLjE1LS4wOGEyIDIgMCAwIDEtMS0xLjc0di0uNWEyIDIgMCAwIDEgMS0xLjc0bC4xNS0uMDlhMiAyIDAgMCAwIC43My0yLjczbC0uMjItLjM4YTIgMiAwIDAgMC0yLjczLS43M2wtLjE1LjA4YTIgMiAwIDAgMS0yIDBsLS40My0uMjVhMiAyIDAgMCAxLTEtMS43M1Y0YTIgMiAwIDAgMC0yLTJ6IiAvPgogIDxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/settings
 			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
 			*
 			* @param {Object} props - Lucide icons props and any valid SVG attribute
 			* @returns {FunctionalComponent} Svelte component
 			*
 			*/
-			iconNode: [
-				["circle", {
-					"cx": "18",
-					"cy": "5",
-					"r": "3"
-				}],
-				["circle", {
-					"cx": "6",
-					"cy": "12",
-					"r": "3"
-				}],
-				["circle", {
-					"cx": "18",
-					"cy": "19",
-					"r": "3"
-				}],
-				["line", {
-					"x1": "8.59",
-					"x2": "15.42",
-					"y1": "13.51",
-					"y2": "17.49"
-				}],
-				["line", {
-					"x1": "15.41",
-					"x2": "8.59",
-					"y1": "6.51",
-					"y2": "10.49"
-				}]
-			],
+			iconNode: [["path", { "d": "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" }], ["circle", {
+				"cx": "12",
+				"cy": "12",
+				"r": "3"
+			}]],
 			children: ($$renderer) => {
 				$$renderer.push(`<!--[-->`);
 				slot($$renderer, $$props, "default", {}, null);
@@ -234,6 +210,39 @@ function _page($$renderer, $$props) {
 		let chatInput = "";
 		let activeReactions = /* @__PURE__ */ new Map();
 		let reactionIdCounter = 0;
+		let qualityPreset = "normal";
+		const presets = {
+			low: {
+				label: "Liviano",
+				resolution: {
+					width: 1280,
+					height: 720
+				},
+				fps: 15,
+				bitrate: 1e6,
+				desc: "Ideal para conexiones lentas"
+			},
+			normal: {
+				label: "Normal",
+				resolution: {
+					width: 1920,
+					height: 1080
+				},
+				fps: 30,
+				bitrate: 25e5,
+				desc: "Uso general"
+			},
+			high: {
+				label: "Alta calidad",
+				resolution: {
+					width: 1920,
+					height: 1080
+				},
+				fps: 60,
+				bitrate: 5e6,
+				desc: "Gaming y diseño"
+			}
+		};
 		const roomId = crypto.randomUUID();
 		const pin = String(Math.floor(1e5 + Math.random() * 9e5));
 		const roomUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/room/${roomId}`;
@@ -375,7 +384,11 @@ function _page($$renderer, $$props) {
 		Link_2($$renderer, { class: "w-3.5 h-3.5 text-slate-400" });
 		$$renderer.push(`<!--]--></button></div> <p class="text-xs text-slate-600 truncate font-mono svelte-ek3c68">${escape_html(roomUrl)}</p></div></div> <div class="p-4 border-b border-slate-100 space-y-2 svelte-ek3c68">`);
 		$$renderer.push("<!--[0-->");
-		$$renderer.push(`<button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-xl font-medium text-sm hover:bg-slate-700 active:scale-95 transition-all svelte-ek3c68">`);
+		$$renderer.push(`<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all svelte-ek3c68">`);
+		Settings($$renderer, { class: "w-4 h-4" });
+		$$renderer.push(`<!----> Configurar calidad <span class="text-xs text-slate-400 ml-auto svelte-ek3c68">${escape_html(presets[qualityPreset].label)}</span></button> `);
+		$$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--> <button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-xl font-medium text-sm hover:bg-slate-700 active:scale-95 transition-all svelte-ek3c68">`);
 		Share_2($$renderer, { class: "w-4 h-4" });
 		$$renderer.push(`<!----> Compartir pantalla</button>`);
 		$$renderer.push(`<!--]--> `);
@@ -393,9 +406,9 @@ function _page($$renderer, $$props) {
 		} else {
 			$$renderer.push("<!--[-1-->");
 			$$renderer.push(`<!--[-->`);
-			const each_array_2 = ensure_array_like(chatMessages);
-			for (let $$index_2 = 0, $$length = each_array_2.length; $$index_2 < $$length; $$index_2++) {
-				let msg = each_array_2[$$index_2];
+			const each_array_3 = ensure_array_like(chatMessages);
+			for (let $$index_3 = 0, $$length = each_array_3.length; $$index_3 < $$length; $$index_3++) {
+				let msg = each_array_3[$$index_3];
 				$$renderer.push(`<div${attr_class(`flex flex-col ${msg.sender === "Anfitrión" ? "items-end" : "items-start"}`, "svelte-ek3c68")}><div class="flex items-center gap-1.5 mb-0.5 svelte-ek3c68"><span${attr_class(`text-[10px] font-semibold ${msg.sender === "Anfitrión" ? "text-slate-600" : "text-blue-500"}`, "svelte-ek3c68")}>${escape_html(msg.sender)}</span> <span class="text-[10px] text-slate-300 svelte-ek3c68">${escape_html(msg.timestamp instanceof Date ? msg.timestamp.toLocaleTimeString("es-ES", {
 					hour: "2-digit",
 					minute: "2-digit"

@@ -14,7 +14,9 @@
     VolumeX,
     MessageCircle,
     Send,
-    SmilePlus
+    SmilePlus,
+    Activity,
+    Share2
   } from 'lucide-svelte';
 
   const roomId = $derived($page.params.roomId);
@@ -40,6 +42,12 @@
   let chatMessages = $state([]);
   let chatInput = $state('');
   let chatContainer = $state(null);
+
+  // --- Connection Stats ---
+  let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
+  let statsInterval = $state(null);
+  let lastBytesReceived = $state(0);
+  let lastStatsTime = $state(0);
 
   // --- Reactions ---
   const reactionEmojis = ['👍', '👎', '❓', '🎉'];
@@ -172,6 +180,7 @@
               pendingStream = remoteStream;
             }
             status = 'live';
+            startStatsPolling();
           }
         };
 
@@ -248,6 +257,7 @@
   }
 
   function disconnect() {
+    stopStatsPolling();
     if (peer) {
       peer.close();
       peer = null;
@@ -261,6 +271,7 @@
     chatMessages = [];
     chatOpen = false;
     errorMessage = '';
+    connectionStats = { resolution: '', fps: '', bitrate: '' };
   }
 
   function cleanupSocket() {
@@ -340,6 +351,64 @@
     pin = '';
   }
 
+  async function updateStats() {
+    if (!peer || status !== 'live') return;
+    try {
+      const stats = await peer.getStats();
+      stats.forEach(report => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          connectionStats.resolution = `${report.frameWidth || '?'}x${report.frameHeight || '?'}`;
+          connectionStats.fps = `${report.framesPerSecond || '?'}`;
+          const now = Date.now();
+          const bytesReceived = report.bytesReceived || 0;
+          if (lastStatsTime > 0) {
+            const elapsed = (now - lastStatsTime) / 1000;
+            const deltaBytes = bytesReceived - lastBytesReceived;
+            const bps = (deltaBytes * 8) / elapsed;
+            if (bps >= 1000000) {
+              connectionStats.bitrate = `${(bps / 1000000).toFixed(1)} Mbps`;
+            } else if (bps >= 1000) {
+              connectionStats.bitrate = `${(bps / 1000).toFixed(0)} Kbps`;
+            } else {
+              connectionStats.bitrate = `${Math.round(bps)} bps`;
+            }
+          }
+          lastBytesReceived = bytesReceived;
+          lastStatsTime = now;
+        }
+      });
+    } catch (err) {
+      console.error('Error getting stats:', err);
+    }
+  }
+
+  function startStatsPolling() {
+    stopStatsPolling();
+    lastBytesReceived = 0;
+    lastStatsTime = 0;
+    connectionStats = { resolution: '', fps: '', bitrate: '' };
+    statsInterval = setInterval(updateStats, 3000);
+  }
+
+  function stopStatsPolling() {
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
+    }
+  }
+
+  async function shareLink() {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Únete a mi pantalla', url: window.location.href });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+      }
+    } catch (err) {
+      console.error('Error sharing:', err);
+    }
+  }
+
   function formatTime(timestamp) {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('es-ES', {
@@ -349,6 +418,7 @@
   }
 
   onDestroy(() => {
+    stopStatsPolling();
     disconnect();
   });
 </script>
@@ -542,6 +612,17 @@
           {/if}
         </div>
 
+        <!-- Connection Stats Bar -->
+        {#if connectionStats.resolution}
+          <div class="flex items-center justify-center gap-2 mt-3 px-2 text-xs text-slate-400">
+            <Activity class="w-3 h-3" />
+            <span>{connectionStats.resolution} · {connectionStats.fps} fps</span>
+            {#if connectionStats.bitrate}
+              <span>· {connectionStats.bitrate}</span>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Reactions Row -->
         <div class="flex items-center justify-center gap-3 mt-4">
           {#each reactionEmojis as emoji}
@@ -570,13 +651,25 @@
             <span>{getStatusLabel(status)}</span>
           </div>
 
-          <button
-            onclick={disconnect}
-            class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg
-                   hover:bg-red-100 transition-colors text-sm font-medium"
-          >
-            Salir
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              onclick={shareLink}
+              class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg
+                     hover:bg-slate-200 transition-colors text-sm font-medium
+                     flex items-center gap-1.5"
+              title="Compartir enlace"
+            >
+              <Share2 class="w-3.5 h-3.5" />
+              Compartir
+            </button>
+            <button
+              onclick={disconnect}
+              class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg
+                     hover:bg-red-100 transition-colors text-sm font-medium"
+            >
+              Salir
+            </button>
+          </div>
         </div>
       </div>
 
