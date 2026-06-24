@@ -16,11 +16,11 @@
     "src": "../../node_modules/.pnpm/@sveltejs+kit@2.67.0_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.56.4_@typescript-eslint+type_sx26ub5immt3g3ww4khdd3h62q/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
     "isEntry": true,
     "imports": [
-      "_root.js",
+      "_index.js",
       "_state.svelte.js",
       "_exports.js",
       "_utils.js",
-      "_index.js"
+      "_root.js"
     ]
   },
   "../../node_modules/.pnpm/@sveltejs+kit@2.67.0_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.56.4_@typescript-eslint+type_sx26ub5immt3g3ww4khdd3h62q/node_modules/@sveltejs/kit/src/runtime/server/index.js": {
@@ -34,7 +34,6 @@
       "_server.js",
       "_exports.js",
       "_utils.js",
-      "_index.js",
       "_internal.js"
     ]
   },
@@ -53,26 +52,21 @@
     "file": "chunks/Icon.js",
     "name": "Icon",
     "imports": [
-      "_root.js"
-    ]
-  },
-  "_arrow-left.js": {
-    "file": "chunks/arrow-left.js",
-    "name": "arrow-left",
-    "imports": [
-      "_root.js",
-      "_Icon.js"
+      "_index.js"
     ]
   },
   "_exports.js": {
     "file": "chunks/exports.js",
-    "name": "exports"
+    "name": "exports",
+    "imports": [
+      "_index.js"
+    ]
   },
   "_index.js": {
     "file": "chunks/index.js",
     "name": "index",
     "imports": [
-      "_root.js"
+      "_uneval.js"
     ]
   },
   "_internal.js": {
@@ -87,7 +81,7 @@
     "file": "chunks/monitor.js",
     "name": "monitor",
     "imports": [
-      "_root.js",
+      "_index.js",
       "_Icon.js"
     ]
   },
@@ -95,7 +89,7 @@
     "file": "chunks/root.js",
     "name": "root",
     "imports": [
-      "_uneval.js"
+      "_index.js"
     ]
   },
   "_server.js": {
@@ -106,8 +100,9 @@
     "file": "chunks/state.svelte.js",
     "name": "state.svelte",
     "imports": [
-      "_root.js",
-      "_exports.js"
+      "_index.js",
+      "_exports.js",
+      "_root.js"
     ]
   },
   "_uneval.js": {
@@ -126,14 +121,31 @@
       "_uneval.js"
     ]
   },
+  "_volume-x.js": {
+    "file": "chunks/volume-x.js",
+    "name": "volume-x",
+    "imports": [
+      "_index.js",
+      "_Icon.js"
+    ]
+  },
   "src/routes/+layout.svelte": {
     "file": "entries/pages/_layout.svelte.js",
     "name": "entries/pages/_layout.svelte",
     "src": "src/routes/+layout.svelte",
     "isEntry": true,
+    "imports": [
+      "_index.js"
+    ],
     "css": [
       "_app/immutable/assets/_layout.Rf7YHFrv.css"
     ]
+  },
+  "src/routes/+layout.ts": {
+    "file": "entries/pages/_layout.ts.js",
+    "name": "entries/pages/_layout.ts",
+    "src": "src/routes/+layout.ts",
+    "isEntry": true
   },
   "src/routes/+page.svelte": {
     "file": "entries/pages/_page.svelte.js",
@@ -141,10 +153,10 @@
     "src": "src/routes/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_root.js",
+      "_index.js",
       "_exports.js",
       "_utils.js",
-      "_index.js",
+      "_root.js",
       "_state.svelte.js",
       "_monitor.js",
       "_Icon.js"
@@ -156,11 +168,11 @@
     "src": "src/routes/room/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_root.js",
-      "_arrow-left.js",
+      "_index.js",
+      "_volume-x.js",
       "_exports.js",
       "_utils.js",
-      "_index.js",
+      "_root.js",
       "_state.svelte.js",
       "_monitor.js",
       "_Icon.js"
@@ -178,10 +190,11 @@
     "src": "src/routes/room/[roomId]/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_root.js",
-      "_arrow-left.js",
+      "_index.js",
+      "_volume-x.js",
       "_exports.js",
       "_utils.js",
+      "_root.js",
       "_state.svelte.js",
       "_Icon.js"
     ],

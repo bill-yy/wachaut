@@ -1,0 +1,1 @@
+import{a as r,d as s,g as l,r as n}from"../chunks/DDeabFAX.js";import{s as i}from"../chunks/Cnk7t7lW.js";const d=!1,p=Object.freeze(Object.defineProperty({__proto__:null,ssr:d},Symbol.toStringTag,{value:"Module"}));var c=s('<div class="min-h-screen bg-slate-50"><!></div>');function u(e,a){var o=c(),t=l(o);i(t,a,"default",{}),n(o),r(e,o)}export{u as component,p as universal};

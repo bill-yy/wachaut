@@ -1,7 +1,13 @@
 {
-	"/": [],
-	"/room": [
-		"src/routes/room/+page.ts"
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
 	],
-	"/room/[roomId]": []
+	"/room": [
+		"src/routes/room/+page.ts",
+		"src/routes/+layout.ts"
+	],
+	"/room/[roomId]": [
+		"src/routes/+layout.ts"
+	]
 }

@@ -1,0 +1,1 @@
+import{h as r,b as s,e as d}from"./DDeabFAX.js";function c(i,a,l,f,o){var t;r&&s();var e=(t=a.$$slots)==null?void 0:t[l],n=!1;e===!0&&(e=a.children,n=!0),e===void 0||e(i,n?()=>f:f)}d();export{c as s};
