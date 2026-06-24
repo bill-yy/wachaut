@@ -56,16 +56,17 @@
       "_root.js"
     ]
   },
+  "_arrow-left.js": {
+    "file": "chunks/arrow-left.js",
+    "name": "arrow-left",
+    "imports": [
+      "_root.js",
+      "_Icon.js"
+    ]
+  },
   "_exports.js": {
     "file": "chunks/exports.js",
     "name": "exports"
-  },
-  "_index-server.js": {
-    "file": "chunks/index-server.js",
-    "name": "index-server",
-    "imports": [
-      "_root.js"
-    ]
   },
   "_index.js": {
     "file": "chunks/index.js",
@@ -80,6 +81,14 @@
     "imports": [
       "_root.js",
       "_server.js"
+    ]
+  },
+  "_monitor.js": {
+    "file": "chunks/monitor.js",
+    "name": "monitor",
+    "imports": [
+      "_root.js",
+      "_Icon.js"
     ]
   },
   "_root.js": {
@@ -136,6 +145,7 @@
       "_exports.js",
       "_utils.js",
       "_state.svelte.js",
+      "_monitor.js",
       "_Icon.js"
     ]
   },
@@ -146,10 +156,13 @@
     "isEntry": true,
     "imports": [
       "_root.js",
-      "_index-server.js",
+      "_arrow-left.js",
       "_exports.js",
       "_utils.js",
-      "_state.svelte.js"
+      "_index.js",
+      "_state.svelte.js",
+      "_monitor.js",
+      "_Icon.js"
     ]
   },
   "src/routes/room/+page.ts": {
@@ -165,7 +178,7 @@
     "isEntry": true,
     "imports": [
       "_root.js",
-      "_index-server.js",
+      "_arrow-left.js",
       "_exports.js",
       "_utils.js",
       "_state.svelte.js",

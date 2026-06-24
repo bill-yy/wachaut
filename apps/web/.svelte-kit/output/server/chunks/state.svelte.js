@@ -1,4 +1,4 @@
-import { o as noop } from "./root.js";
+import { p as noop } from "./root.js";
 import "./exports.js";
 import "@sveltejs/kit/internal/server";
 const is_legacy = noop.toString().includes("$$") || /function \w+\(\) \{\}/.test(noop.toString());

@@ -549,6 +549,20 @@ function defer_effect(effect, dirty_effects, maybe_dirty_effects) {
   clear_marked(effect.deps);
   set_signal_status(effect, CLEAN);
 }
+function subscribe_to_store(store, run, invalidate) {
+  if (store == null) {
+    run(void 0);
+    return noop;
+  }
+  const unsub = untrack(
+    () => store.subscribe(
+      run,
+      // @ts-expect-error
+      invalidate
+    )
+  );
+  return unsub.unsubscribe ? () => unsub.unsubscribe() : unsub;
+}
 function createSubscriber(start) {
   let subscribers = 0;
   let version = source(0);
@@ -4133,6 +4147,25 @@ function attr_class(value, hash, directives) {
   var result = to_class(value, hash, directives);
   return result ? ` class="${escape_html(result, true)}"` : "";
 }
+function store_get(store_values, store_name, store) {
+  if (store_name in store_values && store_values[store_name][0] === store) {
+    return store_values[store_name][2];
+  }
+  store_values[store_name]?.[1]();
+  store_values[store_name] = [store, null, void 0];
+  const unsub = subscribe_to_store(
+    store,
+    /** @param {any} v */
+    (v) => store_values[store_name][2] = v
+  );
+  store_values[store_name][1] = unsub;
+  return store_values[store_name][2];
+}
+function unsubscribe_stores(store_values) {
+  for (const store_name of Object.keys(store_values)) {
+    store_values[store_name][1]();
+  }
+}
 function slot(renderer, $$props, name, slot_props, fallback_fn) {
   var slot_fn = $$props.$$slots?.[name];
   if (slot_fn === true) {
@@ -4306,20 +4339,22 @@ export {
   spread_props as a,
   slot as b,
   attr as c,
-  attr_class as d,
+  store_get as d,
   escape_html as e,
-  fallback as f,
-  attributes as g,
+  attr_class as f,
+  ssr_context as g,
   head as h,
-  clsx as i,
-  ensure_array_like as j,
-  element as k,
-  bind_props as l,
-  ssr_context as m,
-  getContext as n,
-  noop as o,
-  root as p,
-  safe_not_equal as q,
+  fallback as i,
+  attributes as j,
+  clsx as k,
+  ensure_array_like as l,
+  element as m,
+  bind_props as n,
+  getContext as o,
+  noop as p,
+  root as q,
   rest_props as r,
-  sanitize_props as s
+  sanitize_props as s,
+  safe_not_equal as t,
+  unsubscribe_stores as u
 };

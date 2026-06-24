@@ -1,26 +1,24 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { writable } from 'svelte/store';
 	import { Monitor, Copy, Check, Share2, StopCircle, Users, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, Radio, AlertTriangle, Loader2 } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
 	import { browser } from '$app/environment';
 
-	// Use a plain object for state to avoid Svelte 5 hydration issues
-	let state = $state({
-		roomId: '',
-		pin: '',
-		isSharing: false,
-		viewerCount: 0,
-		copiedPin: false,
-		copiedUrl: false,
-		isMuted: false,
-		isFullscreen: false,
-		error: '',
-		roomUrl: '',
-		isLoading: true,
-		showLeaveConfirm: false
-	});
+	// Use Svelte 4 stores instead of $state to avoid hydration bugs
+	const roomId = writable('');
+	const pin = writable('');
+	const isSharing = writable(false);
+	const viewerCount = writable(0);
+	const copiedPin = writable(false);
+	const copiedUrl = writable(false);
+	const isMuted = writable(false);
+	const isFullscreen = writable(false);
+	const error = writable('');
+	const roomUrl = writable('');
+	const isLoading = writable(true);
+	const showLeaveConfirm = writable(false);
 
 	let stream: MediaStream | null = null;
 	let videoPreview: HTMLVideoElement;
@@ -37,10 +35,10 @@
 		if (!browser) return;
 
 		// Generate room ID (opaque, unique) and PIN (password)
-		state.roomId = crypto.randomUUID();
-		state.pin = Math.floor(100000 + Math.random() * 900000).toString();
-		state.roomUrl = `${window.location.origin}/room/${state.roomId}`;
-		state.isLoading = false;
+		roomId.set(crypto.randomUUID());
+		pin.set(Math.floor(100000 + Math.random() * 900000).toString());
+		roomUrl.set(`${window.location.origin}/room/${$roomId}`);
+		isLoading.set(false);
 
 		// Connect to signaling server
 		const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
@@ -48,11 +46,11 @@
 
 		socket.on('connect', () => {
 			console.log('Connected to signaling server');
-			socket?.emit('host:create-room', { roomId: state.roomId, pin: state.pin });
+			socket?.emit('host:create-room', { roomId: $roomId, pin: $pin });
 		});
 
 		socket.on('viewer:joined', async ({ viewerId }: { viewerId: string }) => {
-			state.viewerCount++;
+			viewerCount.update(n => n + 1);
 			await createPeerConnection(viewerId, true);
 		});
 
@@ -71,7 +69,7 @@
 		});
 
 		socket.on('viewer:left', ({ viewerId }: { viewerId: string }) => {
-			state.viewerCount = Math.max(0, state.viewerCount - 1);
+			viewerCount.update(n => Math.max(0, n - 1));
 			const peer = peers.get(viewerId);
 			if (peer) {
 				peer.close();
@@ -80,7 +78,7 @@
 		});
 
 		socket.on('disconnect', () => {
-			state.error = 'Se ha perdido la conexión con el servidor. Intentando reconectar...';
+			error.set('Se ha perdido la conexión con el servidor. Intentando reconectar...');
 		});
 	});
 
@@ -136,8 +134,8 @@
 				videoPreview.play();
 			}
 
-			state.isSharing = true;
-			state.error = '';
+			isSharing.set(true);
+			error.set('');
 
 			// Add stream to existing peers
 			peers.forEach((peer) => {
@@ -152,7 +150,7 @@
 			};
 		} catch (err) {
 			console.error('Error starting screen share:', err);
-			state.error = 'No se ha podido compartir la pantalla. Asegúrate de dar permiso al navegador.';
+			error.set('No se ha podido compartir la pantalla. Asegúrate de dar permiso al navegador.');
 		}
 	}
 
@@ -164,10 +162,10 @@
 		if (videoPreview) {
 			videoPreview.srcObject = null;
 		}
-		state.isSharing = false;
+		isSharing.set(false);
 		
 		// Notify server
-		socket?.emit('host:stop-sharing', { roomId: state.roomId });
+		socket?.emit('host:stop-sharing', { roomId: $roomId });
 	}
 
 	function toggleMute() {
@@ -175,7 +173,7 @@
 			const audioTrack = stream.getAudioTracks()[0];
 			if (audioTrack) {
 				audioTrack.enabled = !audioTrack.enabled;
-				state.isMuted = !audioTrack.enabled;
+				isMuted.set(!audioTrack.enabled);
 			}
 		}
 	}
@@ -183,10 +181,10 @@
 	function toggleFullscreen() {
 		if (!document.fullscreenElement) {
 			document.documentElement.requestFullscreen();
-			state.isFullscreen = true;
+			isFullscreen.set(true);
 		} else {
 			document.exitFullscreen();
-			state.isFullscreen = false;
+			isFullscreen.set(false);
 		}
 	}
 
@@ -194,11 +192,11 @@
 		try {
 			await navigator.clipboard.writeText(text);
 			if (type === 'pin') {
-				state.copiedPin = true;
-				setTimeout(() => state.copiedPin = false, 2000);
+				copiedPin.set(true);
+				setTimeout(() => copiedPin.set(false), 2000);
 			} else {
-				state.copiedUrl = true;
-				setTimeout(() => state.copiedUrl = false, 2000);
+				copiedUrl.set(true);
+				setTimeout(() => copiedUrl.set(false), 2000);
 			}
 		} catch {
 			// Fallback
@@ -209,33 +207,33 @@
 			document.execCommand('copy');
 			document.body.removeChild(textarea);
 			if (type === 'pin') {
-				state.copiedPin = true;
-				setTimeout(() => state.copiedPin = false, 2000);
+				copiedPin.set(true);
+				setTimeout(() => copiedPin.set(false), 2000);
 			} else {
-				state.copiedUrl = true;
-				setTimeout(() => state.copiedUrl = false, 2000);
+				copiedUrl.set(true);
+				setTimeout(() => copiedUrl.set(false), 2000);
 			}
 		}
 	}
 
 	function openLeaveConfirm() {
-		state.showLeaveConfirm = true;
+		showLeaveConfirm.set(true);
 	}
 
 	function cancelLeave() {
-		state.showLeaveConfirm = false;
+		showLeaveConfirm.set(false);
 	}
 
 	function confirmLeave() {
-		state.showLeaveConfirm = false;
+		showLeaveConfirm.set(false);
 		stopSharing();
-		socket?.emit('host:close-room', { roomId: state.roomId });
+		socket?.emit('host:close-room', { roomId: $roomId });
 		socket?.disconnect();
 		goto('/');
 	}
 
 	function goHome() {
-		if (state.isSharing || state.viewerCount > 0) {
+		if ($isSharing || $viewerCount > 0) {
 			openLeaveConfirm();
 		} else {
 			confirmLeave();
@@ -247,7 +245,7 @@
 	<title>Sala de Wachaut</title>
 </svelte:head>
 
-{#if state.isLoading}
+{#if $isLoading}
 	<!-- Loading State -->
 	<main class="flex min-h-screen flex-col items-center justify-center bg-slate-50">
 		<div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
@@ -273,7 +271,7 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-3">
-					{#if state.isSharing}
+					{#if $isSharing}
 						<div class="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">
 							<div class="h-2 w-2 animate-pulse rounded-full bg-red-500"></div>
 							En vivo
@@ -281,18 +279,18 @@
 					{/if}
 					<div class="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
 						<Users class="h-3.5 w-3.5" />
-						<span>{state.viewerCount} espectador{state.viewerCount === 1 ? '' : 'es'}</span>
+						<span>{$viewerCount} espectador{$viewerCount === 1 ? '' : 'es'}</span>
 					</div>
 				</div>
 			</div>
 		</header>
 
 		<!-- Error Banner -->
-		{#if state.error}
+		{#if $error}
 			<div class="mx-4 mt-4 animate-slide-up">
 				<div class="mx-auto flex max-w-6xl items-center gap-3 rounded-xl bg-red-50 px-4 py-3 border border-red-100">
 					<AlertTriangle class="h-4 w-4 flex-shrink-0 text-red-500" />
-					<p class="text-sm text-red-600">{state.error}</p>
+					<p class="text-sm text-red-600">{$error}</p>
 				</div>
 			</div>
 		{/if}
@@ -302,7 +300,7 @@
 			<!-- Video Area -->
 			<div class="flex-1 bg-slate-900 p-4">
 				<div class="relative mx-auto aspect-video max-w-5xl overflow-hidden rounded-2xl bg-slate-800 shadow-2xl">
-					{#if state.isSharing}
+					{#if $isSharing}
 						<video
 							bind:this={videoPreview}
 							class="h-full w-full"
@@ -312,15 +310,15 @@
 						></video>
 						<!-- Controls Overlay -->
 						<div class="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-5 opacity-0 transition-opacity duration-300 hover:opacity-100">
-							<button onclick={toggleMute} class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30" title={state.isMuted ? 'Activar audio' : 'Silenciar audio'}>
-								{#if state.isMuted}
+							<button onclick={toggleMute} class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30" title={$isMuted ? 'Activar audio' : 'Silenciar audio'}>
+								{#if $isMuted}
 									<VolumeX class="h-5 w-5" />
 								{:else}
 									<Volume2 class="h-5 w-5" />
 								{/if}
 							</button>
-							<button onclick={toggleFullscreen} class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30" title={state.isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
-								{#if state.isFullscreen}
+							<button onclick={toggleFullscreen} class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30" title={$isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}>
+								{#if $isFullscreen}
 									<Minimize class="h-5 w-5" />
 								{:else}
 									<Maximize class="h-5 w-5" />
@@ -361,17 +359,17 @@
 							<label class="mb-1.5 block text-xs font-medium text-slate-500">PIN de acceso</label>
 							<div class="flex items-center gap-2">
 								<code class="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-center text-xl font-mono font-bold tracking-[0.3em] text-slate-800">
-									{state.pin}
+									{$pin}
 								</code>
-								<button onclick={() => copyToClipboard(state.pin, 'pin')} class="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 transition-colors hover:bg-slate-50" title="Copiar PIN">
-									{#if state.copiedPin}
+								<button onclick={() => copyToClipboard($pin, 'pin')} class="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 transition-colors hover:bg-slate-50" title="Copiar PIN">
+									{#if $copiedPin}
 										<Check class="h-5 w-5 text-green-600" />
 									{:else}
 										<Copy class="h-5 w-5 text-slate-500" />
 									{/if}
 								</button>
 							</div>
-							{#if state.copiedPin}
+							{#if $copiedPin}
 								<p class="mt-1.5 text-xs text-green-600 animate-fade-in">¡PIN copiado!</p>
 							{/if}
 						</div>
@@ -379,16 +377,16 @@
 						<div>
 							<label class="mb-1.5 block text-xs font-medium text-slate-500">Enlace para compartir</label>
 							<div class="flex items-center gap-2">
-								<input type="text" value={state.roomUrl} readonly class="input-field flex-1 text-xs" />
-								<button onclick={() => copyToClipboard(state.roomUrl, 'url')} class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 transition-colors hover:bg-slate-50" title="Copiar enlace">
-									{#if state.copiedUrl}
+								<input type="text" value={$roomUrl} readonly class="input-field flex-1 text-xs" />
+								<button onclick={() => copyToClipboard($roomUrl, 'url')} class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 transition-colors hover:bg-slate-50" title="Copiar enlace">
+									{#if $copiedUrl}
 										<Check class="h-5 w-5 text-green-600" />
 									{:else}
 										<Copy class="h-5 w-5 text-slate-500" />
 									{/if}
 								</button>
 							</div>
-							{#if state.copiedUrl}
+							{#if $copiedUrl}
 								<p class="mt-1.5 text-xs text-green-600 animate-fade-in">¡Enlace copiado!</p>
 							{/if}
 						</div>
@@ -398,7 +396,7 @@
 					<div class="card-static">
 						<h3 class="mb-3 text-sm font-bold text-slate-800">Acciones</h3>
 						<div class="space-y-2.5">
-							{#if !state.isSharing}
+							{#if !$isSharing}
 								<button onclick={startSharing} class="btn-primary w-full gap-2 py-3.5">
 									<Share2 class="h-4 w-4" />
 									Compartir pantalla
@@ -433,7 +431,7 @@
 	</main>
 
 	<!-- Leave Confirmation Modal -->
-	{#if state.showLeaveConfirm}
+	{#if $showLeaveConfirm}
 		<div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
 			<div class="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl animate-scale-in">
 				<div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50">
@@ -441,7 +439,7 @@
 				</div>
 				<h3 class="mb-2 text-lg font-bold text-slate-800">¿Cerrar la sala?</h3>
 				<p class="mb-6 text-sm text-slate-500">
-					{#if state.isSharing}
+					{#if $isSharing}
 						Se detendrá la transmisión y los espectadores perderán la conexión.
 					{:else}
 						Los espectadores perderán la conexión.

@@ -1,4 +1,4 @@
-import { s as sanitize_props, r as rest_props, f as fallback, g as attributes, i as clsx, j as ensure_array_like, k as element, b as slot, l as bind_props } from "./root.js";
+import { s as sanitize_props, r as rest_props, i as fallback, j as attributes, k as clsx, l as ensure_array_like, m as element, b as slot, n as bind_props } from "./root.js";
 /**
  * @license lucide-svelte v0.460.1 - ISC
  *
