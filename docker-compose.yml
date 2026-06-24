@@ -29,6 +29,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
+      - TURN_SECRET=${TURN_SECRET}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wachaut-server.rule=Host(`wachaut.billytech.es`) && PathPrefix(`/socket.io`)"
@@ -41,6 +42,8 @@ services:
   coturn:
     image: coturn/coturn:latest
     restart: always
+    environment:
+      - TURN_SECRET=${TURN_SECRET}
     command:
       - -n
       - --log-file=stdout
@@ -48,10 +51,11 @@ services:
       - --max-port=11000
       - --realm=wachaut.billytech.es
       - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
       - --fingerprint
       - --no-multicast-peers
       - --no-cli
-      - --stun-only
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { Server } from 'socket.io';
+import crypto from 'node:crypto';
 
 const fastify = Fastify({
   logger: true
@@ -314,6 +315,42 @@ io.on('connection', (socket) => {
 
     io.to(room.hostId).emit('reaction:receive', { emoji, from: 'Espectador' });
   });
+});
+
+// TURN credentials endpoint
+fastify.get('/turn-credentials', async (request, reply) => {
+  const secret = process.env.TURN_SECRET;
+  if (!secret) {
+    reply.status(503);
+    return { error: 'TURN not configured' };
+  }
+
+  const ttl = 3600; // 1 hour
+  const identifier = (request.query as { id?: string })?.id || crypto.randomUUID();
+  const expiry = Math.floor(Date.now() / 1000) + ttl;
+  const username = `${expiry}:${identifier}`;
+  const password = crypto
+    .createHmac('sha1', secret)
+    .update(username)
+    .digest('base64');
+
+  return {
+    ttl,
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      {
+        urls: 'turn:wachaut.billytech.es:3478',
+        username,
+        credential: password
+      },
+      {
+        urls: 'turns:wachaut.billytech.es:5349',
+        username,
+        credential: password
+      }
+    ]
+  };
 });
 
 // Health check endpoint

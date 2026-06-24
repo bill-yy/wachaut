@@ -30,6 +30,30 @@
   let socket = $state(null);
   let peer = $state(null);
   let pendingStream = $state(null);
+  let iceServers = $state(null);
+
+  async function fetchIceServers() {
+    if (iceServers) return iceServers;
+    try {
+      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
+      const httpUrl = wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+      const res = await fetch(`${httpUrl}/turn-credentials?id=${socket?.id || crypto.randomUUID()}`, {
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      iceServers = data.iceServers;
+      console.log('[viewer] ICE servers loaded:', iceServers.map(s => s.urls));
+      return iceServers;
+    } catch (e) {
+      console.error('[viewer] Failed to fetch TURN credentials, falling back to STUN:', e);
+      iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+      return iceServers;
+    }
+  }
 
   // --- Video ---
   let videoEl = $state(null);
@@ -163,12 +187,8 @@
     // WebRTC signaling — server protocol: { signal } objects
     socket.on('host:signal', async (data) => {
       if (!peer) {
-        peer = new RTCPeerConnection({
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        });
+        const servers = await fetchIceServers();
+        peer = new RTCPeerConnection({ iceServers: servers });
 
         peer.ontrack = (event) => {
           if (event.streams && event.streams[0]) {
@@ -191,10 +211,15 @@
         };
 
         peer.onconnectionstatechange = () => {
+          console.log(`[viewer] connectionState=${peer.connectionState} iceState=${peer.iceConnectionState}`);
           if (peer.connectionState === 'disconnected' ||
               peer.connectionState === 'failed') {
             status = 'waiting';
           }
+        };
+
+        peer.oniceconnectionstatechange = () => {
+          console.log(`[viewer] iceConnectionState=${peer.iceConnectionState}`);
         };
       }
 
