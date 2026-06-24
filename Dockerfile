@@ -20,11 +20,11 @@ FROM node:22-alpine AS web
 WORKDIR /app
 COPY --from=builder /app/apps/web/build ./build
 COPY --from=builder /app/apps/web/package.json ./
-RUN sed -i '/@wachaut\/shared-types/d' package.json && npm install --omit=dev --legacy-peer-deps
+RUN sed -i '/@wachaut\\/shared-types/d' package.json && npm install --omit=dev --legacy-peer-deps
 EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
-CMD ["node", "build"]
+CMD ["npx", "serve", "build", "-l", "3000", "-s"]
 
 # Production stage for server
 FROM node:22-alpine AS server
@@ -57,4 +57,4 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-CMD ["sh", "-c", "(cd /app/web && PORT=3000 node build) & (cd /app/server && PORT=3001 HOST=0.0.0.0 node dist/index.js) & wait"]
+CMD ["sh", "-c", "(cd /app/web && npx serve build -l 3000 -s) & (cd /app/server && PORT=3001 HOST=0.0.0.0 node dist/index.js) & wait"]

@@ -1,4 +1,4 @@
-import { r as root } from "./root.js";
+import { j as root } from "./root.js";
 import "./server.js";
 let read_implementation = null;
 function set_read_implementation(fn) {
@@ -103,7 +103,7 @@ const options = {
     app: ({ head, body, assets, nonce, env }) => '<!DOCTYPE html>\n<html lang="es">\n	<head>\n		<meta charset="utf-8" />\n		<meta name="viewport" content="width=device-width, initial-scale=1" />\n		<meta name="description" content="Wachaut - Comparte tu pantalla con amigos sin registro" />\n		<title>Wachaut</title>\n		' + head + '\n	</head>\n	<body data-sveltekit-preload-data="hover">\n		<div style="display: contents">' + body + "</div>\n	</body>\n</html>\n",
     error
   },
-  version_hash: "ta77lo"
+  version_hash: "rw68et"
 };
 async function get_hooks() {
   let handle;

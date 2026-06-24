@@ -16,11 +16,10 @@
     "src": "../../node_modules/.pnpm/@sveltejs+kit@2.67.0_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.56.4_@typescript-eslint+type_sx26ub5immt3g3ww4khdd3h62q/node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
     "isEntry": true,
     "imports": [
-      "_index.js",
+      "_root.js",
       "_state.svelte.js",
       "_exports.js",
-      "_utils.js",
-      "_root.js"
+      "_utils.js"
     ]
   },
   "../../node_modules/.pnpm/@sveltejs+kit@2.67.0_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.56.4_@typescript-eslint+type_sx26ub5immt3g3ww4khdd3h62q/node_modules/@sveltejs/kit/src/runtime/server/index.js": {
@@ -52,21 +51,14 @@
     "file": "chunks/Icon.js",
     "name": "Icon",
     "imports": [
-      "_index.js"
+      "_root.js"
     ]
   },
   "_exports.js": {
     "file": "chunks/exports.js",
     "name": "exports",
     "imports": [
-      "_index.js"
-    ]
-  },
-  "_index.js": {
-    "file": "chunks/index.js",
-    "name": "index",
-    "imports": [
-      "_uneval.js"
+      "_root.js"
     ]
   },
   "_internal.js": {
@@ -81,7 +73,7 @@
     "file": "chunks/monitor.js",
     "name": "monitor",
     "imports": [
-      "_index.js",
+      "_root.js",
       "_Icon.js"
     ]
   },
@@ -89,7 +81,7 @@
     "file": "chunks/root.js",
     "name": "root",
     "imports": [
-      "_index.js"
+      "_uneval.js"
     ]
   },
   "_server.js": {
@@ -100,9 +92,8 @@
     "file": "chunks/state.svelte.js",
     "name": "state.svelte",
     "imports": [
-      "_index.js",
-      "_exports.js",
-      "_root.js"
+      "_root.js",
+      "_exports.js"
     ]
   },
   "_uneval.js": {
@@ -125,7 +116,7 @@
     "file": "chunks/volume-x.js",
     "name": "volume-x",
     "imports": [
-      "_index.js",
+      "_root.js",
       "_Icon.js"
     ]
   },
@@ -134,9 +125,6 @@
     "name": "entries/pages/_layout.svelte",
     "src": "src/routes/+layout.svelte",
     "isEntry": true,
-    "imports": [
-      "_index.js"
-    ],
     "css": [
       "_app/immutable/assets/_layout.Rf7YHFrv.css"
     ]
@@ -153,10 +141,9 @@
     "src": "src/routes/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_index.js",
+      "_root.js",
       "_exports.js",
       "_utils.js",
-      "_root.js",
       "_state.svelte.js",
       "_monitor.js",
       "_Icon.js"
@@ -168,11 +155,10 @@
     "src": "src/routes/room/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_index.js",
+      "_root.js",
       "_volume-x.js",
       "_exports.js",
       "_utils.js",
-      "_root.js",
       "_state.svelte.js",
       "_monitor.js",
       "_Icon.js"
@@ -190,11 +176,10 @@
     "src": "src/routes/room/[roomId]/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_index.js",
+      "_root.js",
       "_volume-x.js",
       "_exports.js",
       "_utils.js",
-      "_root.js",
       "_state.svelte.js",
       "_Icon.js"
     ],

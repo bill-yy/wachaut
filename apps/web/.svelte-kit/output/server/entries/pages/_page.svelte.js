@@ -1,9 +1,8 @@
-import { s as sanitize_props, a as spread_props, b as slot, m as head, p as attr, o as store_get, u as unsubscribe_stores } from "../../chunks/index.js";
+import { s as sanitize_props, a as spread_props, b as slot, o as head, q as attr, p as store_get, u as unsubscribe_stores } from "../../chunks/root.js";
 import "@sveltejs/kit/internal";
 import { w as writable } from "../../chunks/exports.js";
 import "../../chunks/utils.js";
 import "@sveltejs/kit/internal/server";
-import "../../chunks/root.js";
 import "../../chunks/state.svelte.js";
 import { M as Monitor } from "../../chunks/monitor.js";
 import { I as Icon } from "../../chunks/Icon.js";

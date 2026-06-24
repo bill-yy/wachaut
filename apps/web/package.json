@@ -36,6 +36,7 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
     "@wachaut/shared-types": "workspace:*",
     "socket.io-client": "^4.8.0"
   }
