@@ -184,7 +184,9 @@ function _page($$renderer, $$props) {
 		onDestroy(() => {
 			disconnect();
 		});
-		$$renderer.push(`<div class="min-h-screen bg-slate-50"><header class="bg-white border-b border-slate-200 px-4 py-3 shadow-sm"><div class="max-w-5xl mx-auto flex items-center justify-between"><h1 class="text-xl font-bold text-slate-800 tracking-tight">📺 Wachaut</h1> <span class="text-xs text-slate-400">Sala: ${escape_html(roomId())}</span></div></header> <main class="max-w-5xl mx-auto px-4 py-6">`);
+		$$renderer.push(`<div class="min-h-screen bg-slate-50"><header class="bg-white border-b border-slate-200 px-4 py-3 shadow-sm"><div class="max-w-5xl mx-auto flex items-center justify-between"><div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800">`);
+		Monitor($$renderer, { class: "h-3.5 w-3.5 text-white" });
+		$$renderer.push(`<!----></div> <span class="text-lg font-bold text-slate-800">Wachaut</span></div> <span class="text-xs text-slate-400">Sala: ${escape_html(roomId())}</span></div></header> <main class="max-w-5xl mx-auto px-4 py-6">`);
 		if (status === "idle") {
 			$$renderer.push("<!--[0-->");
 			$$renderer.push(`<div class="flex items-center justify-center" style="min-height: 60vh;"><div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-slate-200"><div class="flex flex-col items-center mb-6"><div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-4">`);

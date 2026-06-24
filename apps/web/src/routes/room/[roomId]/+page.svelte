@@ -100,8 +100,9 @@
 
     status = 'connecting';
 
-    socket = io({
-      transports: ['websocket', 'polling']
+    const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
+    socket = io(wsUrl, {
+      transports: ['websocket']
     });
 
     socket.on('connect', () => {
@@ -364,9 +365,12 @@
   <!-- Header -->
   <header class="bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
     <div class="max-w-5xl mx-auto flex items-center justify-between">
-      <h1 class="text-xl font-bold text-slate-800 tracking-tight">
-        📺 Wachaut
-      </h1>
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800">
+          <Monitor class="h-3.5 w-3.5 text-white" />
+        </div>
+        <span class="text-lg font-bold text-slate-800">Wachaut</span>
+      </div>
       <span class="text-xs text-slate-400">
         Sala: {roomId}
       </span>
