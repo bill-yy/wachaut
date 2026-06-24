@@ -82,12 +82,20 @@
     "file": "chunks/internal2.js",
     "name": "internal"
   },
+  "_monitor.js": {
+    "file": "chunks/monitor.js",
+    "name": "monitor",
+    "imports": [
+      "_server.js"
+    ]
+  },
   "_navigation.js": {
     "file": "chunks/navigation.js",
     "name": "navigation",
     "imports": [
       "_server.js",
-      "_client.js"
+      "_client.js",
+      "_monitor.js"
     ]
   },
   "_server.js": {
@@ -125,7 +133,7 @@
       "_server.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.h8LdMwt6.css"
+      "_app/immutable/assets/_layout.DRCu8ZBM.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -140,8 +148,8 @@
     "src": "src/routes/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_exports.js",
       "_server.js",
+      "_monitor.js",
       "_navigation.js"
     ]
   },
@@ -153,6 +161,7 @@
     "imports": [
       "_internal.js",
       "_server.js",
+      "_monitor.js",
       "_navigation.js"
     ]
   },
@@ -164,7 +173,8 @@
     "imports": [
       "_internal.js",
       "_server.js",
-      "_client.js"
+      "_client.js",
+      "_monitor.js"
     ]
   },
   "virtual:__sveltekit/env": {

@@ -1,6 +1,7 @@
 import { i as onDestroy } from "../../../chunks/internal.js";
 import { D as attr, d as slot, f as spread_props, k as escape_html, s as head, t as attr_class, u as sanitize_props } from "../../../chunks/server.js";
-import { n as Icon, t as Monitor } from "../../../chunks/navigation.js";
+import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
+import { t as Link_2 } from "../../../chunks/navigation.js";
 import "socket.io-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-left.svelte
 function Arrow_left($$renderer, $$props) {
@@ -67,6 +68,44 @@ function Copy($$renderer, $$props) {
 				"rx": "2",
 				"ry": "2"
 			}], ["path", { "d": "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }]],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/eye.svelte
+function Eye($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "eye" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name Eye
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMi4wNjIgMTIuMzQ4YTEgMSAwIDAgMSAwLS42OTYgMTAuNzUgMTAuNzUgMCAwIDEgMTkuODc2IDAgMSAxIDAgMCAxIDAgLjY5NiAxMC43NSAxMC43NSAwIDAgMS0xOS44NzYgMCIgLz4KICA8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSIzIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/eye
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [["path", { "d": "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" }], ["circle", {
+				"cx": "12",
+				"cy": "12",
+				"r": "3"
+			}]],
 			children: ($$renderer) => {
 				$$renderer.push(`<!--[-->`);
 				slot($$renderer, $$props, "default", {}, null);
@@ -167,49 +206,6 @@ function Share_2($$renderer, $$props) {
 					"y1": "6.51",
 					"y2": "10.49"
 				}]
-			],
-			children: ($$renderer) => {
-				$$renderer.push(`<!--[-->`);
-				slot($$renderer, $$props, "default", {}, null);
-				$$renderer.push(`<!--]-->`);
-			},
-			$$slots: { default: true }
-		}
-	]));
-}
-//#endregion
-//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/users.svelte
-function Users($$renderer, $$props) {
-	/**
-	* @license lucide-svelte v0.460.1 - ISC
-	*
-	* This source code is licensed under the ISC license.
-	* See the LICENSE file in the root directory of this source tree.
-	*/
-	Icon($$renderer, spread_props([
-		{ name: "users" },
-		sanitize_props($$props),
-		{
-			/**
-			* @component @name Users
-			* @description Lucide SVG icon component, renders SVG Element with children.
-			*
-			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTYgMjF2LTJhNCA0IDAgMCAwLTQtNEg2YTQgNCAwIDAgMC00IDR2MiIgLz4KICA8Y2lyY2xlIGN4PSI5IiBjeT0iNyIgcj0iNCIgLz4KICA8cGF0aCBkPSJNMjIgMjF2LTJhNCA0IDAgMCAwLTMtMy44NyIgLz4KICA8cGF0aCBkPSJNMTYgMy4xM2E0IDQgMCAwIDEgMCA3Ljc1IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/users
-			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-			*
-			* @param {Object} props - Lucide icons props and any valid SVG attribute
-			* @returns {FunctionalComponent} Svelte component
-			*
-			*/
-			iconNode: [
-				["path", { "d": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }],
-				["circle", {
-					"cx": "9",
-					"cy": "7",
-					"r": "4"
-				}],
-				["path", { "d": "M22 21v-2a4 4 0 0 0-3-3.87" }],
-				["path", { "d": "M16 3.13a4 4 0 0 1 0 7.75" }]
 			],
 			children: ($$renderer) => {
 				$$renderer.push(`<!--[-->`);
@@ -330,72 +326,68 @@ function _page($$renderer, $$props) {
 		}
 		head("ek3c68", $$renderer, ($$renderer) => {
 			$$renderer.title(($$renderer) => {
-				$$renderer.push(`<title>Sala de Wachaut</title>`);
+				$$renderer.push(`<title>Wachaut — Tu sala</title>`);
 			});
 		});
-		$$renderer.push(`<div${attr_class("fixed inset-0 z-[200] flex items-center justify-center bg-slate-50 transition-opacity duration-500", void 0, {
+		$$renderer.push(`<div${attr_class("fixed inset-0 z-[200] flex items-center justify-center bg-slate-50 transition-all duration-700", void 0, {
 			"opacity-0": isReady,
 			"pointer-events-none": isReady
-		})}><div class="text-center"><div class="mb-4 inline-flex h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-800"></div> <p class="text-sm text-slate-500">Preparando sala...</p></div></div> <main${attr_class("min-h-screen flex-col bg-slate-50 transition-opacity duration-500", void 0, {
-			"flex": isReady,
-			"hidden": true,
-			"opacity-0": true
-		})}><header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 px-4 py-3 backdrop-blur-xl"><div class="mx-auto flex max-w-6xl items-center justify-between"><div class="flex items-center gap-3"><button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" title="Volver al inicio">`);
+		})}><div class="text-center"><div class="mb-4 inline-flex h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-slate-800"></div> <p class="text-sm font-medium text-slate-400">Creando sala...</p></div></div> <div${attr_class("min-h-screen bg-slate-50 transition-opacity duration-500", void 0, { "opacity-0": true })}><header class="sticky top-0 z-50 border-b border-slate-200/60 bg-white/70 backdrop-blur-xl"><div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3"><div class="flex items-center gap-3"><button class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" title="Volver al inicio">`);
 		Arrow_left($$renderer, { class: "h-4 w-4" });
-		$$renderer.push(`<!----></button> <div class="flex items-center gap-2"><div class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800">`);
-		Monitor($$renderer, { class: "h-3.5 w-3.5 text-white" });
-		$$renderer.push(`<!----></div> <span class="font-semibold text-slate-800">Wachaut</span></div></div> <div class="flex items-center gap-3">`);
+		$$renderer.push(`<!----></button> <div class="h-4 w-px bg-slate-200"></div> <div class="flex items-center gap-2"><div class="flex h-6 w-6 items-center justify-center rounded-md bg-slate-800">`);
+		Monitor($$renderer, { class: "h-3 w-3 text-white" });
+		$$renderer.push(`<!----></div> <span class="text-sm font-semibold text-slate-700">Wachaut</span></div></div> <div class="flex items-center gap-3">`);
 		if (isSharing) {
 			$$renderer.push("<!--[0-->");
-			$$renderer.push(`<div class="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600"><div class="h-2 w-2 animate-pulse rounded-full bg-red-500"></div>En vivo</div>`);
+			$$renderer.push(`<div class="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-100"><div class="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></div> En vivo</div>`);
 		} else $$renderer.push("<!--[-1-->");
-		$$renderer.push(`<!--]--> <div class="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">`);
-		Users($$renderer, { class: "h-3.5 w-3.5" });
-		$$renderer.push(`<!----> <span>${escape_html(viewerCount)} espectador${escape_html("es")}</span></div></div></div></header> `);
+		$$renderer.push(`<!--]--> <div class="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500">`);
+		Eye($$renderer, { class: "h-3.5 w-3.5" });
+		$$renderer.push(`<!----> ${escape_html(viewerCount)}</div></div></div></header> `);
 		$$renderer.push("<!--[-1-->");
-		$$renderer.push(`<!--]--> <div class="flex flex-1 flex-col lg:flex-row"><div class="flex-1 bg-slate-900 p-4"><div class="relative mx-auto aspect-video max-w-5xl overflow-hidden rounded-2xl bg-slate-800 shadow-2xl">`);
+		$$renderer.push(`<!--]--> <div class="mx-auto max-w-7xl p-4"><div class="flex flex-col gap-4 lg:flex-row"><div class="flex-1"><div class="relative overflow-hidden rounded-2xl bg-slate-900 shadow-xl">`);
 		if (isSharing) {
 			$$renderer.push("<!--[0-->");
-			$$renderer.push(`<video class="h-full w-full" autoplay="" muted="" playsinline=""></video> <div class="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-5 opacity-0 transition-opacity duration-300 hover:opacity-100"><button class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30"${attr("title", "Silenciar")}>`);
+			$$renderer.push(`<video class="h-auto w-full" autoplay="" muted="" playsinline=""></video> <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-2xl bg-black/50 px-3 py-2 backdrop-blur-xl transition-opacity duration-300 hover:bg-black/60"><button class="flex h-9 w-9 items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/20 hover:text-white"${attr("title", "Silenciar")}>`);
 			$$renderer.push("<!--[-1-->");
-			Volume_2($$renderer, { class: "h-5 w-5" });
-			$$renderer.push(`<!--]--></button> <button class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30" title="Pantalla completa">`);
+			Volume_2($$renderer, { class: "h-4 w-4" });
+			$$renderer.push(`<!--]--></button> <button class="flex h-9 w-9 items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/20 hover:text-white" title="Pantalla completa">`);
 			$$renderer.push("<!--[-1-->");
-			Maximize($$renderer, { class: "h-5 w-5" });
-			$$renderer.push(`<!--]--></button> <button class="flex h-10 items-center justify-center gap-2 rounded-xl bg-red-500/90 px-4 text-sm font-medium text-white hover:bg-red-600" title="Detener">`);
-			Circle_stop($$renderer, { class: "h-5 w-5" });
-			$$renderer.push(`<!----><span class="hidden sm:inline">Detener</span></button></div>`);
+			Maximize($$renderer, { class: "h-4 w-4" });
+			$$renderer.push(`<!--]--></button> <div class="mx-1 h-5 w-px bg-white/20"></div> <button class="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-red-500 px-3 text-xs font-medium text-white transition-colors hover:bg-red-600" title="Dejar de compartir">`);
+			Circle_stop($$renderer, { class: "h-4 w-4" });
+			$$renderer.push(`<!----> <span class="hidden sm:inline">Detener</span></button></div>`);
 		} else {
 			$$renderer.push("<!--[-1-->");
-			$$renderer.push(`<div class="flex h-full flex-col items-center justify-center text-white">`);
-			Monitor($$renderer, { class: "mb-6 h-10 w-10 text-slate-400" });
-			$$renderer.push(`<!----> <p class="mb-2 text-xl font-semibold text-slate-300">Tu pantalla aparecerá aquí</p> <p class="mb-6 text-sm text-slate-500">Haz clic para empezar a compartir</p> <button class="btn-primary gap-2 px-6 py-3.5">`);
-			Share_2($$renderer, { class: "h-5 w-5" });
-			$$renderer.push(`<!---->Compartir pantalla</button></div>`);
+			$$renderer.push(`<div class="flex aspect-video flex-col items-center justify-center p-8 text-center"><div class="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800">`);
+			Monitor($$renderer, { class: "h-7 w-7 text-slate-400" });
+			$$renderer.push(`<!----></div> <p class="mb-1 text-lg font-semibold text-slate-300">Tu pantalla aparecerá aquí</p> <p class="mb-6 text-sm text-slate-500">Comparte tu pantalla para que los espectadores puedan verla</p> <button class="btn-primary gap-2 px-6 py-3">`);
+			Share_2($$renderer, { class: "h-4 w-4" });
+			$$renderer.push(`<!----> Compartir pantalla</button></div>`);
 		}
-		$$renderer.push(`<!--]--></div></div> <div class="w-full border-l border-slate-200/80 bg-white p-5 lg:w-80"><div class="space-y-5"><div class="card-static"><div class="mb-4 flex items-center gap-2"><div class="h-2 w-2 rounded-full bg-green-500"></div><h3 class="text-sm font-bold text-slate-800">Información de la sala</h3></div> <div class="mb-4"><label class="mb-1.5 block text-xs font-medium text-slate-500">PIN de acceso</label> <div class="flex items-center gap-2"><code class="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.3em] text-slate-800">${escape_html(pin)}</code> <button class="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50" title="Copiar PIN">`);
+		$$renderer.push(`<!--]--></div></div> <div class="w-full shrink-0 lg:w-80"><div class="space-y-4"><div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Información de la sala</h3> <div class="mb-4"><label class="mb-1.5 block text-xs font-medium text-slate-500">PIN de acceso</label> <div class="flex items-center gap-2"><code class="flex-1 rounded-xl bg-slate-50 px-4 py-3 text-center font-mono text-xl font-bold tracking-[0.3em] text-slate-800 ring-1 ring-slate-100">${escape_html(pin)}</code> <button class="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-95" title="Copiar PIN">`);
 		$$renderer.push("<!--[-1-->");
-		Copy($$renderer, { class: "h-5 w-5 text-slate-500" });
+		Copy($$renderer, { class: "h-4 w-4 text-slate-400" });
 		$$renderer.push(`<!--]--></button></div> `);
 		$$renderer.push("<!--[-1-->");
-		$$renderer.push(`<!--]--></div> <div><label class="mb-1.5 block text-xs font-medium text-slate-500">Enlace para compartir</label> <div class="flex items-center gap-2"><input type="text"${attr("value", roomUrl)} readonly="" class="input-field flex-1 text-xs"/> <button class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50" title="Copiar enlace">`);
+		$$renderer.push(`<!--]--></div> <div><label class="mb-1.5 block text-xs font-medium text-slate-500">Enlace para compartir</label> <div class="flex items-center gap-2"><input type="text"${attr("value", roomUrl)} readonly="" class="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 ring-1 ring-slate-100"/> <button class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-95" title="Copiar enlace">`);
 		$$renderer.push("<!--[-1-->");
-		Copy($$renderer, { class: "h-5 w-5 text-slate-500" });
+		Link_2($$renderer, { class: "h-4 w-4 text-slate-400" });
 		$$renderer.push(`<!--]--></button></div> `);
 		$$renderer.push("<!--[-1-->");
-		$$renderer.push(`<!--]--></div></div> <div class="card-static"><h3 class="mb-3 text-sm font-bold text-slate-800">Acciones</h3> <div class="space-y-2.5">`);
+		$$renderer.push(`<!--]--></div></div> <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Acciones</h3> <div class="space-y-2.5">`);
 		if (!isSharing) {
 			$$renderer.push("<!--[0-->");
-			$$renderer.push(`<button class="btn-primary w-full gap-2 py-3.5">`);
+			$$renderer.push(`<button class="btn-primary w-full gap-2 py-3">`);
 			Share_2($$renderer, { class: "h-4 w-4" });
-			$$renderer.push(`<!---->Compartir pantalla</button>`);
+			$$renderer.push(`<!----> Compartir pantalla</button>`);
 		} else {
 			$$renderer.push("<!--[-1-->");
-			$$renderer.push(`<button class="btn-danger w-full gap-2 py-3.5">`);
+			$$renderer.push(`<button class="btn-danger w-full gap-2 py-3">`);
 			Circle_stop($$renderer, { class: "h-4 w-4" });
-			$$renderer.push(`<!---->Detener compartir</button>`);
+			$$renderer.push(`<!----> Detener compartir</button>`);
 		}
-		$$renderer.push(`<!--]--> <button class="btn-secondary w-full py-3.5">Cerrar sala</button></div></div> <div class="rounded-xl border border-blue-100 bg-blue-50 p-4"><p class="text-xs leading-relaxed text-blue-600">Comparte el enlace con tus amigos para que se unan. Máximo 5 espectadores.</p></div></div></div></div></main> `);
+		$$renderer.push(`<!--]--> <button class="btn-secondary w-full py-3">Cerrar sala</button></div></div> <div class="rounded-xl bg-blue-50/80 p-4 ring-1 ring-blue-100/50"><p class="text-xs leading-relaxed text-blue-600">Comparte el enlace con tus amigos. Ellos necesitarán el PIN para entrar. Máximo 5 espectadores simultáneos.</p></div></div></div></div></div></div> `);
 		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]-->`);
 	});
