@@ -287,8 +287,6 @@
 
   // ─── WebRTC ──────────────────────────────────────────────────────────
   let iceServers = $state(null);
-  let peers = new Map();
-  let localStream = $state(null);
 
   async function fetchIceServers() {
     if (iceServers) return iceServers;
