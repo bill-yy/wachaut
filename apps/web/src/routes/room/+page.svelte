@@ -30,10 +30,11 @@
 	];
 
 	onMount(() => {
-		// Generate room ID and PIN
+		// Generate room ID (opaque, unique) and PIN (password)
 		roomId = crypto.randomUUID();
 		pin = Math.floor(100000 + Math.random() * 900000).toString();
-		roomUrl = `${window.location.origin}/room/${pin}`;
+		// URL uses the opaque roomId, not the PIN
+		roomUrl = `${window.location.origin}/room/${roomId}`;
 		isLoading = false;
 
 		// Connect to signaling server

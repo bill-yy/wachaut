@@ -72,21 +72,25 @@ io.on('connection', (socket) => {
     fastify.log.info(`Room created: ${roomId} with PIN ${pin}`);
   });
 
-  // Viewer joins a room
-  socket.on('viewer:join', ({ pin }: { pin: string }) => {
-    const roomId = pinToRoom.get(pin);
-    
-    if (!roomId) {
-      socket.emit('room:error', { message: 'No se ha encontrado una sala con ese PIN. Comprueba que sea correcto.' });
-      return;
-    }
-    
+  // Viewer joins a room (with roomId and PIN authentication)
+  socket.on('viewer:join', ({ roomId, pin }: { roomId: string; pin: string }) => {
+    // First, validate the room exists
     const room = rooms.get(roomId);
+    
     if (!room) {
-      socket.emit('room:error', { message: 'La sala ya no existe.' });
+      socket.emit('room:error', { message: 'No se ha encontrado la sala. Comprueba el enlace.' });
       return;
     }
-
+    
+    // Then validate the PIN
+    if (room.pin !== pin) {
+      socket.emit('room:auth-failed', { message: 'PIN incorrecto. Comprueba que lo hayas escrito bien.' });
+      return;
+    }
+    
+    // PIN is correct, authenticate
+    socket.emit('room:auth-success');
+    
     // Limit viewers to 5
     if (room.viewers.size >= 5) {
       socket.emit('room:error', { message: 'La sala está llena. Espera a que alguien salga.' });

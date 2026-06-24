@@ -1,0 +1,1 @@
+import{b as o,E as t,D as l,i as c,B as p,a as d,d as v,e as h,r as m}from"../chunks/DnWreqMH.js";function u(s,e,...a){var r=new p(s);o(()=>{const n=e()??null;l&&n==null&&c(),r.ensure(n,n&&(i=>n(i,...a)))},t)}var f=v('<div class="min-h-screen bg-slate-50"><!></div>');function b(s,e){var a=f(),r=h(a);u(r,()=>e.children),m(a),d(s,a)}export{b as component};

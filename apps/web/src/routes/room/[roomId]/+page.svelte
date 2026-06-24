@@ -2,12 +2,14 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { Monitor, ArrowLeft, Maximize, Minimize, Volume2, VolumeX, AlertCircle, Loader2, Wifi, WifiOff, Users } from 'lucide-svelte';
+	import { Monitor, ArrowLeft, Maximize, Minimize, Volume2, VolumeX, AlertCircle, Loader2, Wifi, WifiOff, Lock, Eye, EyeOff } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
 
+	let roomId = $state('');
 	let pin = $state('');
 	let isConnected = $state(false);
 	let isConnecting = $state(false);
+	let isAuthenticating = $state(false);
 	let error = $state('');
 	let videoElement: HTMLVideoElement;
 	let socket: ReturnType<typeof io> | null = null;
@@ -16,6 +18,8 @@
 	let isFullscreen = $state(false);
 	let hostDisconnected = $state(false);
 	let pinError = $state('');
+	let showPin = $state(false);
+	let isAuthenticated = $state(false);
 
 	const iceServers = [
 		{ urls: 'stun:stun.l.google.com:19302' },
@@ -23,13 +27,10 @@
 	];
 
 	onMount(() => {
-		// Get PIN from URL
-		const urlPin = $page.params.pin || '';
-		if (urlPin.length === 6 && /^\d{6}$/.test(urlPin)) {
-			pin = urlPin;
-			joinRoom();
-		} else if (urlPin) {
-			pinError = 'El PIN no es válido';
+		// Get roomId from URL (opaque ID, not PIN)
+		roomId = $page.params.roomId || '';
+		if (!roomId) {
+			error = 'Enlace de sala no válido';
 		}
 	});
 
@@ -47,7 +48,7 @@
 	function validatePin(value: string): boolean {
 		pinError = '';
 		if (!value) {
-			pinError = 'Introduce un PIN';
+			pinError = 'Introduce el PIN de la sala';
 			return false;
 		}
 		if (value.length !== 6) {
@@ -61,7 +62,7 @@
 		return true;
 	}
 
-	async function joinRoom() {
+	async function authenticateAndJoin() {
 		if (!validatePin(pin)) {
 			const input = document.querySelector('input[name="viewer-pin"]') as HTMLInputElement;
 			if (input) {
@@ -71,7 +72,7 @@
 			return;
 		}
 
-		isConnecting = true;
+		isAuthenticating = true;
 		error = '';
 
 		try {
@@ -80,54 +81,30 @@
 
 			socket.on('connect', () => {
 				console.log('Connected to signaling server');
-				socket?.emit('viewer:join', { pin });
+				// Send roomId and PIN for authentication
+				socket?.emit('viewer:join', { roomId, pin });
 			});
 
-			socket.on('room:joined', async ({ roomId }: { roomId: string }) => {
-				console.log('Joined room:', roomId);
-				isConnected = true;
-				isConnecting = false;
-
-				// Create peer connection
-				peer = new RTCPeerConnection({ iceServers });
-
-				peer.ontrack = (event) => {
-					if (videoElement && event.streams[0]) {
-						videoElement.srcObject = event.streams[0];
-						videoElement.play();
-					}
-				};
-
-				peer.onicecandidate = (event) => {
-					if (event.candidate) {
-						socket?.emit('viewer:signal', { signal: event.candidate });
-					}
-				};
-
-				peer.onconnectionstatechange = () => {
-					if (peer?.connectionState === 'disconnected') {
-						hostDisconnected = true;
-					} else if (peer?.connectionState === 'connected') {
-						hostDisconnected = false;
-					}
-				};
+			socket.on('room:auth-success', async () => {
+				isAuthenticated = true;
+				isAuthenticating = false;
+				// Now proceed to connect
+				await connectToStream();
 			});
 
-			socket.on('host:signal', async ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
-				if (!peer) return;
-
-				if (signal.type === 'offer') {
-					await peer.setRemoteDescription(new RTCSessionDescription(signal));
-					const answer = await peer.createAnswer();
-					await peer.setLocalDescription(answer);
-					socket?.emit('viewer:signal', { signal: answer });
-				} else if (signal.candidate) {
-					await peer.addIceCandidate(new RTCIceCandidate(signal));
+			socket.on('room:auth-failed', ({ message }: { message: string }) => {
+				isAuthenticating = false;
+				pinError = message || 'PIN incorrecto';
+				const input = document.querySelector('input[name="viewer-pin"]') as HTMLInputElement;
+				if (input) {
+					input.classList.add('animate-shake');
+					setTimeout(() => input.classList.remove('animate-shake'), 400);
 				}
 			});
 
 			socket.on('room:error', ({ message }: { message: string }) => {
 				error = message;
+				isAuthenticating = false;
 				isConnecting = false;
 				cleanup();
 			});
@@ -155,8 +132,51 @@
 		} catch (err) {
 			console.error('Error joining room:', err);
 			error = 'No se ha podido conectar a la sala. Inténtalo de nuevo.';
-			isConnecting = false;
+			isAuthenticating = false;
 		}
+	}
+
+	async function connectToStream() {
+		isConnecting = true;
+
+		// Create peer connection
+		peer = new RTCPeerConnection({ iceServers });
+
+		peer.ontrack = (event) => {
+			if (videoElement && event.streams[0]) {
+				videoElement.srcObject = event.streams[0];
+				videoElement.play();
+			}
+		};
+
+		peer.onicecandidate = (event) => {
+			if (event.candidate) {
+				socket?.emit('viewer:signal', { signal: event.candidate });
+			}
+		};
+
+		peer.onconnectionstatechange = () => {
+			if (peer?.connectionState === 'disconnected') {
+				hostDisconnected = true;
+			} else if (peer?.connectionState === 'connected') {
+				hostDisconnected = false;
+				isConnected = true;
+				isConnecting = false;
+			}
+		};
+
+		socket?.on('host:signal', async ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
+			if (!peer) return;
+
+			if (signal.type === 'offer') {
+				await peer.setRemoteDescription(new RTCSessionDescription(signal));
+				const answer = await peer.createAnswer();
+				await peer.setLocalDescription(answer);
+				socket?.emit('viewer:signal', { signal: answer });
+			} else if (signal.candidate) {
+				await peer.addIceCandidate(new RTCIceCandidate(signal));
+			}
+		});
 	}
 
 	function handlePinInput(e: Event) {
@@ -169,7 +189,7 @@
 
 	function handlePinKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter') {
-			joinRoom();
+			authenticateAndJoin();
 		}
 	}
 
@@ -201,18 +221,18 @@
 </svelte:head>
 
 <main class="flex min-h-screen flex-col bg-slate-900">
-	<!-- PIN Input Screen -->
-	{#if !isConnected && !isConnecting}
+	<!-- PIN Authentication Screen -->
+	{#if !isAuthenticated && !isConnecting && !isConnected}
 		<div class="flex flex-1 flex-col items-center justify-center px-4">
 			<div class="w-full max-w-sm animate-slide-up">
 				<div class="mb-8 text-center">
 					<div class="mb-5 flex justify-center">
 						<div class="flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-slate-800 shadow-lg">
-							<Monitor class="h-8 w-8 text-slate-300" />
+							<Lock class="h-8 w-8 text-slate-300" />
 						</div>
 					</div>
-					<h1 class="text-2xl font-bold text-white">Unirse a una sala</h1>
-					<p class="mt-2 text-sm text-slate-400">Introduce el PIN de 6 dígitos que te ha compartido el anfitrión</p>
+					<h1 class="text-2xl font-bold text-white">Sala protegida</h1>
+					<p class="mt-2 text-sm text-slate-400">Introduce el PIN de 6 dígitos para acceder</p>
 				</div>
 
 				{#if error}
@@ -223,10 +243,10 @@
 				{/if}
 
 				<div class="space-y-4">
-					<div>
+					<div class="relative">
 						<input
 							name="viewer-pin"
-							type="text"
+							type={showPin ? 'text' : 'password'}
 							inputmode="numeric"
 							maxlength="6"
 							placeholder="000000"
@@ -235,13 +255,30 @@
 							oninput={handlePinInput}
 							onkeydown={handlePinKeydown}
 						/>
-						{#if pinError}
-							<p class="mt-2 text-xs text-red-400">{pinError}</p>
-						{/if}
+						<button
+							type="button"
+							class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+							onclick={() => showPin = !showPin}
+							title={showPin ? 'Ocultar PIN' : 'Mostrar PIN'}
+						>
+							{#if showPin}
+								<EyeOff class="h-5 w-5" />
+							{:else}
+								<Eye class="h-5 w-5" />
+							{/if}
+						</button>
 					</div>
-					<button onclick={joinRoom} class="btn-primary w-full py-3.5 gap-2">
-						<Wifi class="h-4 w-4" />
-						Unirse a la sala
+					{#if pinError}
+						<p class="text-xs text-red-400">{pinError}</p>
+					{/if}
+					<button onclick={authenticateAndJoin} disabled={isAuthenticating} class="btn-primary w-full py-3.5 gap-2">
+						{#if isAuthenticating}
+							<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
+							Verificando...
+						{:else}
+							<Lock class="h-4 w-4" />
+							Acceder a la sala
+						{/if}
 					</button>
 					<button onclick={goBack} class="btn-secondary w-full gap-2 py-3.5 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white">
 						<ArrowLeft class="h-4 w-4" />
@@ -253,13 +290,25 @@
 	{/if}
 
 	<!-- Connecting State -->
-	{#if isConnecting}
+	{#if isAuthenticating || isConnecting}
 		<div class="flex flex-1 flex-col items-center justify-center animate-fade-in">
 			<div class="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800">
 				<Loader2 class="h-8 w-8 animate-spin text-slate-300" />
 			</div>
-			<p class="text-lg font-semibold text-white">Conectando...</p>
-			<p class="mt-2 text-sm text-slate-400">Estableciendo conexión segura con la sala</p>
+			<p class="text-lg font-semibold text-white">
+				{#if isAuthenticating}
+					Verificando PIN...
+				{:else}
+					Conectando...
+				{/if}
+			</p>
+			<p class="mt-2 text-sm text-slate-400">
+				{#if isAuthenticating}
+					Comprobando credenciales de la sala
+				{:else}
+					Estableciendo conexión segura
+				{/if}
+			</p>
 		</div>
 	{/if}
 

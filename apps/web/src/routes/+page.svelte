@@ -1,10 +1,7 @@
 <script lang="ts">
-	import { Monitor, Users, ArrowRight, Shield, Zap, Globe, ChevronRight, Radio, Wifi } from 'lucide-svelte';
+	import { Monitor, Users, ArrowRight, Shield, Zap, Globe, ChevronRight, Radio, Wifi, Link2 } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 
-	let pinInput = $state('');
-	let pinError = $state('');
-	let isJoining = $state(false);
 	let isCreating = $state(false);
 
 	async function createRoom() {
@@ -13,64 +10,14 @@
 			await goto('/room');
 		} catch (err) {
 			console.error('Error creating room:', err);
-			// Fallback manual navigation
 			window.location.href = '/room';
-		}
-	}
-
-	function validatePin(value: string): boolean {
-		pinError = '';
-		if (!value) {
-			pinError = 'Introduce un PIN';
-			return false;
-		}
-		if (value.length !== 6) {
-			pinError = 'El PIN debe tener 6 dígitos';
-			return false;
-		}
-		if (!/^\d{6}$/.test(value)) {
-			pinError = 'El PIN solo puede contener números';
-			return false;
-		}
-		return true;
-	}
-
-	async function joinWithPin() {
-		if (!validatePin(pinInput)) {
-			// Shake animation trigger
-			const input = document.querySelector('input[name="pin"]') as HTMLInputElement;
-			if (input) {
-				input.classList.add('animate-shake');
-				setTimeout(() => input.classList.remove('animate-shake'), 400);
-			}
-			return;
-		}
-		isJoining = true;
-		try {
-			await goto(`/room/${pinInput}`);
-		} catch (err) {
-			window.location.href = `/room/${pinInput}`;
-		}
-	}
-
-	function handlePinInput(e: Event) {
-		const target = e.target as HTMLInputElement;
-		// Only allow digits
-		const cleaned = target.value.replace(/\D/g, '').slice(0, 6);
-		pinInput = cleaned;
-		if (pinError) pinError = '';
-	}
-
-	function handlePinKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			joinWithPin();
 		}
 	}
 </script>
 
 <svelte:head>
 	<title>Wachaut — Comparte tu pantalla al instante</title>
-	<meta name="description" content="Comparte tu pantalla con amigos sin registro. Crea una sala, comparte el PIN y listo." />
+	<meta name="description" content="Comparte tu pantalla con amigos sin registro. Crea una sala, comparte el enlace y listo." />
 </svelte:head>
 
 <main class="flex min-h-screen flex-col gradient-hero">
@@ -110,7 +57,7 @@
 				Comparte tu pantalla
 			</h1>
 			<p class="mb-2 text-lg text-slate-500">
-				Sin registro, sin complicaciones. Crea una sala y pasa el PIN.
+				Sin registro, sin complicaciones. Crea una sala y comparte el enlace.
 			</p>
 			<p class="mb-10 text-sm text-slate-400">
 				Hasta 5 espectadores · Audio incluido · Funciona en cualquier navegador
@@ -129,44 +76,62 @@
 					{/if}
 				</button>
 				<a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">
-					<Users class="h-5 w-5" />
-					Unirse a una sala
+					<Link2 class="h-5 w-5" />
+					Tengo un enlace
 				</a>
 			</div>
 
-			<!-- PIN Entry Section -->
+			<!-- Join via Link -->
 			<div id="join" class="mt-10">
-				<div class="card-static mx-auto max-w-sm">
-					<p class="mb-4 text-sm font-medium text-slate-600">¿Tienes un PIN?</p>
-					<div class="flex gap-2">
-						<div class="relative flex-1">
-							<input
-								name="pin"
-								type="text"
-								inputmode="numeric"
-								maxlength="6"
-								placeholder="000000"
-								class="input-field w-full text-center text-xl font-mono tracking-[0.5em] {pinError ? 'border-red-300 focus:border-red-400 focus:ring-red-500/10' : ''}"
-								value={pinInput}
-								oninput={handlePinInput}
-								onkeydown={handlePinKeydown}
-								disabled={isJoining}
-							/>
-							{#if pinError}
-								<p class="mt-1.5 text-xs text-red-500">{pinError}</p>
-							{/if}
+				<div class="card-static mx-auto max-w-md">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+							<Link2 class="h-5 w-5 text-blue-500" />
 						</div>
+						<div class="text-left">
+							<p class="text-sm font-semibold text-slate-800">¿Tienes un enlace?</p>
+							<p class="text-xs text-slate-500">Pega el enlace que te ha compartido el anfitrión</p>
+						</div>
+					</div>
+					<div class="flex gap-2">
+						<input
+							type="text"
+							placeholder="https://wachaut.billytech.es/room/..."
+							class="input-field flex-1 text-sm"
+							onkeydown={(e) => {
+								if (e.key === 'Enter') {
+									const target = e.target as HTMLInputElement;
+									const url = target.value.trim();
+									if (url) {
+										// Extract room ID from URL or use as-is if it's a path
+										try {
+											const urlObj = new URL(url);
+											goto(urlObj.pathname);
+										} catch {
+											// Not a full URL, might be a path
+											goto(url.startsWith('/') ? url : `/room/${url}`);
+										}
+									}
+								}
+							}}
+						/>
 						<button
-							onclick={joinWithPin}
-							disabled={isJoining}
 							class="btn-primary px-5"
 							title="Entrar en la sala"
+							onclick={() => {
+								const input = document.querySelector('input[placeholder*="wachaut"]') as HTMLInputElement;
+								const url = input?.value.trim();
+								if (url) {
+									try {
+										const urlObj = new URL(url);
+										goto(urlObj.pathname);
+									} catch {
+										goto(url.startsWith('/') ? url : `/room/${url}`);
+									}
+								}
+							}}
 						>
-							{#if isJoining}
-								<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
-							{:else}
-								<ArrowRight class="h-5 w-5" />
-							{/if}
+							<ArrowRight class="h-5 w-5" />
 						</button>
 					</div>
 				</div>
@@ -212,7 +177,7 @@
 	<!-- Footer -->
 	<footer class="border-t border-slate-200/60 bg-white/30 px-4 py-8 text-center backdrop-blur-sm">
 		<p class="text-xs text-slate-400">
-			Wachaut — Comparte tu pantalla con amigos · Hecho con ❤️ (bueno, con código)
+			Wachaut — Comparte tu pantalla con amigos · Hecho con codigo
 		</p>
 	</footer>
 </main>
