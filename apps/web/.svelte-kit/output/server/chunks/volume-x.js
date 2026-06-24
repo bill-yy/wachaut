@@ -1,4 +1,4 @@
-import { j as ssr_context, a as sanitize_props, b as spread_props, s as slot } from "./index.js";
+import { j as ssr_context, s as sanitize_props, a as spread_props, b as slot } from "./index.js";
 import { I as Icon } from "./Icon.js";
 function onDestroy(fn) {
   /** @type {SSRContext} */

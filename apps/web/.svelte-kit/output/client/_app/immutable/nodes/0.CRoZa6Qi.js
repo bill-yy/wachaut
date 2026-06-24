@@ -1,0 +1,1 @@
+import{a as r,d as s,g as l,r as n}from"../chunks/DDeabFAX.js";import{s as d}from"../chunks/Cnk7t7lW.js";const i=!1,u=Object.freeze(Object.defineProperty({__proto__:null,ssr:i},Symbol.toStringTag,{value:"Module"}));var f=s("<div><!></div>");function v(t,a){var o=f(),e=l(o);d(e,a,"default",{}),n(o),r(t,o)}export{v as component,u as universal};

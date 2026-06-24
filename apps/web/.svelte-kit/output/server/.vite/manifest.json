@@ -136,6 +136,9 @@
     "isEntry": true,
     "imports": [
       "_index.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_layout.Rf7YHFrv.css"
     ]
   },
   "src/routes/+layout.ts": {

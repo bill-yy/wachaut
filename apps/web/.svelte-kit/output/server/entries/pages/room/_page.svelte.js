@@ -1,4 +1,4 @@
-import { a as sanitize_props, b as spread_props, s as slot, m as head, o as store_get, l as escape_html, p as attr, u as unsubscribe_stores } from "../../../chunks/index.js";
+import { s as sanitize_props, a as spread_props, b as slot, m as head, o as store_get, l as escape_html, p as attr, u as unsubscribe_stores } from "../../../chunks/index.js";
 import { o as onDestroy, A as Arrow_left, V as Volume_x, a as Volume_2, M as Minimize, b as Maximize } from "../../../chunks/volume-x.js";
 import "@sveltejs/kit/internal";
 import { w as writable } from "../../../chunks/exports.js";
