@@ -1,9 +1,9 @@
-import { s as slot } from "../../chunks/index.js";
-function _layout($$payload, $$props) {
-  $$payload.out += `<div><!---->`;
-  slot($$payload, $$props, "default", {});
-  $$payload.out += `<!----></div>`;
+import { d as slot } from "../../chunks/server.js";
+//#region src/routes/+layout.svelte
+function _layout($$renderer, $$props) {
+	$$renderer.push(`<div><!--[-->`);
+	slot($$renderer, $$props, "default", {}, null);
+	$$renderer.push(`<!--]--></div>`);
 }
-export {
-  _layout as default
-};
+//#endregion
+export { _layout as default };

@@ -146,6 +146,7 @@ declare module '$env/static/private' {
 	export const npm_node_execpath: string;
 	export const npm_package_dependencies_socket_io_client: string;
 	export const npm_package_dependencies_svelte: string;
+	export const npm_package_dependencies_yaml: string;
 	export const npm_package_dependencies__sveltejs_adapter_static: string;
 	export const npm_package_dependencies__wachaut_shared_types: string;
 	export const SLACK_ALLOWED_CHANNELS: string;
@@ -438,6 +439,7 @@ declare module '$env/dynamic/private' {
 		npm_node_execpath: string;
 		npm_package_dependencies_socket_io_client: string;
 		npm_package_dependencies_svelte: string;
+		npm_package_dependencies_yaml: string;
 		npm_package_dependencies__sveltejs_adapter_static: string;
 		npm_package_dependencies__wachaut_shared_types: string;
 		SLACK_ALLOWED_CHANNELS: string;

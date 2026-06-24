@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { Monitor, Copy, Check, Share2, StopCircle, Users, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, AlertTriangle } from 'lucide-svelte';
 	import { io } from 'socket.io-client';
 
@@ -138,7 +139,7 @@
 		stopSharing();
 		socket?.emit('host:close-room', { roomId });
 		socket?.disconnect();
-		window.location.href = '/';
+		goto('/');
 	}
 </script>
 
