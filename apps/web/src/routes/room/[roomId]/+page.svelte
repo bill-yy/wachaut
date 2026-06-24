@@ -46,18 +46,16 @@
   let animatingReaction = $state(null);
 
   // --- Derived ---
-  let connectionLabel = $derived(() => {
-    switch (status) {
-      case 'idle': return 'Desconectado';
-      case 'connecting': return 'Conectando...';
-      case 'auth': return 'Autenticando...';
-      case 'waiting': return 'Esperando transmisión';
-      case 'live': return 'En vivo';
-      case 'error': return 'Error';
-      case 'disconnected': return 'Desconectado';
-      default: return '';
-    }
-  });
+  function getStatusLabel(s) {
+    if (s === 'idle') return 'Desconectado';
+    if (s === 'connecting') return 'Conectando...';
+    if (s === 'auth') return 'Autenticando...';
+    if (s === 'waiting') return 'Esperando transmisión';
+    if (s === 'live') return 'En vivo';
+    if (s === 'error') return 'Error';
+    if (s === 'disconnected') return 'Desconectado';
+    return '';
+  }
 
   let isConnected = $derived(
     status === 'waiting' || status === 'live'
@@ -569,7 +567,7 @@
             <span
               class="w-2 h-2 rounded-full {statusColor}"
             ></span>
-            <span>{connectionLabel}</span>
+            <span>{getStatusLabel(status)}</span>
           </div>
 
           <button

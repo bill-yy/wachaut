@@ -138,18 +138,16 @@ function _page($$renderer, $$props) {
 			"🎉"
 		];
 		let animatingReaction = null;
-		let connectionLabel = derived(() => () => {
-			switch (status) {
-				case "idle": return "Desconectado";
-				case "connecting": return "Conectando...";
-				case "auth": return "Autenticando...";
-				case "waiting": return "Esperando transmisión";
-				case "live": return "En vivo";
-				case "error": return "Error";
-				case "disconnected": return "Desconectado";
-				default: return "";
-			}
-		});
+		function getStatusLabel(s) {
+			if (s === "idle") return "Desconectado";
+			if (s === "connecting") return "Conectando...";
+			if (s === "auth") return "Autenticando...";
+			if (s === "waiting") return "Esperando transmisión";
+			if (s === "live") return "En vivo";
+			if (s === "error") return "Error";
+			if (s === "disconnected") return "Desconectado";
+			return "";
+		}
 		let isConnected = derived(() => status === "waiting" || status === "live");
 		let statusColor = derived(() => () => {
 			if (status === "live") return "bg-red-500";
@@ -212,7 +210,7 @@ function _page($$renderer, $$props) {
 				let emoji = each_array[$$index];
 				$$renderer.push(`<button${attr_class(`w-12 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-xl hover:bg-slate-100 hover:border-slate-300 transition-all duration-200 ${animatingReaction === emoji ? "scale-125" : ""}`)} title="Enviar reacción">${escape_html(emoji)}</button>`);
 			}
-			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-between mt-4 px-2"><div class="flex items-center gap-2 text-sm text-slate-500"><span${attr_class(`w-2 h-2 rounded-full ${stringify(statusColor())}`)}></span> <span>${escape_html(connectionLabel())}</span></div> <button class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium">Salir</button></div></div>`);
+			$$renderer.push(`<!--]--></div> <div class="flex items-center justify-between mt-4 px-2"><div class="flex items-center gap-2 text-sm text-slate-500"><span${attr_class(`w-2 h-2 rounded-full ${stringify(statusColor())}`)}></span> <span>${escape_html(getStatusLabel(status))}</span></div> <button class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium">Salir</button></div></div>`);
 		} else if (status === "error") {
 			$$renderer.push("<!--[4-->");
 			$$renderer.push(`<div class="flex items-center justify-center" style="min-height: 60vh;"><div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200"><div class="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">`);
