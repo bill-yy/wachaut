@@ -1,5 +1,13 @@
-import { i as increment_write_version, D as DIRTY, c as set_signal_status, C as CLEAN, U as UNOWNED, d as DERIVED, e as schedule_effect, f as active_reaction, j as untracking, k as is_runes, B as BLOCK_EFFECT, l as derived_sources, m as state_unsafe_mutation, o as active_effect, q as BRANCH_EFFECT, R as ROOT_EFFECT, r as untracked_writes, t as set_untracked_writes, M as MAYBE_DIRTY, H as HYDRATION_ERROR, v as get_next_sibling, w as define_property, x as set_active_reaction, y as set_active_effect, z as is_array, A as init_operations, E as get_first_child, F as HYDRATION_START, G as HYDRATION_END, I as hydration_failed, J as clear_text_content, K as array_from, L as component_root, N as create_text, O as branch, P as push, Q as component_context, S as pop, T as LEGACY_PROPS, V as get, W as flush_sync, X as render, a as push$1, Y as setContext, p as pop$1 } from "./index.js";
-import { a as safe_equals, e as equals } from "./equality.js";
+import { t as increment_write_version, D as DIRTY, v as set_signal_status, C as CLEAN, U as UNOWNED, w as DERIVED, x as schedule_effect, y as active_reaction, z as untracking, A as is_runes, B as BLOCK_EFFECT, E as derived_sources, F as state_unsafe_mutation, G as active_effect, H as BRANCH_EFFECT, R as ROOT_EFFECT, I as untracked_writes, J as set_untracked_writes, M as MAYBE_DIRTY, K as HYDRATION_ERROR, L as get_next_sibling, N as define_property, O as set_active_reaction, P as set_active_effect, Q as is_array, S as init_operations, T as get_first_child, V as HYDRATION_START, W as HYDRATION_END, X as hydration_failed, Y as clear_text_content, Z as array_from, _ as component_root, $ as is_passive_event, a0 as create_text, a1 as branch, a2 as push, a3 as component_context, a4 as pop, a5 as LEGACY_PROPS, a6 as get, a7 as flush_sync, a8 as render, e as push$1, a9 as setContext, p as pop$1 } from "./index.js";
+function equals(value) {
+  return value === this.v;
+}
+function safe_not_equal(a, b) {
+  return a != a ? b == b : a !== b || a !== null && typeof a === "object" || typeof a === "function";
+}
+function safe_equals(value) {
+  return !safe_not_equal(value, this.v);
+}
 function hydration_mismatch(location) {
   {
     console.warn(`https://svelte.dev/e/hydration_mismatch`);
@@ -189,10 +197,6 @@ function assign_nodes(start, end) {
     effect.nodes_start = start;
     effect.nodes_end = end;
   }
-}
-const PASSIVE_EVENTS = ["touchstart", "touchmove"];
-function is_passive_event(name) {
-  return PASSIVE_EVENTS.includes(name);
 }
 function mount(component, options) {
   return _mount(component, options);
@@ -498,5 +502,6 @@ function Root($$payload, $$props) {
 }
 const root = asClassComponent(Root);
 export {
-  root as r
+  root as r,
+  safe_not_equal as s
 };

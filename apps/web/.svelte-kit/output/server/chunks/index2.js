@@ -1,5 +1,5 @@
-import { n as noop } from "./index.js";
-import { s as safe_not_equal } from "./equality.js";
+import { q as noop } from "./index.js";
+import { s as safe_not_equal } from "./root.js";
 const subscriber_queue = [];
 function readable(value, start) {
   return {

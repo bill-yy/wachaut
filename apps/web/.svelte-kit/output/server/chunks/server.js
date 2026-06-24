@@ -21,12 +21,12 @@ function set_assets(path) {
   assets = initial.assets = path;
 }
 export {
-  set_building as a,
-  set_prerendering as b,
-  base as c,
-  app_dir as d,
-  assets as e,
-  reset as f,
+  app_dir as a,
+  base as b,
+  assets as c,
+  reset as d,
+  set_building as e,
+  set_prerendering as f,
   override as o,
   prerendering as p,
   relative as r,

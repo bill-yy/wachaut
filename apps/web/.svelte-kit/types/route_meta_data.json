@@ -4,7 +4,6 @@
 		"src/routes/+layout.ts"
 	],
 	"/room": [
-		"src/routes/room/+page.ts",
 		"src/routes/+layout.ts"
 	],
 	"/room/[roomId]": [

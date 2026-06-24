@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Monitor, Users, ArrowRight, Shield, Zap, Globe, ChevronRight, Radio, Wifi, Link2 } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { writable } from 'svelte/store';
 
@@ -25,7 +26,7 @@
 		<div class="mx-auto flex max-w-5xl items-center justify-between">
 			<div class="flex items-center gap-2.5">
 				<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 shadow-lg shadow-slate-800/20">
-					<span class="text-white text-sm font-bold">W</span>
+					<Monitor class="h-4.5 w-4.5 text-white" />
 				</div>
 				<span class="text-lg font-bold text-slate-800">Wachaut</span>
 			</div>
@@ -45,7 +46,8 @@
 		<div class="mx-auto max-w-xl animate-slide-up">
 			<div class="mb-6 flex justify-center">
 				<div class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-xs font-medium text-blue-600">
-					⚡ Conexión directa P2P
+					<Wifi class="h-3.5 w-3.5" />
+					Conexión directa P2P
 				</div>
 			</div>
 
@@ -65,11 +67,14 @@
 						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
 						Creando sala...
 					{:else}
-						▶ Crear una sala →
+						<Radio class="h-5 w-5" />
+						Crear una sala
+						<ChevronRight class="h-4 w-4" />
 					{/if}
 				</button>
 				<a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">
-					🔗 Tengo un enlace
+					<Link2 class="h-5 w-5" />
+					Tengo un enlace
 				</a>
 			</div>
 
@@ -77,7 +82,7 @@
 				<div class="card-static mx-auto max-w-md">
 					<div class="flex items-center gap-3 mb-4">
 						<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-							<span class="text-blue-500 text-lg">🔗</span>
+							<Link2 class="h-5 w-5 text-blue-500" />
 						</div>
 						<div class="text-left">
 							<p class="text-sm font-semibold text-slate-800">¿Tienes un enlace?</p>
@@ -120,7 +125,7 @@
 								}
 							}}
 						>
-							→
+							<ArrowRight class="h-5 w-5" />
 						</button>
 					</div>
 				</div>
@@ -134,7 +139,7 @@
 				<div class="card text-center">
 					<div class="mb-4 flex justify-center">
 						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50">
-							<span class="text-amber-500 text-xl">⚡</span>
+							<Zap class="h-6 w-6 text-amber-500" />
 						</div>
 					</div>
 					<h3 class="mb-2 text-sm font-bold text-slate-800">Sin registro</h3>
@@ -143,7 +148,7 @@
 				<div class="card text-center">
 					<div class="mb-4 flex justify-center">
 						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
-							<span class="text-blue-500 text-xl">🌐</span>
+							<Globe class="h-6 w-6 text-blue-500" />
 						</div>
 					</div>
 					<h3 class="mb-2 text-sm font-bold text-slate-800">Desde el navegador</h3>
@@ -152,7 +157,7 @@
 				<div class="card text-center">
 					<div class="mb-4 flex justify-center">
 						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">
-							<span class="text-emerald-500 text-xl">🔒</span>
+							<Shield class="h-6 w-6 text-emerald-500" />
 						</div>
 					</div>
 					<h3 class="mb-2 text-sm font-bold text-slate-800">Privado y seguro</h3>
