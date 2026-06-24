@@ -313,10 +313,26 @@ function _page($$renderer, $$props) {
 				addReaction(data.emoji);
 			});
 		}
-		const iceServers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+		let iceServers = null;
+		async function fetchIceServers() {
+			if (iceServers) return iceServers;
+			try {
+				const httpUrl = "wss://api-wachaut.billytech.es".replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+				const res = await fetch(`${httpUrl}/turn-credentials?id=${socket?.id || crypto.randomUUID()}`, { credentials: "include" });
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				iceServers = (await res.json()).iceServers;
+				console.log("[host] ICE servers loaded:", iceServers.map((s) => s.urls));
+				return iceServers;
+			} catch (e) {
+				console.error("[host] Failed to fetch TURN credentials, falling back to STUN:", e);
+				iceServers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+				return iceServers;
+			}
+		}
 		async function createPeerConnection(viewerId) {
 			if (peers.has(viewerId)) return;
-			const pc = new RTCPeerConnection({ iceServers });
+			const servers = await fetchIceServers();
+			const pc = new RTCPeerConnection({ iceServers: servers });
 			pc.onicecandidate = (event) => {
 				if (event.candidate) socket.emit("host:signal", {
 					viewerId,
@@ -324,10 +340,14 @@ function _page($$renderer, $$props) {
 				});
 			};
 			pc.onconnectionstatechange = () => {
+				console.log(`[host] viewer=${viewerId} connectionState=${pc.connectionState} iceState=${pc.iceConnectionState}`);
 				if (pc.connectionState === "failed") {
 					pc.close();
 					peers.delete(viewerId);
 				}
+			};
+			pc.oniceconnectionstatechange = () => {
+				console.log(`[host] viewer=${viewerId} iceConnectionState=${pc.iceConnectionState}`);
 			};
 			peers.set(viewerId, pc);
 		}

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  coturn:
+    image: coturn/coturn:latest
+    restart: always
+    environment:
+      - TURN_SECRET=${TURN_SECRET}
+    command: >
+      sh -c 'turnserver -n --log-file=stdout --min-port=10000 --max-port=11000
+      --realm=wachaut.billytech.es --use-auth-secret
+      --static-auth-secret="$TURN_SECRET" --fingerprint --no-multicast-peers'
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "10000-11000:10000-11000/udp"
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

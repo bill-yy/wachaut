@@ -343,11 +343,6 @@ fastify.get('/turn-credentials', async (request, reply) => {
         urls: 'turn:wachaut.billytech.es:3478',
         username,
         credential: password
-      },
-      {
-        urls: 'turns:wachaut.billytech.es:5349',
-        username,
-        credential: password
       }
     ]
   };
