@@ -1,4 +1,4 @@
-import { h as head, e as escape_html } from "../../../chunks/root.js";
+import { h as head } from "../../../chunks/root.js";
 import { o as onDestroy } from "../../../chunks/index-server.js";
 import "@sveltejs/kit/internal";
 import "../../../chunks/exports.js";
@@ -8,18 +8,11 @@ import "../../../chunks/state.svelte.js";
 import "socket.io-client";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    let state = {
-      isSharing: false
-    };
     onDestroy(() => {
-      stopSharing();
     });
-    function stopSharing() {
-      state.isSharing = false;
-    }
     head("ek3c68", $$renderer2, ($$renderer3) => {
       $$renderer3.title(($$renderer4) => {
-        $$renderer4.push(`<title>${escape_html(state.isSharing ? "Compartiendo pantalla - Wachaut" : "Sala de Wachaut")}</title>`);
+        $$renderer4.push(`<title>Sala de Wachaut</title>`);
       });
     });
     {

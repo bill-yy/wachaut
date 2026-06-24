@@ -244,7 +244,7 @@
 </script>
 
 <svelte:head>
-	<title>{state.isSharing ? 'Compartiendo pantalla - Wachaut' : 'Sala de Wachaut'}</title>
+	<title>Sala de Wachaut</title>
 </svelte:head>
 
 {#if state.isLoading}
