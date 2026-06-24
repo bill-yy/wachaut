@@ -48,13 +48,6 @@
       "_internal.js"
     ]
   },
-  "_Icon.js": {
-    "file": "chunks/Icon.js",
-    "name": "Icon",
-    "imports": [
-      "_index.js"
-    ]
-  },
   "_exports.js": {
     "file": "chunks/exports.js",
     "name": "exports",
@@ -75,14 +68,6 @@
     "imports": [
       "_root.js",
       "_server.js"
-    ]
-  },
-  "_monitor.js": {
-    "file": "chunks/monitor.js",
-    "name": "monitor",
-    "imports": [
-      "_index.js",
-      "_Icon.js"
     ]
   },
   "_root.js": {
@@ -125,8 +110,7 @@
     "file": "chunks/volume-x.js",
     "name": "volume-x",
     "imports": [
-      "_index.js",
-      "_Icon.js"
+      "_index.js"
     ]
   },
   "src/routes/+layout.svelte": {
@@ -138,7 +122,7 @@
       "_index.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.Rf7YHFrv.css"
+      "_app/immutable/assets/_layout.BP6VX_kk.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -157,9 +141,7 @@
       "_exports.js",
       "_utils.js",
       "_root.js",
-      "_state.svelte.js",
-      "_monitor.js",
-      "_Icon.js"
+      "_state.svelte.js"
     ]
   },
   "src/routes/room/+page.svelte": {
@@ -173,9 +155,7 @@
       "_exports.js",
       "_utils.js",
       "_root.js",
-      "_state.svelte.js",
-      "_monitor.js",
-      "_Icon.js"
+      "_state.svelte.js"
     ]
   },
   "src/routes/room/+page.ts": {
@@ -195,8 +175,7 @@
       "_exports.js",
       "_utils.js",
       "_root.js",
-      "_state.svelte.js",
-      "_Icon.js"
+      "_state.svelte.js"
     ],
     "css": [
       "_app/immutable/assets/_page.4yS9Dxmv.css"
