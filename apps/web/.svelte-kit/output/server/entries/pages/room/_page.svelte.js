@@ -1,7 +1,7 @@
 import "../../../chunks/internal.js";
 import { d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
-import { n as Link_2, t as Users } from "../../../chunks/navigation.js";
+import { n as Shield, r as Link_2, t as Users } from "../../../chunks/navigation.js";
 import { i as Message_circle, n as Share_2, r as Send, t as Triangle_alert } from "../../../chunks/triangle-alert.js";
 import { io } from "socket.io-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-left.svelte
@@ -155,6 +155,45 @@ function Settings($$renderer, $$props) {
 	]));
 }
 //#endregion
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/terminal.svelte
+function Terminal($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "terminal" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name Terminal
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cG9seWxpbmUgcG9pbnRzPSI0IDE3IDEwIDExIDQgNSIgLz4KICA8bGluZSB4MT0iMTIiIHgyPSIyMCIgeTE9IjE5IiB5Mj0iMTkiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/terminal
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [["polyline", { "points": "4 17 10 11 4 5" }], ["line", {
+				"x1": "12",
+				"x2": "20",
+				"y1": "19",
+				"y2": "19"
+			}]],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
 //#region src/routes/room/+page.svelte
 function _page($$renderer, $$props) {
 	$$renderer.component(($$renderer) => {
@@ -169,44 +208,6 @@ function _page($$renderer, $$props) {
 		let reactionIdCounter = 0;
 		let showFirstViewerCelebration = false;
 		let confettiParticles = [];
-		function triggerFirstViewerCelebration() {
-			showFirstViewerCelebration = true;
-			const colors = [
-				"#ef4444",
-				"#f59e0b",
-				"#10b981",
-				"#3b82f6",
-				"#8b5cf6",
-				"#ec4899",
-				"#06b6d4"
-			];
-			const emojis = [
-				"🎉",
-				"🎊",
-				"✨",
-				"🥳",
-				"👋",
-				"🙌"
-			];
-			const particles = [];
-			for (let i = 0; i < 40; i++) particles.push({
-				id: i,
-				x: Math.random() * 100,
-				delay: Math.random() * .5,
-				duration: 1.5 + Math.random() * 1.5,
-				rotation: Math.random() * 360,
-				size: 6 + Math.random() * 10,
-				color: colors[Math.floor(Math.random() * colors.length)],
-				type: Math.random() > .3 ? "rect" : "emoji",
-				emoji: emojis[Math.floor(Math.random() * emojis.length)],
-				borderRadius: Math.random() > .5 ? "50%" : "2px"
-			});
-			confettiParticles = particles;
-			setTimeout(() => {
-				showFirstViewerCelebration = false;
-				confettiParticles = [];
-			}, 3500);
-		}
 		let qualityPreset = "normal";
 		const presets = {
 			low: {
@@ -324,6 +325,9 @@ function _page($$renderer, $$props) {
 			socket.on("reaction:receive", (data) => {
 				addReaction(data.emoji);
 			});
+			socket.on("host:viewers-list", (data) => {
+				if (data?.viewers) data.viewers;
+			});
 		}
 		let iceServers = null;
 		let pendingCandidates = /* @__PURE__ */ new Map();
@@ -364,6 +368,44 @@ function _page($$renderer, $$props) {
 			};
 			peers.set(viewerId, pc);
 		}
+		function triggerFirstViewerCelebration() {
+			showFirstViewerCelebration = true;
+			const colors = [
+				"#ef4444",
+				"#f59e0b",
+				"#10b981",
+				"#3b82f6",
+				"#8b5cf6",
+				"#ec4899",
+				"#06b6d4"
+			];
+			const emojis = [
+				"🎉",
+				"🎊",
+				"✨",
+				"🥳",
+				"👋",
+				"🙌"
+			];
+			const particles = [];
+			for (let i = 0; i < 40; i++) particles.push({
+				id: i,
+				x: Math.random() * 100,
+				delay: Math.random() * .5,
+				duration: 1.5 + Math.random() * 1.5,
+				rotation: Math.random() * 360,
+				size: 6 + Math.random() * 10,
+				color: colors[Math.floor(Math.random() * colors.length)],
+				type: Math.random() > .3 ? "rect" : "emoji",
+				emoji: emojis[Math.floor(Math.random() * emojis.length)],
+				borderRadius: Math.random() > .5 ? "50%" : "2px"
+			});
+			confettiParticles = particles;
+			setTimeout(() => {
+				showFirstViewerCelebration = false;
+				confettiParticles = [];
+			}, 3500);
+		}
 		initSocket();
 		if (loading) {
 			$$renderer.push("<!--[0-->");
@@ -396,15 +438,17 @@ function _page($$renderer, $$props) {
 		} else $$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> `);
 		$$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--> `);
+		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <div class="min-h-screen bg-slate-50 flex flex-col svelte-ek3c68"><header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 svelte-ek3c68"><div class="flex items-center gap-3 svelte-ek3c68"><button class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Volver">`);
 		Arrow_left($$renderer, { class: "w-5 h-5 text-slate-600" });
 		$$renderer.push(`<!----></button> <div class="flex items-center gap-2 svelte-ek3c68">`);
 		Monitor($$renderer, { class: "w-6 h-6 text-slate-800" });
 		$$renderer.push(`<!----> <span class="font-bold text-slate-800 text-lg tracking-tight svelte-ek3c68">Wachaut</span></div></div> <div class="flex items-center gap-3 svelte-ek3c68">`);
 		$$renderer.push("<!--[-1-->");
-		$$renderer.push(`<!--]--> <div class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full svelte-ek3c68">`);
+		$$renderer.push(`<!--]--> <button class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full hover:bg-slate-200 active:scale-95 transition-all svelte-ek3c68" title="Ver espectadores">`);
 		Users($$renderer, { class: "w-4 h-4 text-slate-500" });
-		$$renderer.push(`<!----> <span class="text-slate-700 text-sm font-medium svelte-ek3c68">${escape_html(viewerCount)}</span></div> <button class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Chat">`);
+		$$renderer.push(`<!----> <span class="text-slate-700 text-sm font-medium svelte-ek3c68">${escape_html(viewerCount)}</span></button> <button class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Chat">`);
 		Message_circle($$renderer, { class: "w-5 h-5 text-slate-600" });
 		$$renderer.push(`<!----> `);
 		if (chatMessages.length > 0 && true) {
@@ -419,9 +463,9 @@ function _page($$renderer, $$props) {
 		$$renderer.push(`<!--]--> `);
 		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <!--[-->`);
-		const each_array_1 = ensure_array_like([...activeReactions.values()]);
-		for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
-			let reaction = each_array_1[$$index_1];
+		const each_array_2 = ensure_array_like([...activeReactions.values()]);
+		for (let $$index_2 = 0, $$length = each_array_2.length; $$index_2 < $$length; $$index_2++) {
+			let reaction = each_array_2[$$index_2];
 			$$renderer.push(`<div class="absolute text-4xl pointer-events-none select-none svelte-ek3c68"${attr_style(`left: ${stringify(reaction.x)}%; bottom: 80px; animation: floatUp 3s ease-out forwards;`)}>${escape_html(reaction.emoji)}</div>`);
 		}
 		$$renderer.push(`<!--]--></div> <aside class="w-full lg:w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden svelte-ek3c68"><div class="p-4 border-b border-slate-100 space-y-3 svelte-ek3c68"><h3 class="font-semibold text-slate-800 text-sm uppercase tracking-wider svelte-ek3c68">Información de sala</h3> <div class="bg-slate-50 rounded-xl p-3 svelte-ek3c68"><div class="flex items-center justify-between mb-1 svelte-ek3c68"><span class="text-xs text-slate-500 font-medium svelte-ek3c68">PIN de acceso</span> <button class="p-1 hover:bg-slate-200 rounded-lg active:scale-95 transition-all svelte-ek3c68" title="Copiar PIN">`);
@@ -447,7 +491,9 @@ function _page($$renderer, $$props) {
 		Arrow_left($$renderer, { class: "w-4 h-4" });
 		$$renderer.push(`<!----> Cerrar sala</button></div> <div class="flex-1 flex flex-col overflow-hidden min-h-0 svelte-ek3c68"><div class="px-4 py-3 flex items-center justify-between border-b border-slate-100 svelte-ek3c68"><div class="flex items-center gap-2 svelte-ek3c68">`);
 		Message_circle($$renderer, { class: "w-4 h-4 text-slate-500" });
-		$$renderer.push(`<!----> <span class="text-sm font-semibold text-slate-700 svelte-ek3c68">Chat</span> <span class="text-xs text-slate-400 svelte-ek3c68">(${escape_html(chatMessages.length)})</span></div></div> <div class="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 svelte-ek3c68">`);
+		$$renderer.push(`<!----> <span class="text-sm font-semibold text-slate-700 svelte-ek3c68">Chat</span> <span class="text-xs text-slate-400 svelte-ek3c68">(${escape_html(chatMessages.length)})</span></div> <div class="flex items-center gap-1 svelte-ek3c68">`);
+		Terminal($$renderer, { class: "w-3 h-3 text-slate-400" });
+		$$renderer.push(`<!----> <span class="text-[10px] text-slate-400 svelte-ek3c68">/help</span></div></div> <div class="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 svelte-ek3c68">`);
 		if (chatMessages.length === 0) {
 			$$renderer.push("<!--[0-->");
 			$$renderer.push(`<div class="flex flex-col items-center justify-center h-full text-center py-8 svelte-ek3c68">`);
@@ -456,19 +502,24 @@ function _page($$renderer, $$props) {
 		} else {
 			$$renderer.push("<!--[-1-->");
 			$$renderer.push(`<!--[-->`);
-			const each_array_4 = ensure_array_like(chatMessages);
-			for (let $$index_4 = 0, $$length = each_array_4.length; $$index_4 < $$length; $$index_4++) {
-				let msg = each_array_4[$$index_4];
-				$$renderer.push(`<div${attr_class(`flex flex-col ${msg.sender === "Anfitrión" ? "items-end" : "items-start"}`, "svelte-ek3c68")}><div class="flex items-center gap-1.5 mb-0.5 svelte-ek3c68"><span${attr_class(`text-[10px] font-semibold ${msg.sender === "Anfitrión" ? "text-slate-600" : "text-blue-500"}`, "svelte-ek3c68")}>${escape_html(msg.sender)}</span> <span class="text-[10px] text-slate-300 svelte-ek3c68">${escape_html(msg.timestamp instanceof Date ? msg.timestamp.toLocaleTimeString("es-ES", {
+			const each_array_5 = ensure_array_like(chatMessages);
+			for (let $$index_5 = 0, $$length = each_array_5.length; $$index_5 < $$length; $$index_5++) {
+				let msg = each_array_5[$$index_5];
+				$$renderer.push(`<div${attr_class(`flex flex-col ${msg.sender === "Anfitrión" ? "items-end" : msg.sender === "Sistema" ? "items-center" : "items-start"}`, "svelte-ek3c68")}><div class="flex items-center gap-1.5 mb-0.5 svelte-ek3c68">`);
+				if (msg.sender === "Sistema") {
+					$$renderer.push("<!--[0-->");
+					Shield($$renderer, { class: "w-3 h-3 text-slate-400" });
+				} else $$renderer.push("<!--[-1-->");
+				$$renderer.push(`<!--]--> <span${attr_class(`text-[10px] font-semibold ${msg.sender === "Anfitrión" ? "text-slate-600" : msg.sender === "Sistema" ? "text-slate-400" : "text-blue-500"}`, "svelte-ek3c68")}>${escape_html(msg.sender)}</span> <span class="text-[10px] text-slate-300 svelte-ek3c68">${escape_html(msg.timestamp instanceof Date ? msg.timestamp.toLocaleTimeString("es-ES", {
 					hour: "2-digit",
 					minute: "2-digit"
-				}) : "")}</span></div> <div${attr_class(`max-w-[85%] px-3 py-2 rounded-2xl text-sm ${msg.sender === "Anfitrión" ? "bg-slate-800 text-white rounded-br-md" : "bg-slate-100 text-slate-700 rounded-bl-md"}`, "svelte-ek3c68")}>${escape_html(msg.text)}</div></div>`);
+				}) : "")}</span></div> <div${attr_class(`max-w-[85%] px-3 py-2 rounded-2xl text-sm ${msg.sender === "Anfitrión" ? "bg-slate-800 text-white rounded-br-md" : msg.sender === "Sistema" ? "bg-slate-100 text-slate-500 text-xs italic rounded-xl" : "bg-slate-100 text-slate-700 rounded-bl-md"}`, "svelte-ek3c68")}>${escape_html(msg.text)}</div></div>`);
 			}
 			$$renderer.push(`<!--]-->`);
 		}
-		$$renderer.push(`<!--]--></div> <div class="p-3 border-t border-slate-100 svelte-ek3c68"><div class="flex items-center gap-2 svelte-ek3c68"><input type="text"${attr("value", chatInput)} placeholder="Escribe un mensaje..." maxlength="500" class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-all svelte-ek3c68"/> <button${attr("disabled", !chatInput.trim(), true)} class="p-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed svelte-ek3c68" title="Enviar mensaje">`);
+		$$renderer.push(`<!--]--></div> <div class="p-3 border-t border-slate-100 svelte-ek3c68"><div class="flex items-center gap-2 svelte-ek3c68"><input type="text"${attr("value", chatInput)} placeholder="Escribe un mensaje o /comando..." maxlength="500" class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-all svelte-ek3c68"/> <button${attr("disabled", !chatInput.trim(), true)} class="p-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed svelte-ek3c68" title="Enviar mensaje">`);
 		Send($$renderer, { class: "w-4 h-4" });
-		$$renderer.push(`<!----></button></div> <div class="flex items-center justify-between mt-1.5 svelte-ek3c68"><span class="text-[10px] text-slate-400 svelte-ek3c68">${escape_html(0)}/500</span> <span class="text-[10px] text-slate-400 svelte-ek3c68">Enter para enviar</span></div></div></div></aside></div></div>`);
+		$$renderer.push(`<!----></button></div> <div class="flex items-center justify-between mt-1.5 svelte-ek3c68"><span class="text-[10px] text-slate-400 svelte-ek3c68">${escape_html(0)}/500</span> <span class="text-[10px] text-slate-400 svelte-ek3c68">/help para comandos</span></div></div></div></aside></div></div>`);
 	});
 }
 //#endregion

@@ -1,7 +1,7 @@
 import "../../chunks/internal.js";
 import { c as head, d as sanitize_props, f as slot, k as attr, p as spread_props } from "../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../chunks/monitor.js";
-import { n as Link_2 } from "../../chunks/navigation.js";
+import { n as Shield, r as Link_2 } from "../../chunks/navigation.js";
 import { t as Wifi } from "../../chunks/wifi.js";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-right.svelte
 function Arrow_right($$renderer, $$props) {
@@ -147,40 +147,6 @@ function Radio($$renderer, $$props) {
 				["path", { "d": "M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" }],
 				["path", { "d": "M19.1 4.9C23 8.8 23 15.1 19.1 19" }]
 			],
-			children: ($$renderer) => {
-				$$renderer.push(`<!--[-->`);
-				slot($$renderer, $$props, "default", {}, null);
-				$$renderer.push(`<!--]-->`);
-			},
-			$$slots: { default: true }
-		}
-	]));
-}
-//#endregion
-//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/shield.svelte
-function Shield($$renderer, $$props) {
-	/**
-	* @license lucide-svelte v0.460.1 - ISC
-	*
-	* This source code is licensed under the ISC license.
-	* See the LICENSE file in the root directory of this source tree.
-	*/
-	Icon($$renderer, spread_props([
-		{ name: "shield" },
-		sanitize_props($$props),
-		{
-			/**
-			* @component @name Shield
-			* @description Lucide SVG icon component, renders SVG Element with children.
-			*
-			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMjAgMTNjMCA1LTMuNSA3LjUtNy42NiA4Ljk1YTEgMSAwIDAgMS0uNjctLjAxQzcuNSAyMC41IDQgMTggNCAxM1Y2YTEgMSAwIDAgMSAxLTFjMiAwIDQuNS0xLjIgNi4yNC0yLjcyYTEuMTcgMS4xNyAwIDAgMSAxLjUyIDBDMTQuNTEgMy44MSAxNyA1IDE5IDVhMSAxIDAgMCAxIDEgMXoiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/shield
-			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-			*
-			* @param {Object} props - Lucide icons props and any valid SVG attribute
-			* @returns {FunctionalComponent} Svelte component
-			*
-			*/
-			iconNode: [["path", { "d": "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" }]],
 			children: ($$renderer) => {
 				$$renderer.push(`<!--[-->`);
 				slot($$renderer, $$props, "default", {}, null);

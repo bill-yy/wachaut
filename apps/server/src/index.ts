@@ -14,14 +14,22 @@ await fastify.register(cors, {
 });
 
 // Room storage (in-memory with TTL)
+interface ViewerInfo {
+  socketId: string;
+  name: string;
+  joinedAt: number;
+  connected: boolean;
+}
+
 interface Room {
   id: string;
   pin: string;
   hostId: string;
-  viewers: Set<string>;
+  viewers: Map<string, ViewerInfo>;
   createdAt: Date;
   isSharing: boolean;
   chat: ChatMessage[];
+  isMuted: boolean;
 }
 
 interface ChatMessage {
@@ -67,25 +75,25 @@ function checkRateLimit(socketId: string, maxEvents: number = MAX_EVENTS_PER_MIN
 
 // Cleanup expired rooms every 5 minutes
 setInterval(() => {
-  const now = new Date();
-  const twoHours = 2 * 60 * 60 * 1000;
-  
-  for (const [roomId, room] of rooms) {
-    if (now.getTime() - room.createdAt.getTime() > twoHours) {
-      rooms.delete(roomId);
-      for (const viewerId of room.viewers) {
-        viewerToRoom.delete(viewerId);
-      }
-    }
-  }
+const now = new Date();
+const twoHours = 2 * 60 * 60 * 1000;
 
-  // Cleanup rate limit entries
-  const nowMs = Date.now();
-  for (const [key, entry] of eventCounts) {
-    if (nowMs > entry.resetAt) {
-      eventCounts.delete(key);
+for (const [roomId, room] of rooms) {
+  if (now.getTime() - room.createdAt.getTime() > twoHours) {
+    rooms.delete(roomId);
+    for (const [viewerId] of room.viewers) {
+      viewerToRoom.delete(viewerId);
     }
   }
+}
+
+// Cleanup rate limit entries
+const nowMs = Date.now();
+for (const [key, entry] of eventCounts) {
+  if (nowMs > entry.resetAt) {
+    eventCounts.delete(key);
+  }
+}
 }, 5 * 60 * 1000);
 
 // Socket.IO setup
@@ -133,19 +141,20 @@ io.on('connection', (socket) => {
           if (currentRoom && currentRoom.hostId === socket.id) {
             socket.to(roomId).emit('room:closed');
             rooms.delete(roomId);
-            for (const viewerId of currentRoom.viewers) {
+            for (const [viewerId] of currentRoom.viewers) {
               viewerToRoom.delete(viewerId);
             }
           }
         }, 60000);
         break;
       }
-      
       // Check if viewer
       if (room.viewers.has(socket.id)) {
-        room.viewers.delete(socket.id);
-        viewerToRoom.delete(socket.id);
-        socket.to(room.hostId).emit('viewer:left', { viewerId: socket.id });
+        const viewer = room.viewers.get(socket.id);
+        if (viewer) {
+          viewer.connected = false;
+          socket.to(room.hostId).emit('viewer:left', { viewerId: socket.id });
+        }
         break;
       }
     }
@@ -168,10 +177,11 @@ io.on('connection', (socket) => {
       id: roomId,
       pin,
       hostId: socket.id,
-      viewers: new Set(),
+      viewers: new Map(),
       createdAt: new Date(),
       isSharing: false,
-      chat: []
+      chat: [],
+      isMuted: false
     };
     
     rooms.set(roomId, room);
@@ -197,10 +207,83 @@ io.on('connection', (socket) => {
     if (room) {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
-      for (const viewerId of room.viewers) {
+      for (const [viewerId] of room.viewers) {
         viewerToRoom.delete(viewerId);
       }
     }
+  });
+
+  socket.on('host:mute', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (room && room.hostId === socket.id) {
+      room.isMuted = true;
+      socket.to(roomId).emit('host:muted');
+    }
+  });
+
+  socket.on('host:unmute', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (room && room.hostId === socket.id) {
+      room.isMuted = false;
+      socket.to(roomId).emit('host:unmuted');
+    }
+  });
+
+  socket.on('host:kick', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return;
+    if (!room.viewers.has(viewerId)) return;
+
+    room.viewers.delete(viewerId);
+    viewerToRoom.delete(viewerId);
+    io.to(viewerId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrión' });
+    socket.to(room.hostId).emit('viewer:left', { viewerId });
+  });
+
+  socket.on('host:broadcast', ({ roomId, text }: { roomId: string; text: string }) => {
+    if (!checkRateLimit(socket.id)) return;
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return;
+
+    const msg: ChatMessage = {
+      id: `broadcast-${socket.id}-${Date.now()}`,
+      sender: 'Anfitrión (Broadcast)',
+      text: text.slice(0, MAX_CHAT_LENGTH),
+      timestamp: Date.now()
+    };
+    room.chat.push(msg);
+    if (room.chat.length > 100) room.chat.shift();
+    io.to(roomId).emit('chat:message', msg);
+  });
+
+  socket.on('host:focus', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
+    if (!checkRateLimit(socket.id)) return;
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return;
+    if (!room.viewers.has(viewerId)) return;
+
+    io.to(roomId).emit('viewer:focus', { viewerId });
+  });
+
+  socket.on('host:unfocus', ({ roomId }: { roomId: string }) => {
+    if (!checkRateLimit(socket.id)) return;
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return;
+
+    io.to(roomId).emit('viewer:unfocus');
+  });
+
+  socket.on('host:request-viewers', ({ roomId }: { roomId: string }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return;
+
+    const viewersList = Array.from(room.viewers.values()).map(v => ({
+      viewerId: v.socketId,
+      name: v.name,
+      joinedAt: v.joinedAt,
+      connected: v.connected
+    }));
+    socket.emit('host:viewers-list', { viewers: viewersList });
   });
 
   // ─── VIEWER EVENTS ──────────────────────────────────────
@@ -230,15 +313,25 @@ io.on('connection', (socket) => {
       return;
     }
 
-    room.viewers.add(socket.id);
+    room.viewers.set(socket.id, {
+      socketId: socket.id,
+      name: 'Espectador',
+      joinedAt: Date.now(),
+      connected: true
+    });
     viewerToRoom.set(socket.id, roomId);
     socket.join(roomId);
     
     socket.emit('room:joined', { roomId });
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id });
     
-    // Send chat history to the joining viewer
-    socket.emit('chat:history', { messages: room.chat.slice(-50) });
+    // Send chat history to the joining viewer (last 100 messages)
+    socket.emit('chat:history', { messages: room.chat.slice(-100) });
+
+    // Send current mute state
+    if (room.isMuted) {
+      socket.emit('host:muted');
+    }
     
     fastify.log.info(`Viewer ${socket.id} joined room ${roomId}`);
   });
@@ -313,7 +406,8 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
-    io.to(room.hostId).emit('reaction:receive', { emoji, from: 'Espectador' });
+    // Broadcast reaction to host and all other viewers in the room
+    io.to(roomId).emit('reaction:receive', { emoji, from: 'Espectador' });
   });
 });
 

@@ -14,7 +14,6 @@
     VolumeX,
     MessageCircle,
     Send,
-    SmilePlus,
     Activity,
     Share2
   } from 'lucide-svelte';
@@ -61,6 +60,7 @@
   let isMuted = $state(true);
   let isFullscreen = $state(false);
   let isHovering = $state(false);
+  let hostMuted = $state(false);
 
   // --- Chat ---
   let chatOpen = $state(false);
@@ -75,8 +75,10 @@
   let lastStatsTime = $state(0);
 
   // --- Reactions ---
-  const reactionEmojis = ['👍', '👎', '❓', '🎉'];
+  const ALLOWED_REACTIONS = ['👍', '❤️', '🔥', '👏', '😂'];
   let animatingReaction = $state(null);
+  let floatingReactions = $state([]);
+  let reactionCounter = 0;
 
   // --- Derived ---
   function getStatusLabel(s) {
@@ -164,7 +166,7 @@
       status = 'waiting';
     });
 
-    // Chat events
+  // Chat events
     socket.on('chat:history', (data) => {
       if (data?.messages) {
         chatMessages = data.messages.map((msg) => ({
@@ -186,6 +188,11 @@
           timestamp: msg.timestamp || new Date().toISOString()
         }
       ];
+    });
+
+    // Reactions
+    socket.on('reaction:receive', (data) => {
+      addFloatingReaction(data.emoji);
     });
 
     // WebRTC signaling — server protocol: { signal } objects
@@ -270,6 +277,20 @@
       status = 'waiting';
     });
 
+    socket.on('host:muted', () => {
+      hostMuted = true;
+    });
+
+    socket.on('host:unmuted', () => {
+      hostMuted = false;
+    });
+
+    socket.on('viewer:kicked', (data) => {
+      errorMessage = data?.reason || 'Has sido expulsado de la sala';
+      status = 'error';
+      cleanupSocket();
+    });
+
     socket.on('host:disconnected', () => {
       errorMessage = 'El anfitrión se desconectó';
       status = 'error';
@@ -310,7 +331,7 @@
     }
     status = 'idle';
     pin = '';
-    chatMessages = [];
+    // Don't clear chatMessages on disconnect so they persist if reconnecting
     chatOpen = false;
     errorMessage = '';
     connectionStats = { resolution: '', fps: '', bitrate: '' };
@@ -360,8 +381,38 @@
     const text = chatInput.trim();
     if (!text || !socket) return;
 
+    // Chat commands
+    if (text.startsWith('/')) {
+      const parts = text.split(/\s+/);
+      const command = parts[0].toLowerCase();
+      switch (command) {
+        case '/help':
+          addSystemMessage('Comandos: /help, /stats, /clear');
+          chatInput = '';
+          return;
+        case '/stats':
+          addSystemMessage(`Estado: ${getStatusLabel(status)} | Resolución: ${connectionStats.resolution || 'N/A'} | FPS: ${connectionStats.fps || 'N/A'} | Bitrate: ${connectionStats.bitrate || 'N/A'}`);
+          chatInput = '';
+          return;
+        case '/clear':
+          chatMessages = [];
+          addSystemMessage('Chat limpiado.');
+          chatInput = '';
+          return;
+      }
+    }
+
     socket.emit('chat:message', { text });
     chatInput = '';
+  }
+
+  function addSystemMessage(text) {
+    chatMessages = [...chatMessages, {
+      id: `system-${Date.now()}`,
+      sender: 'Sistema',
+      text,
+      timestamp: new Date().toISOString()
+    }];
   }
 
   function handleChatKeydown(e) {
@@ -373,6 +424,7 @@
 
   function sendReaction(emoji) {
     if (!socket) return;
+    if (!ALLOWED_REACTIONS.includes(emoji)) return;
 
     socket.emit('reaction:send', { emoji });
     animatingReaction = emoji;
@@ -383,6 +435,21 @@
     }, 600);
   }
 
+  function addFloatingReaction(emoji) {
+    if (!ALLOWED_REACTIONS.includes(emoji)) return;
+    const id = ++reactionCounter;
+    const reaction = {
+      id,
+      emoji,
+      x: Math.random() * 80 + 10,
+      createdAt: Date.now()
+    };
+    floatingReactions = [...floatingReactions, reaction];
+    setTimeout(() => {
+      floatingReactions = floatingReactions.filter(r => r.id !== id);
+    }, 3000);
+  }
+
   function toggleChat() {
     chatOpen = !chatOpen;
   }
@@ -390,7 +457,7 @@
   function retry() {
     status = 'idle';
     errorMessage = '';
-    pin = '';
+    // Don't clear pin so user can reconnect with same PIN
   }
 
   async function updateStats() {
@@ -464,6 +531,23 @@
     disconnect();
   });
 </script>
+
+<style>
+  @keyframes floatUp {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(-60px) scale(1.2);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-140px) scale(0.8);
+    }
+  }
+</style>
 
 <div class="min-h-screen bg-slate-50">
   <!-- Header -->
@@ -620,6 +704,18 @@
             EN VIVO
           </div>
 
+          <!-- Host Muted Indicator -->
+          {#if hostMuted}
+            <div
+              class="absolute top-4 left-32 flex items-center gap-1.5
+                     bg-amber-500/90 backdrop-blur-sm text-white px-2.5 py-1
+                     rounded-full text-xs font-medium animate-[fadeIn_0.3s_ease]"
+            >
+              <VolumeX class="w-3.5 h-3.5" />
+              Silenciado
+            </div>
+          {/if}
+
           <!-- Hover Controls -->
           {#if isHovering}
             <div
@@ -652,6 +748,16 @@
               </button>
             </div>
           {/if}
+
+          <!-- Floating Reactions -->
+          {#each floatingReactions as reaction (reaction.id)}
+            <div
+              class="absolute text-4xl pointer-events-none select-none"
+              style="left: {reaction.x}%; bottom: 80px; animation: floatUp 3s ease-out forwards;"
+            >
+              {reaction.emoji}
+            </div>
+          {/each}
         </div>
 
         <!-- Connection Stats Bar -->
@@ -667,7 +773,7 @@
 
         <!-- Reactions Row -->
         <div class="flex items-center justify-center gap-3 mt-4">
-          {#each reactionEmojis as emoji}
+          {#each ALLOWED_REACTIONS as emoji}
             <button
               onclick={() => sendReaction(emoji)}
               class="w-12 h-12 bg-white border border-slate-200 rounded-xl
@@ -764,7 +870,7 @@
             Se perdió la conexión con el servidor
           </p>
           <button
-            onclick={retry}
+            onclick={() => connect()}
             class="px-6 py-3 bg-slate-800 text-white font-medium
                    rounded-xl hover:bg-slate-700 transition-colors"
           >
@@ -834,16 +940,18 @@
         {/if}
 
         {#each chatMessages as msg (msg.id)}
-          <div class="flex flex-col">
-            <div class="flex items-baseline gap-2">
-              <span class="text-slate-300 text-xs font-semibold">
-                {msg.sender}
-              </span>
-              <span class="text-slate-600 text-[10px]">
-                {formatTime(msg.timestamp)}
-              </span>
-            </div>
-            <p class="text-slate-200 text-sm mt-0.5 break-words">
+          <div class="flex flex-col {msg.sender === 'Sistema' ? 'items-center' : ''}">
+            {#if msg.sender !== 'Sistema'}
+              <div class="flex items-baseline gap-2">
+                <span class="text-slate-300 text-xs font-semibold">
+                  {msg.sender}
+                </span>
+                <span class="text-slate-600 text-[10px]">
+                  {formatTime(msg.timestamp)}
+                </span>
+              </div>
+            {/if}
+            <p class="{msg.sender === 'Sistema' ? 'text-slate-500 text-xs italic bg-slate-800/50 px-3 py-1 rounded-lg' : 'text-slate-200 text-sm'} mt-0.5 break-words">
               {msg.text}
             </p>
           </div>
@@ -857,7 +965,7 @@
         <div class="flex items-center gap-2">
           <input
             type="text"
-            placeholder="Escribe un mensaje..."
+            placeholder="Escribe un mensaje o /comando..."
             value={chatInput}
             oninput={(e) => (chatInput = e.target.value)}
             onkeydown={handleChatKeydown}

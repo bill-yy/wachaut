@@ -20,7 +20,9 @@
     Send,
     Settings,
     Circle,
-    Square
+    Square,
+    Terminal,
+    Shield
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
 
@@ -56,36 +58,6 @@
   // First viewer celebration
   let showFirstViewerCelebration = $state(false);
   let confettiParticles = $state([]);
-  // ─── First Viewer Celebration ────────────────────────────────────
-  function triggerFirstViewerCelebration() {
-    showFirstViewerCelebration = true;
-
-    // Generate confetti particles
-    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
-    const emojis = ['🎉', '🎊', '✨', '🥳', '👋', '🙌'];
-    const particles = [];
-    for (let i = 0; i < 40; i++) {
-      particles.push({
-        id: i,
-        x: Math.random() * 100,
-        delay: Math.random() * 0.5,
-        duration: 1.5 + Math.random() * 1.5,
-        rotation: Math.random() * 360,
-        size: 6 + Math.random() * 10,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        type: Math.random() > 0.3 ? 'rect' : 'emoji',
-        emoji: emojis[Math.floor(Math.random() * emojis.length)],
-        borderRadius: Math.random() > 0.5 ? '50%' : '2px'
-      });
-    }
-    confettiParticles = particles;
-
-    // Auto-dismiss after 3.5 seconds
-    setTimeout(() => {
-      showFirstViewerCelebration = false;
-      confettiParticles = [];
-    }, 3500);
-  }
 
   // Recording
   let isRecording = $state(false);
@@ -102,6 +74,10 @@
     normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 2_500_000, desc: 'Uso general' },
     high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
   };
+
+  // Viewer list for kick
+  let viewersList = $state([]);
+  let showViewersPanel = $state(false);
 
   // Room info
   const roomId = crypto.randomUUID();
@@ -122,12 +98,10 @@
     const newReaction = {
       id,
       emoji,
-      x: Math.random() * 80 + 10, // 10-90% of container width
+      x: Math.random() * 80 + 10,
       createdAt: Date.now()
     };
     activeReactions = new Map(activeReactions).set(id, newReaction);
-
-    // Remove after 3 seconds
     setTimeout(() => {
       activeReactions = new Map(activeReactions);
       activeReactions.delete(id);
@@ -185,10 +159,70 @@
     recordingInterval = null;
   }
 
-  // ─── Chat ────────────────────────────────────────────────────────────
+  // ─── Chat Commands ───────────────────────────────────────────────────
+  function processChatCommand(text) {
+    const parts = text.trim().split(/\s+/);
+    const command = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    switch (command) {
+      case '/help': {
+        addSystemMessage('Comandos disponibles: /help, /stats, /clear, /kick <viewerId>');
+        return true;
+      }
+      case '/stats': {
+        const stats = {
+          viewers: viewerCount,
+          connected: connected ? 'Sí' : 'No',
+          sharing: isSharing ? 'Sí' : 'No',
+          muted: isMuted ? 'Sí' : 'No',
+          peers: peers.size,
+          quality: presets[qualityPreset].label
+        };
+        addSystemMessage(`Estadísticas: Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, Peers=${stats.peers}, Calidad=${stats.quality}`);
+        return true;
+      }
+      case '/clear': {
+        chatMessages = [];
+        addSystemMessage('Chat limpiado.');
+        return true;
+      }
+      case '/kick': {
+        if (!args[0]) {
+          addSystemMessage('Uso: /kick <viewerId>');
+          return true;
+        }
+        const viewerId = args[0];
+        if (!socket) return true;
+        socket.emit('host:kick', { roomId, viewerId });
+        addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  function addSystemMessage(text) {
+    chatMessages = [...chatMessages, {
+      id: `system-${Date.now()}-${Math.random()}`,
+      sender: 'Sistema',
+      text,
+      timestamp: new Date()
+    }];
+  }
+
   function sendChatMessage() {
     const text = chatInput.trim();
     if (!text || !socket || !connected || text.length > 500) return;
+
+    if (text.startsWith('/')) {
+      const handled = processChatCommand(text);
+      if (handled) {
+        chatInput = '';
+        return;
+      }
+    }
 
     socket.emit('chat:message', { roomId, text, sender: 'Anfitrión' });
     chatInput = '';
@@ -252,13 +286,12 @@
       }
     });
 
-    // WebRTC signaling from viewer (answer + ICE candidates)
+    // WebRTC signaling from viewer
     socket.on('viewer:signal', async (data) => {
       const pc = peers.get(data.viewerId);
       if (!pc) return;
       if (data.signal.type === 'answer') {
         await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
-        // Apply queued candidates
         const queued = pendingCandidates.get(data.viewerId) || [];
         for (const candidate of queued) {
           await pc.addIceCandidate(candidate);
@@ -298,11 +331,18 @@
     socket.on('reaction:receive', (data) => {
       addReaction(data.emoji);
     });
+
+    // Viewers list
+    socket.on('host:viewers-list', (data) => {
+      if (data?.viewers) {
+        viewersList = data.viewers;
+      }
+    });
   }
 
   // ─── WebRTC ──────────────────────────────────────────────────────────
   let iceServers = $state(null);
-  let pendingCandidates = new Map(); // viewerId -> RTCIceCandidate[]
+  let pendingCandidates = new Map();
 
   async function fetchIceServers() {
     if (iceServers) return iceServers;
@@ -346,14 +386,12 @@
       console.log(`[host] viewer=${viewerId} iceConnectionState=${pc.iceConnectionState}`);
     };
 
-    // Add existing stream tracks if already sharing
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
 
     peers.set(viewerId, pc);
 
-    // If already sharing, send offer immediately
     if (localStream) {
       await sendOffer(pc, viewerId);
     }
@@ -381,20 +419,17 @@
       localStream = stream;
       isSharing = true;
 
-      // Wait for DOM update so videoPreview exists
       await tick();
       if (videoPreview) {
         videoPreview.srcObject = stream;
         videoPreview.play().catch(() => {});
       }
 
-      // Add tracks to ALL existing peers and send offers explicitly
       for (const [viewerId, pc] of peers) {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
         await sendOffer(pc, viewerId);
       }
 
-      // Apply bitrate limit to all video senders
       for (const [viewerId, pc] of peers) {
         const senders = pc.getSenders();
         for (const sender of senders) {
@@ -425,6 +460,7 @@
       localStream = null;
     }
     isSharing = false;
+    isMuted = false;
 
     peers.forEach(pc => pc.close());
     peers = new Map();
@@ -437,8 +473,14 @@
 
   function toggleMute() {
     if (!localStream) return;
-    localStream.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
-    isMuted = !isMuted;
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    const newMuted = !isMuted;
+    audioTracks.forEach(t => { t.enabled = !newMuted; });
+    isMuted = newMuted;
+    if (socket && connected) {
+      socket.emit(newMuted ? 'host:mute' : 'host:unmute', { roomId });
+    }
   }
 
   function toggleFullscreen() {
@@ -451,6 +493,18 @@
       el.requestFullscreen();
       isFullscreen = true;
     }
+  }
+
+  function requestViewersList() {
+    if (socket && connected) {
+      socket.emit('host:request-viewers', { roomId });
+    }
+  }
+
+  function kickViewer(viewerId) {
+    if (!socket || !connected) return;
+    socket.emit('host:kick', { roomId, viewerId });
+    addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
   }
 
   // ─── Clipboard ──────────────────────────────────────────────────────
@@ -473,6 +527,33 @@
       socket.disconnect();
     }
     goto('/');
+  }
+
+  // ─── First Viewer Celebration ────────────────────────────────────
+  function triggerFirstViewerCelebration() {
+    showFirstViewerCelebration = true;
+    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const emojis = ['🎉', '🎊', '✨', '🥳', '👋', '🙌'];
+    const particles = [];
+    for (let i = 0; i < 40; i++) {
+      particles.push({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 0.5,
+        duration: 1.5 + Math.random() * 1.5,
+        rotation: Math.random() * 360,
+        size: 6 + Math.random() * 10,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        type: Math.random() > 0.3 ? 'rect' : 'emoji',
+        emoji: emojis[Math.floor(Math.random() * emojis.length)],
+        borderRadius: Math.random() > 0.5 ? '50%' : '2px'
+      });
+    }
+    confettiParticles = particles;
+    setTimeout(() => {
+      showFirstViewerCelebration = false;
+      confettiParticles = [];
+    }, 3500);
   }
 
   // ─── Init ───────────────────────────────────────────────────────────
@@ -500,10 +581,10 @@
     <span class="text-sm font-medium">{error}</span>
   </div>
 {/if}
+
 <!-- First Viewer Celebration -->
 {#if showFirstViewerCelebration}
   <div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease]">
-    <!-- Confetti particles -->
     {#each confettiParticles as p (p.id)}
       <div
         class="absolute"
@@ -524,8 +605,6 @@
         {#if p.type === 'emoji'}{p.emoji}{/if}
       </div>
     {/each}
-
-    <!-- Celebration message -->
     <div class="fixed inset-0 flex items-center justify-center">
       <div class="bg-white/95 backdrop-blur-md rounded-3xl px-8 py-6 shadow-2xl border border-slate-200 text-center animate-[celebrationPop_0.5s_cubic-bezier(0.175,0.885,0.32,1.275)]">
         <div class="text-5xl mb-3">🎉</div>
@@ -571,6 +650,49 @@
   </div>
 {/if}
 
+<!-- Viewers Panel Modal -->
+{#if showViewersPanel}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+          <Users class="w-5 h-5 text-slate-600" />
+          Espectadores ({viewerCount})
+        </h3>
+        <button
+          onclick={() => { showViewersPanel = false; }}
+          class="text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          ✕
+        </button>
+      </div>
+      {#if viewersList.length === 0}
+        <p class="text-slate-400 text-sm text-center py-4">No hay espectadores conectados</p>
+      {:else}
+        <div class="space-y-2 max-h-64 overflow-y-auto">
+          {#each viewersList as viewer}
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span class="text-sm text-slate-700 font-mono">{viewer.viewerId.slice(0, 8)}...</span>
+              </div>
+              <button
+                onclick={() => kickViewer(viewer.viewerId)}
+                class="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-medium hover:bg-red-200 active:scale-95 transition-all"
+              >
+                Expulsar
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      <div class="mt-4 pt-3 border-t border-slate-100">
+        <p class="text-xs text-slate-400">También puedes usar <span class="font-mono bg-slate-100 px-1 rounded">/kick &lt;viewerId&gt;</span> en el chat</p>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- Main Container -->
 <div class="min-h-screen bg-slate-50 flex flex-col">
   <!-- Top Bar -->
@@ -596,10 +718,14 @@
           <span class="text-red-600 text-sm font-semibold">EN VIVO</span>
         </div>
       {/if}
-      <div class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full">
+      <button
+        onclick={() => { showViewersPanel = true; requestViewersList(); }}
+        class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full hover:bg-slate-200 active:scale-95 transition-all"
+        title="Ver espectadores"
+      >
         <Users class="w-4 h-4 text-slate-500" />
         <span class="text-slate-700 text-sm font-medium">{viewerCount}</span>
-      </div>
+      </button>
       <button
         onclick={() => { showChat = !showChat; }}
         class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
@@ -645,7 +771,7 @@
           <button
             onclick={toggleMute}
             class="p-2.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
-            title={isMuted ? 'Activar micrófono' : 'Silenciar'}
+            title={isMuted ? 'Activar audio' : 'Silenciar audio'}
           >
             {#if isMuted}
               <VolumeX class="w-5 h-5 text-red-400" />
@@ -832,7 +958,7 @@
 
         {#if isSharing}
           <div class="flex items-center justify-center gap-2 pt-2">
-            {#each ['👍', '👎', '❓', '🎉'] as emoji}
+            {#each ['👍', '❤️', '🔥', '👏', '😂'] as emoji}
               <button
                 onclick={() => handleSendReaction(emoji)}
                 class="w-10 h-10 flex items-center justify-center text-xl bg-slate-100 rounded-xl hover:bg-slate-200 active:scale-90 transition-all"
@@ -861,6 +987,10 @@
             <span class="text-sm font-semibold text-slate-700">Chat</span>
             <span class="text-xs text-slate-400">({chatMessages.length})</span>
           </div>
+          <div class="flex items-center gap-1">
+            <Terminal class="w-3 h-3 text-slate-400" />
+            <span class="text-[10px] text-slate-400">/help</span>
+          </div>
         </div>
 
         <!-- Messages -->
@@ -876,9 +1006,12 @@
             </div>
           {:else}
             {#each chatMessages as msg (msg.id || msg.timestamp)}
-              <div class="flex flex-col {msg.sender === 'Anfitrión' ? 'items-end' : 'items-start'}">
+              <div class="flex flex-col {msg.sender === 'Anfitrión' ? 'items-end' : msg.sender === 'Sistema' ? 'items-center' : 'items-start'}">
                 <div class="flex items-center gap-1.5 mb-0.5">
-                  <span class="text-[10px] font-semibold {msg.sender === 'Anfitrión' ? 'text-slate-600' : 'text-blue-500'}">
+                  {#if msg.sender === 'Sistema'}
+                    <Shield class="w-3 h-3 text-slate-400" />
+                  {/if}
+                  <span class="text-[10px] font-semibold {msg.sender === 'Anfitrión' ? 'text-slate-600' : msg.sender === 'Sistema' ? 'text-slate-400' : 'text-blue-500'}">
                     {msg.sender}
                   </span>
                   <span class="text-[10px] text-slate-300">
@@ -889,7 +1022,9 @@
                 </div>
                 <div class="max-w-[85%] px-3 py-2 rounded-2xl text-sm {msg.sender === 'Anfitrión'
                   ? 'bg-slate-800 text-white rounded-br-md'
-                  : 'bg-slate-100 text-slate-700 rounded-bl-md'}">
+                  : msg.sender === 'Sistema'
+                    ? 'bg-slate-100 text-slate-500 text-xs italic rounded-xl'
+                    : 'bg-slate-100 text-slate-700 rounded-bl-md'}">
                   {msg.text}
                 </div>
               </div>
@@ -904,7 +1039,7 @@
               type="text"
               bind:value={chatInput}
               onkeydown={handleChatKeydown}
-              placeholder="Escribe un mensaje..."
+              placeholder="Escribe un mensaje o /comando..."
               maxlength="500"
               class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-all"
             />
@@ -919,7 +1054,7 @@
           </div>
           <div class="flex items-center justify-between mt-1.5">
             <span class="text-[10px] text-slate-400">{chatInput.length}/500</span>
-            <span class="text-[10px] text-slate-400">Enter para enviar</span>
+            <span class="text-[10px] text-slate-400">/help para comandos</span>
           </div>
         </div>
       </div>
@@ -929,18 +1064,9 @@
 
 <style>
   @keyframes floatUp {
-    0% {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: translateY(-60px) scale(1.2);
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(-140px) scale(0.8);
-    }
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    50% { opacity: 1; transform: translateY(-60px) scale(1.2); }
+    100% { opacity: 0; transform: translateY(-140px) scale(0.8); }
   }
 
   @keyframes fadeIn {
@@ -949,14 +1075,8 @@
   }
 
   @keyframes scaleIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
   }
 
   @keyframes pulseRecord {
@@ -965,35 +1085,16 @@
   }
 
   @keyframes confettiFall {
-    0% {
-      opacity: 1;
-      transform: translateY(0) rotate(0deg) scale(1);
-    }
-    70% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(100vh) rotate(720deg) scale(0.3);
-    }
+    0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+    70% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(100vh) rotate(720deg) scale(0.3); }
   }
 
   @keyframes celebrationPop {
-    0% {
-      opacity: 0;
-      transform: scale(0.3);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-    70% {
-      transform: scale(0.95);
-    }
-    100% {
-      opacity: 1;
-      transform: scale(1);
-    }
+    0% { opacity: 0; transform: scale(0.3); }
+    50% { opacity: 1; transform: scale(1.05); }
+    70% { transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
   }
 
   @keyframes celebrationFadeOut {

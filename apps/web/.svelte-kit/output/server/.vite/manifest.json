@@ -149,7 +149,7 @@
       "_server.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.ScoxpJy6.css"
+      "_app/immutable/assets/_layout.DPeAFgmH.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -199,6 +199,9 @@
       "_monitor.js",
       "_triangle-alert.js",
       "_wifi.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.Cv-tJa7p.css"
     ]
   },
   "virtual:__sveltekit/env": {
