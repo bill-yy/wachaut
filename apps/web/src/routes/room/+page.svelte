@@ -134,41 +134,39 @@
 
     // Viewers
     socket.on('viewer:joined', (data) => {
-      viewerCount = data.count || viewerCount + 1;
-      if (data.viewerId && isSharing) {
-        setupPeerForViewer(data.viewerId);
+      viewerCount = viewerCount + 1;
+      if (data.viewerId) {
+        createPeerConnection(data.viewerId);
       }
     });
 
     socket.on('viewer:left', (data) => {
-      viewerCount = Math.max(0, data.count || viewerCount - 1);
+      viewerCount = Math.max(0, viewerCount - 1);
       if (data.viewerId) {
         const pc = peers.get(data.viewerId);
-        if (pc) {
-          pc.close();
-          peers = new Map(peers);
-          peers.delete(data.viewerId);
-        }
+        if (pc) { pc.close(); peers.delete(data.viewerId); }
       }
     });
 
-    // WebRTC signaling
-    socket.on('webrtc:signal', async (data) => {
-      if (data.type === 'offer') {
-        await handleOffer(data);
-      } else if (data.type === 'answer') {
-        await handleAnswer(data);
-      } else if (data.type === 'ice-candidate') {
-        await handleIceCandidate(data);
+    // WebRTC signaling from viewer (answer + ICE candidates)
+    socket.on('viewer:signal', async (data) => {
+      const pc = peers.get(data.viewerId);
+      if (!pc) return;
+      if (data.signal.type === 'answer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+      } else if (data.signal.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(data.signal));
       }
     });
 
     // Chat
-    socket.on('chat:history', (messages) => {
-      chatMessages = messages.map(m => ({
-        ...m,
-        timestamp: new Date(m.timestamp || Date.now())
-      }));
+    socket.on('chat:history', (data) => {
+      if (data?.messages) {
+        chatMessages = data.messages.map(m => ({
+          ...m,
+          timestamp: new Date(m.timestamp || Date.now())
+        }));
+      }
     });
 
     socket.on('chat:message', (msg) => {
@@ -185,86 +183,43 @@
   }
 
   // ─── WebRTC ──────────────────────────────────────────────────────────
-  function createPeerConnection(viewerId) {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
+  async function createPeerConnection(viewerId) {
+    if (peers.has(viewerId)) return;
 
+    const pc = new RTCPeerConnection({ iceServers });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) socket.emit('host:signal', { viewerId, signal: event.candidate });
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') { pc.close(); peers.delete(viewerId); }
+    };
+
+    // Renegotiate when tracks are added
     pc.onnegotiationneeded = async () => {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('webrtc:signal', {
-          type: 'offer',
-          roomId,
-          viewerId,
-          sdp: pc.localDescription
-        });
+        socket.emit('host:signal', { viewerId, signal: pc.localDescription });
       } catch (e) {
         console.error('Negotiation error:', e);
       }
     };
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit('webrtc:signal', {
-          type: 'ice-candidate',
-          roomId,
-          viewerId,
-          candidate: event.candidate
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        pc.close();
-        peers = new Map(peers);
-        peers.delete(viewerId);
-      }
-    };
-
-    const newPeers = new Map(peers);
-    newPeers.set(viewerId, pc);
-    peers = newPeers;
-    return pc;
-  }
-
-  async function setupPeerForViewer(viewerId) {
-    if (peers.has(viewerId)) return;
-    createPeerConnection(viewerId);
-    // Negotiation will be triggered automatically by onnegotiationneeded
-  }
-
-  async function handleOffer(data) {
-    const pc = peers.get(data.viewerId) || createPeerConnection(data.viewerId);
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit('webrtc:signal', {
-      type: 'answer',
-      roomId,
-      viewerId: data.viewerId,
-      sdp: pc.localDescription
-    });
-  }
-
-  async function handleAnswer(data) {
-    const pc = peers.get(data.viewerId);
-    if (pc) {
-      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    // Add existing stream tracks if already sharing
+    if (localStream) {
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
-  }
 
-  async function handleIceCandidate(data) {
-    const pc = peers.get(data.viewerId);
-    if (pc && data.candidate) {
-      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-    }
+    // Create initial offer
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('host:signal', { viewerId, signal: pc.localDescription });
+
+    peers.set(viewerId, pc);
   }
 
   // ─── Screen Sharing ─────────────────────────────────────────────────
