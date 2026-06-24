@@ -78,6 +78,6 @@ jobs:
     steps:
       - name: Trigger Dokploy webhook
         run: |
-          curl -X POST "https://infohalla.com/api/deploy/wnqIijsq230dARcLCwltN" \
+          curl -X POST "https://infohalla.com/api/deploy/DGjZ9y9IS_qyhIFuzhiA2" \
             -H "Content-Type: application/json" \
             -d '{"project":"wachaut","service":"wachaut"}'
