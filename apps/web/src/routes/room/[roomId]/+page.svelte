@@ -275,7 +275,7 @@
           timestamp: msg.timestamp || new Date().toISOString()
         }
       ];
-      playChatMessage();
+      try { playChatMessage(); } catch {}
     });
 
     // Reactions
@@ -369,7 +369,7 @@
 
     socket.on('host:muted', () => {
       hostMuted = true;
-      playHostMuted();
+      try { playHostMuted(); } catch {}
     });
 
     socket.on('host:unmuted', () => {
@@ -566,13 +566,17 @@
     const reaction = {
       id,
       emoji,
-      x: Math.random() * 80 + 10,
+      x: Math.random() * 85 + 5,
+      wobble: (Math.random() - 0.5) * 80,
+      scale: 0.8 + Math.random() * 0.8,
+      delay: Math.random() * 0.3,
+      duration: 2 + Math.random() * 1.5,
       createdAt: Date.now()
     };
     floatingReactions = [...floatingReactions, reaction];
     setTimeout(() => {
       floatingReactions = floatingReactions.filter(r => r.id !== id);
-    }, 3000);
+    }, (reaction.duration + reaction.delay) * 1000 + 200);
   }
 
   function retry() {
@@ -727,9 +731,11 @@
 
 <style>
   @keyframes floatUp {
-    0% { opacity: 1; transform: translateY(0) scale(1); }
-    50% { opacity: 1; transform: translateY(-60px) scale(1.2); }
-    100% { opacity: 0; transform: translateY(-140px) scale(0.8); }
+    0% { opacity: 1; transform: translateY(0) translateX(0) scale(0.3) rotate(0deg); }
+    15% { opacity: 1; transform: translateY(-30px) translateX(5px) scale(1.1) rotate(-5deg); }
+    30% { opacity: 1; transform: translateY(-70px) translateX(-8px) scale(1.3) rotate(8deg); }
+    60% { opacity: 0.8; transform: translateY(-150px) translateX(12px) scale(1.1) rotate(-3deg); }
+    100% { opacity: 0; transform: translateY(-280px) translateX(-5px) scale(0.6) rotate(10deg); }
   }
 
   /* Custom volume slider */
@@ -1042,7 +1048,7 @@
         {#each floatingReactions as reaction (reaction.id)}
           <div
             class="absolute text-3xl pointer-events-none select-none"
-            style="left: {reaction.x}%; bottom: 80px; animation: floatUp 3s ease-out forwards;"
+            style="left: {reaction.x}%; bottom: 80px; font-size: {reaction.scale * 2}rem; animation: floatUp {reaction.duration}s ease-out {reaction.delay}s forwards; opacity: 0;"
           >
             {reaction.emoji}
           </div>

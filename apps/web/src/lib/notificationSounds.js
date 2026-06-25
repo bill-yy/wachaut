@@ -9,7 +9,9 @@ const NOTIFICATIONS_VOLUME_KEY = 'wachaut.notifications.volume';
 
 function getCtx() {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch { return null; }
   }
   return audioCtx;
 }
@@ -46,6 +48,7 @@ function setMuted(muted) {
 function playTonePair(freq1, freq2, duration = 0.08) {
   if (isMuted()) return;
   const ctx = getCtx();
+  if (!ctx) return;
   const vol = getVolume();
   const now = ctx.currentTime;
 
@@ -94,6 +97,7 @@ export function playViewerLeave() {
 export function playHostMuted() {
   if (isMuted()) return;
   const ctx = getCtx();
+  if (!ctx) return;
   const vol = getVolume();
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -114,6 +118,7 @@ export function playHostMuted() {
 export function playChatMessage() {
   if (isMuted()) return;
   const ctx = getCtx();
+  if (!ctx) return;
   const vol = getVolume();
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();

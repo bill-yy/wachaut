@@ -164,14 +164,18 @@
     const newReaction = {
       id,
       emoji,
-      x: Math.random() * 80 + 10,
+      x: Math.random() * 85 + 5,
+      wobble: (Math.random() - 0.5) * 80,
+      scale: 0.8 + Math.random() * 0.8,
+      delay: Math.random() * 0.3,
+      duration: 2 + Math.random() * 1.5,
       createdAt: Date.now()
     };
     activeReactions = new Map(activeReactions).set(id, newReaction);
     setTimeout(() => {
       activeReactions = new Map(activeReactions);
       activeReactions.delete(id);
-    }, 3000);
+    }, (newReaction.duration + newReaction.delay) * 1000 + 200);
   }
 
   function handleSendReaction(emoji) {
@@ -342,7 +346,7 @@
       if (data.username) {
         addSystemMessage(`${data.username} se unio a la sala.`);
       }
-      playViewerJoin();
+      try { playViewerJoin(); } catch {}
       if (data.viewerId) {
         createPeerConnection(data.viewerId);
       }
@@ -356,7 +360,7 @@
       if (data.username) {
         addSystemMessage(`${data.username} salio de la sala.`);
       }
-      playViewerLeave();
+      try { playViewerLeave(); } catch {}
       if (data.viewerId) {
         const pc = peers.get(data.viewerId);
         if (pc) { pc.close(); peers.delete(data.viewerId); }
@@ -403,7 +407,7 @@
         ...msg,
         timestamp: new Date(msg.timestamp || Date.now())
       }];
-      playChatMessage();
+      try { playChatMessage(); } catch {}
     });
 
     // Reactions from viewers
@@ -1044,7 +1048,7 @@
       {#each [...activeReactions.values()] as reaction (reaction.id)}
         <div
           class="absolute text-4xl pointer-events-none select-none"
-          style="left: {reaction.x}%; bottom: 80px; animation: floatUp 3s ease-out forwards;"
+          style="left: {reaction.x}%; bottom: 80px; font-size: {reaction.scale * 2.5}rem; animation: floatUp {reaction.duration}s ease-out {reaction.delay}s forwards; opacity: 0;"
         >
           {reaction.emoji}
         </div>
@@ -1369,9 +1373,11 @@
 
 <style>
   @keyframes floatUp {
-    0% { opacity: 1; transform: translateY(0) scale(1); }
-    50% { opacity: 1; transform: translateY(-60px) scale(1.2); }
-    100% { opacity: 0; transform: translateY(-140px) scale(0.8); }
+    0% { opacity: 1; transform: translateY(0) translateX(0) scale(0.3) rotate(0deg); }
+    15% { opacity: 1; transform: translateY(-30px) translateX(5px) scale(1.1) rotate(-5deg); }
+    30% { opacity: 1; transform: translateY(-70px) translateX(-8px) scale(1.3) rotate(8deg); }
+    60% { opacity: 0.8; transform: translateY(-150px) translateX(12px) scale(1.1) rotate(-3deg); }
+    100% { opacity: 0; transform: translateY(-280px) translateX(-5px) scale(0.6) rotate(10deg); }
   }
 
   @keyframes fadeIn {
