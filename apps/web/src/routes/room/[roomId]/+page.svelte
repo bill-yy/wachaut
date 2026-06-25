@@ -570,15 +570,21 @@
   function addFloatingReaction(emoji) {
     if (!ALL_EMOTES.includes(emoji)) return;
     const id = ++reactionCounter;
+    // Each emoji gets a unique set of styles to look random
+    const idx = reactionCounter % 4;
+    const scales = [1.4, 1.8, 2.2, 1.6];
+    const bottoms = [40, 120, 200, 80];
+    const xOffsets = ['0px', '-20px', '15px', '-10px'];
+    const rotations = ['-12deg', '8deg', '-5deg', '15deg'];
     const reaction = {
-      id,
-      emoji,
-      x: Math.random() * 85 + 5,
-      bottom: Math.random() * 60 + 40,
-      wobble: (Math.random() - 0.5) * 80,
-      scale: 0.8 + Math.random() * 0.8,
-      delay: Math.random() * 0.3,
-      duration: 2 + Math.random() * 1.5,
+      id, emoji,
+      x: Math.random() * 70 + 10,
+      bottom: bottoms[idx],
+      fontSize: scales[idx],
+      xOffset: xOffsets[idx],
+      rotation: rotations[idx],
+      delay: Math.random() * 0.2,
+      duration: 2.5 + Math.random() * 1,
       createdAt: Date.now()
     };
     floatingReactions = [...floatingReactions, reaction];
@@ -1051,7 +1057,8 @@
             class="absolute text-3xl pointer-events-none select-none z-10"
             style:left="{reaction.x}%"
             style:bottom="{reaction.bottom}px"
-            style:font-size="{reaction.scale * 2}rem"
+            style:font-size="{reaction.fontSize}rem"
+            style:transform="translateX({reaction.xOffset}) rotate({reaction.rotation})"
             style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
           >
             {reaction.emoji}
