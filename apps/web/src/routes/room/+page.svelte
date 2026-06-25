@@ -165,6 +165,7 @@
       id,
       emoji,
       x: Math.random() * 85 + 5,
+      bottom: Math.random() * 60 + 40,
       wobble: (Math.random() - 0.5) * 80,
       scale: 0.8 + Math.random() * 0.8,
       delay: Math.random() * 0.3,
@@ -1052,7 +1053,7 @@
         <div
           class="absolute text-4xl pointer-events-none select-none z-10"
           style:left="{reaction.x}%"
-          style:bottom="80px"
+          style:bottom="{reaction.bottom}px"
           style:font-size="{reaction.scale * 2.5}rem"
           style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
         >
