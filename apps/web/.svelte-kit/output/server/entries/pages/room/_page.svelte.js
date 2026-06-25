@@ -1,8 +1,8 @@
 import "../../../chunks/internal.js";
 import { d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
+import { a as Triangle_alert, c as Message_circle, i as playViewerLeave, l as Bell, n as playChatMessage, o as Share_2, r as playViewerJoin, s as Send, t as isMuted, u as Bell_off } from "../../../chunks/notificationSounds.js";
 import { n as Shield, r as Link_2, t as Users } from "../../../chunks/navigation.js";
-import { i as Message_circle, n as Share_2, r as Send, t as Triangle_alert } from "../../../chunks/triangle-alert.js";
 import { io } from "socket.io-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/arrow-left.svelte
 function Arrow_left($$renderer, $$props) {
@@ -206,6 +206,66 @@ function _page($$renderer, $$props) {
 		let chatInput = "";
 		let activeReactions = /* @__PURE__ */ new Map();
 		let reactionIdCounter = 0;
+		[
+			{
+				label: "Reacciones",
+				emojis: [
+					"👍",
+					"👎",
+					"❤️",
+					"🔥",
+					"👏",
+					"😂",
+					"🎉",
+					"😮",
+					"😢",
+					"😡"
+				]
+			},
+			{
+				label: "Gestos",
+				emojis: [
+					"👋",
+					"✌️",
+					"💪",
+					"🙏"
+				]
+			},
+			{
+				label: "Objetos",
+				emojis: [
+					"⭐",
+					"💯",
+					"🎯",
+					"💡",
+					"🎵"
+				]
+			},
+			{
+				label: "Comida",
+				emojis: [
+					"☕",
+					"🍕",
+					"🎂"
+				]
+			}
+		].flatMap((c) => c.emojis);
+		const HOST_FAVORITES_KEY = "wachaut.host.favorites";
+		loadHostFavorites();
+		function loadHostFavorites() {
+			try {
+				const stored = JSON.parse(localStorage.getItem(HOST_FAVORITES_KEY));
+				if (Array.isArray(stored) && stored.length >= 5) return stored.slice(0, 5);
+			} catch {}
+			return [
+				"👍",
+				"❤️",
+				"🔥",
+				"👏",
+				"😂"
+			];
+		}
+		let notificationsMuted = isMuted();
 		let showFirstViewerCelebration = false;
 		let confettiParticles = [];
 		let qualityPreset = "normal";
@@ -258,6 +318,14 @@ function _page($$renderer, $$props) {
 				activeReactions.delete(id);
 			}, 3e3);
 		}
+		function addSystemMessage(text) {
+			chatMessages = [...chatMessages, {
+				id: `system-${Date.now()}-${Math.random()}`,
+				sender: "Sistema",
+				text,
+				timestamp: /* @__PURE__ */ new Date()
+			}];
+		}
 		function initSocket() {
 			socket = io("wss://api-wachaut.billytech.es", { transports: ["websocket"] });
 			socket.on("connect", () => {
@@ -279,11 +347,15 @@ function _page($$renderer, $$props) {
 			socket.on("viewer:joined", (data) => {
 				const wasEmpty = viewerCount === 0;
 				viewerCount = viewerCount + 1;
+				if (data.username) addSystemMessage(`${data.username} se unio a la sala.`);
+				playViewerJoin();
 				if (data.viewerId) createPeerConnection(data.viewerId);
 				if (wasEmpty) triggerFirstViewerCelebration();
 			});
 			socket.on("viewer:left", (data) => {
 				viewerCount = Math.max(0, viewerCount - 1);
+				if (data.username) addSystemMessage(`${data.username} salio de la sala.`);
+				playViewerLeave();
 				if (data.viewerId) {
 					const pc = peers.get(data.viewerId);
 					if (pc) {
@@ -321,12 +393,16 @@ function _page($$renderer, $$props) {
 					...msg,
 					timestamp: new Date(msg.timestamp || Date.now())
 				}];
+				playChatMessage();
 			});
 			socket.on("reaction:receive", (data) => {
 				addReaction(data.emoji);
 			});
 			socket.on("host:viewers-list", (data) => {
 				if (data?.viewers) data.viewers;
+			});
+			socket.on("host:kick-failed", (data) => {
+				addSystemMessage(data?.message || "No se pudo expulsar al espectador.");
 			});
 		}
 		let iceServers = null;
@@ -421,6 +497,8 @@ function _page($$renderer, $$props) {
 			$$renderer.push(`<!----> <span class="text-sm font-medium svelte-ek3c68">${escape_html(error)}</span></div>`);
 		} else $$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> `);
+		$$renderer.push("<!--[-1-->");
+		$$renderer.push(`<!--]--> `);
 		if (showFirstViewerCelebration) {
 			$$renderer.push("<!--[0-->");
 			$$renderer.push(`<div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease] svelte-ek3c68"><!--[-->`);
@@ -448,7 +526,15 @@ function _page($$renderer, $$props) {
 		$$renderer.push("<!--[-1-->");
 		$$renderer.push(`<!--]--> <button class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full hover:bg-slate-200 active:scale-95 transition-all svelte-ek3c68" title="Ver espectadores">`);
 		Users($$renderer, { class: "w-4 h-4 text-slate-500" });
-		$$renderer.push(`<!----> <span class="text-slate-700 text-sm font-medium svelte-ek3c68">${escape_html(viewerCount)}</span></button> <button class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Chat">`);
+		$$renderer.push(`<!----> <span class="text-slate-700 text-sm font-medium svelte-ek3c68">${escape_html(viewerCount)}</span></button> <button class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68"${attr("title", notificationsMuted ? "Activar notificaciones" : "Silenciar notificaciones")}>`);
+		if (notificationsMuted) {
+			$$renderer.push("<!--[0-->");
+			Bell_off($$renderer, { class: "w-5 h-5 text-slate-400" });
+		} else {
+			$$renderer.push("<!--[-1-->");
+			Bell($$renderer, { class: "w-5 h-5 text-slate-600" });
+		}
+		$$renderer.push(`<!--]--></button> <button class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all svelte-ek3c68" title="Chat">`);
 		Message_circle($$renderer, { class: "w-5 h-5 text-slate-600" });
 		$$renderer.push(`<!----> `);
 		if (chatMessages.length > 0 && true) {
@@ -502,9 +588,9 @@ function _page($$renderer, $$props) {
 		} else {
 			$$renderer.push("<!--[-1-->");
 			$$renderer.push(`<!--[-->`);
-			const each_array_5 = ensure_array_like(chatMessages);
-			for (let $$index_5 = 0, $$length = each_array_5.length; $$index_5 < $$length; $$index_5++) {
-				let msg = each_array_5[$$index_5];
+			const each_array_7 = ensure_array_like(chatMessages);
+			for (let $$index_7 = 0, $$length = each_array_7.length; $$index_7 < $$length; $$index_7++) {
+				let msg = each_array_7[$$index_7];
 				$$renderer.push(`<div${attr_class(`flex flex-col ${msg.sender === "Anfitrión" ? "items-end" : msg.sender === "Sistema" ? "items-center" : "items-start"}`, "svelte-ek3c68")}><div class="flex items-center gap-1.5 mb-0.5 svelte-ek3c68">`);
 				if (msg.sender === "Sistema") {
 					$$renderer.push("<!--[0-->");

@@ -51,6 +51,7 @@ const MAX_EVENTS_PER_MINUTE = 120;
 const MAX_ROOMS_SIMULTANEOUS = 200;
 const MAX_CHAT_LENGTH = 500;
 const MAX_REACTIONS_PER_MINUTE = 30;
+const MAX_USERNAME_LENGTH = 24;
 
 function getRateKey(socketId: string): string {
   return socketId;
@@ -71,6 +72,48 @@ function checkRateLimit(socketId: string, maxEvents: number = MAX_EVENTS_PER_MIN
     return false;
   }
   return true;
+}
+
+function sanitizeUsername(input: unknown): string {
+  if (typeof input !== 'string') return '';
+
+  return input
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, MAX_USERNAME_LENGTH);
+}
+
+function usernameKey(username: string): string {
+  return username.toLowerCase();
+}
+
+function reserveUsername(room: Room, requestedUsername: string): string {
+  const base = requestedUsername || `viewer-${room.viewers.size + 1}`;
+  const usedNames = new Set(
+    Array.from(room.viewers.values()).map((viewer) => usernameKey(viewer.name))
+  );
+
+  let candidate = base;
+  let suffix = 2;
+
+  while (usedNames.has(usernameKey(candidate))) {
+    const tail = `-${suffix}`;
+    candidate = `${base.slice(0, Math.max(1, MAX_USERNAME_LENGTH - tail.length))}${tail}`;
+    suffix++;
+  }
+
+  return candidate;
+}
+
+function findViewer(room: Room, viewerRef: string): ViewerInfo | undefined {
+  const directMatch = room.viewers.get(viewerRef);
+  if (directMatch) return directMatch;
+
+  const cleanedRef = viewerRef.replace(/^@/, '').toLowerCase();
+  return Array.from(room.viewers.values()).find(
+    (viewer) => usernameKey(viewer.name) === cleanedRef
+  );
 }
 
 // Cleanup expired rooms every 5 minutes
@@ -153,7 +196,7 @@ io.on('connection', (socket) => {
         const viewer = room.viewers.get(socket.id);
         if (viewer) {
           viewer.connected = false;
-          socket.to(room.hostId).emit('viewer:left', { viewerId: socket.id });
+          socket.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
         }
         break;
       }
@@ -232,12 +275,16 @@ io.on('connection', (socket) => {
   socket.on('host:kick', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
     const room = rooms.get(roomId);
     if (!room || room.hostId !== socket.id) return;
-    if (!room.viewers.has(viewerId)) return;
+    const viewer = findViewer(room, viewerId);
+    if (!viewer) {
+      socket.emit('host:kick-failed', { viewerId, message: `No se encontro a ${viewerId}` });
+      return;
+    }
 
-    room.viewers.delete(viewerId);
-    viewerToRoom.delete(viewerId);
-    io.to(viewerId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrión' });
-    socket.to(room.hostId).emit('viewer:left', { viewerId });
+    room.viewers.delete(viewer.socketId);
+    viewerToRoom.delete(viewer.socketId);
+    io.to(viewer.socketId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrion' });
+    socket.emit('viewer:left', { viewerId: viewer.socketId, username: viewer.name });
   });
 
   socket.on('host:broadcast', ({ roomId, text }: { roomId: string; text: string }) => {
@@ -260,9 +307,10 @@ io.on('connection', (socket) => {
     if (!checkRateLimit(socket.id)) return;
     const room = rooms.get(roomId);
     if (!room || room.hostId !== socket.id) return;
-    if (!room.viewers.has(viewerId)) return;
+    const viewer = findViewer(room, viewerId);
+    if (!viewer) return;
 
-    io.to(roomId).emit('viewer:focus', { viewerId });
+    io.to(roomId).emit('viewer:focus', { viewerId: viewer.socketId, username: viewer.name });
   });
 
   socket.on('host:unfocus', ({ roomId }: { roomId: string }) => {
@@ -288,9 +336,15 @@ io.on('connection', (socket) => {
 
   // ─── VIEWER EVENTS ──────────────────────────────────────
 
-  socket.on('viewer:join', ({ roomId, pin }: { roomId: string; pin: string }) => {
+  socket.on('viewer:join', ({ roomId, pin, username }: { roomId: string; pin: string; username?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
+      return;
+    }
+
+    const requestedUsername = sanitizeUsername(username);
+    if (requestedUsername.length < 2) {
+      socket.emit('room:auth-failed', { message: 'Elige un username de al menos 2 caracteres.' });
       return;
     }
 
@@ -313,17 +367,19 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const reservedUsername = reserveUsername(room, requestedUsername);
+
     room.viewers.set(socket.id, {
       socketId: socket.id,
-      name: 'Espectador',
+      name: reservedUsername,
       joinedAt: Date.now(),
       connected: true
     });
     viewerToRoom.set(socket.id, roomId);
     socket.join(roomId);
     
-    socket.emit('room:joined', { roomId });
-    socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id });
+    socket.emit('room:joined', { roomId, username: reservedUsername });
+    socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
     
     // Send chat history to the joining viewer (last 100 messages)
     socket.emit('chat:history', { messages: room.chat.slice(-100) });
@@ -333,7 +389,7 @@ io.on('connection', (socket) => {
       socket.emit('host:muted');
     }
     
-    fastify.log.info(`Viewer ${socket.id} joined room ${roomId}`);
+    fastify.log.info(`Viewer ${socket.id} (${reservedUsername}) joined room ${roomId}`);
   });
 
   socket.on('viewer:signal', ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
@@ -375,9 +431,10 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
+    const viewer = room.viewers.get(socket.id);
     const msg: ChatMessage = {
       id: `${socket.id}-${Date.now()}`,
-      sender: `Espectador`,
+      sender: viewer?.name || 'Espectador',
       text: text.slice(0, MAX_CHAT_LENGTH),
       timestamp: Date.now()
     };
@@ -406,8 +463,9 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
+    const viewer = room.viewers.get(socket.id);
     // Broadcast reaction to host and all other viewers in the room
-    io.to(roomId).emit('reaction:receive', { emoji, from: 'Espectador' });
+    io.to(roomId).emit('reaction:receive', { emoji, from: viewer?.name || 'Espectador' });
   });
 });
 

@@ -22,9 +22,19 @@
     Circle,
     Square,
     Terminal,
-    Shield
+    Shield,
+    SmilePlus,
+    Bell,
+    BellOff
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
+  import {
+    playViewerJoin,
+    playViewerLeave,
+    playChatMessage,
+    isMuted as isNotifMuted,
+    setMuted as setNotifMuted
+  } from '$lib/notificationSounds';
 
   // ─── State ───────────────────────────────────────────────────────────
   let socket = $state(null);
@@ -55,6 +65,48 @@
   let activeReactions = $state(new Map());
   let reactionIdCounter = $state(0);
 
+  // ─── Emote Picker ──────────────────────────────────────────────────
+  const EMOTE_CATEGORIES = [
+    { label: 'Reacciones', emojis: ['👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡'] },
+    { label: 'Gestos', emojis: ['👋', '✌️', '💪', '🙏'] },
+    { label: 'Objetos', emojis: ['⭐', '💯', '🎯', '💡', '🎵'] },
+    { label: 'Comida', emojis: ['☕', '🍕', '🎂'] }
+  ];
+  const ALL_HOST_EMOTES = EMOTE_CATEGORIES.flatMap(c => c.emojis);
+  let showEmotePicker = $state(false);
+  const HOST_FAVORITES_KEY = 'wachaut.host.favorites';
+  let favoriteEmojis = $state(loadHostFavorites());
+
+  function loadHostFavorites() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(HOST_FAVORITES_KEY));
+      if (Array.isArray(stored) && stored.length >= 5) return stored.slice(0, 5);
+    } catch { /* ignore */ }
+    return ['👍', '❤️', '🔥', '👏', '😂'];
+  }
+  function saveHostFavorites(emojis) {
+    try {
+      localStorage.setItem(HOST_FAVORITES_KEY, JSON.stringify(emojis.slice(0, 5)));
+    } catch { /* ignore */ }
+  }
+  function trackHostFavorite(emoji) {
+    const current = [...favoriteEmojis];
+    const idx = current.indexOf(emoji);
+    if (idx !== -1) {
+      current.splice(idx, 1);
+    }
+    current.unshift(emoji);
+    favoriteEmojis = current.slice(0, 5);
+    saveHostFavorites(favoriteEmojis);
+  }
+
+  // ─── Notifications ─────────────────────────────────────────────────
+  let notificationsMuted = $state(isNotifMuted());
+  function toggleNotificationsMuted() {
+    notificationsMuted = !notificationsMuted;
+    setNotifMuted(notificationsMuted);
+  }
+
   // First viewer celebration
   let showFirstViewerCelebration = $state(false);
   let confettiParticles = $state([]);
@@ -74,6 +126,20 @@
     normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 2_500_000, desc: 'Uso general' },
     high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
   };
+
+  // Audio toggle for screen share
+  let includeAudio = $state(true);
+
+  // Auto quality adaptation
+  let autoAdaptQuality = $state(true);
+  let autoAdaptNotification = $state('');
+  let autoAdaptNotificationTimeout = $state(null);
+  let qualityMonitorInterval = $state(null);
+  let poorQualityDuration = $state(0);
+  let goodQualityDuration = $state(0);
+  const QUALITY_ORDER = ['low', 'normal', 'high'];
+  const POOR_THRESHOLD_SECONDS = 10;
+  const GOOD_THRESHOLD_SECONDS = 30;
 
   // Viewer list for kick
   let viewersList = $state([]);
@@ -110,6 +176,10 @@
 
   function handleSendReaction(emoji) {
     if (!socket || !connected) return;
+    if (ALL_HOST_EMOTES.includes(emoji)) {
+      trackHostFavorite(emoji);
+    }
+    showEmotePicker = false;
     socket.emit('reaction:send', { emoji, roomId });
   }
 
@@ -167,7 +237,7 @@
 
     switch (command) {
       case '/help': {
-        addSystemMessage('Comandos disponibles: /help, /stats, /clear, /kick <viewerId>');
+        addSystemMessage('Comandos disponibles: /help, /stats, /clear, /kick <username>');
         return true;
       }
       case '/stats': {
@@ -189,7 +259,7 @@
       }
       case '/kick': {
         if (!args[0]) {
-          addSystemMessage('Uso: /kick <viewerId>');
+          addSystemMessage('Uso: /kick <username>');
           return true;
         }
         const viewerId = args[0];
@@ -269,6 +339,10 @@
     socket.on('viewer:joined', (data) => {
       const wasEmpty = viewerCount === 0;
       viewerCount = viewerCount + 1;
+      if (data.username) {
+        addSystemMessage(`${data.username} se unio a la sala.`);
+      }
+      playViewerJoin();
       if (data.viewerId) {
         createPeerConnection(data.viewerId);
       }
@@ -279,6 +353,10 @@
 
     socket.on('viewer:left', (data) => {
       viewerCount = Math.max(0, viewerCount - 1);
+      if (data.username) {
+        addSystemMessage(`${data.username} salio de la sala.`);
+      }
+      playViewerLeave();
       if (data.viewerId) {
         const pc = peers.get(data.viewerId);
         if (pc) { pc.close(); peers.delete(data.viewerId); }
@@ -325,6 +403,7 @@
         ...msg,
         timestamp: new Date(msg.timestamp || Date.now())
       }];
+      playChatMessage();
     });
 
     // Reactions from viewers
@@ -337,6 +416,10 @@
       if (data?.viewers) {
         viewersList = data.viewers;
       }
+    });
+
+    socket.on('host:kick-failed', (data) => {
+      addSystemMessage(data?.message || 'No se pudo expulsar al espectador.');
     });
   }
 
@@ -414,10 +497,17 @@
           height: { ideal: preset.resolution.height },
           frameRate: { ideal: preset.fps }
         },
-        audio: true
+        audio: includeAudio
       });
       localStream = stream;
       isSharing = true;
+
+      // Reset quality adaptation state
+      poorQualityDuration = 0;
+      goodQualityDuration = 0;
+      if (autoAdaptQuality) {
+        startQualityMonitor();
+      }
 
       await tick();
       if (videoPreview) {
@@ -455,6 +545,7 @@
 
   function stopSharing() {
     if (isRecording) stopRecording();
+    stopQualityMonitor();
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
@@ -482,6 +573,115 @@
       socket.emit(newMuted ? 'host:mute' : 'host:unmute', { roomId });
     }
   }
+  // ─── Quality Adaptation ────────────────────────────────────────────
+  function showAutoAdaptNotification(text) {
+    autoAdaptNotification = text;
+    if (autoAdaptNotificationTimeout) clearTimeout(autoAdaptNotificationTimeout);
+    autoAdaptNotificationTimeout = setTimeout(() => { autoAdaptNotification = ''; }, 4000);
+  }
+
+  async function applyQualityPreset(newPreset) {
+    qualityPreset = newPreset;
+    const preset = presets[newPreset];
+    for (const [viewerId, pc] of peers) {
+      const senders = pc.getSenders();
+      for (const sender of senders) {
+        if (sender.track?.kind === 'video') {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = preset.bitrate;
+          await sender.setParameters(params);
+        }
+      }
+    }
+    showAutoAdaptNotification(`Calidad ajustada automaticamente a ${preset.label}`);
+  }
+
+  function downgradeQuality() {
+    const idx = QUALITY_ORDER.indexOf(qualityPreset);
+    if (idx > 0) {
+      applyQualityPreset(QUALITY_ORDER[idx - 1]);
+    }
+  }
+
+  function upgradeQuality() {
+    const idx = QUALITY_ORDER.indexOf(qualityPreset);
+    if (idx < QUALITY_ORDER.length - 1) {
+      applyQualityPreset(QUALITY_ORDER[idx + 1]);
+    }
+  }
+
+  async function checkConnectionQuality() {
+    let totalPacketLoss = 0;
+    let totalRtt = 0;
+    let count = 0;
+
+    for (const [viewerId, pc] of peers) {
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+            if (report.currentRoundTripTime != null) {
+              totalRtt += report.currentRoundTripTime * 1000; // ms
+              count++;
+            }
+          }
+          if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            if (report.packetsLost != null && report.packetsSent != null && report.packetsSent > 0) {
+              totalPacketLoss += (report.packetsLost / (report.packetsSent + report.packetsLost)) * 100;
+              count++;
+            }
+          }
+        });
+      } catch (e) {
+        // ignore stats errors
+      }
+    }
+
+    if (count === 0) return;
+
+    const avgRtt = totalRtt / Math.max(1, count);
+    const avgLoss = totalPacketLoss / Math.max(1, count);
+
+    const isPoor = avgLoss > 5 || avgRtt > 500;
+    const isGood = avgLoss < 1 && avgRtt < 200;
+
+    if (isPoor) {
+      poorQualityDuration += 1;
+      goodQualityDuration = 0;
+      if (poorQualityDuration >= POOR_THRESHOLD_SECONDS) {
+        poorQualityDuration = 0;
+        downgradeQuality();
+      }
+    } else if (isGood) {
+      goodQualityDuration += 1;
+      poorQualityDuration = 0;
+      if (goodQualityDuration >= GOOD_THRESHOLD_SECONDS) {
+        goodQualityDuration = 0;
+        upgradeQuality();
+      }
+    } else {
+      poorQualityDuration = 0;
+      goodQualityDuration = 0;
+    }
+  }
+
+  function startQualityMonitor() {
+    if (qualityMonitorInterval) return;
+    qualityMonitorInterval = setInterval(checkConnectionQuality, 1000);
+  }
+
+  function stopQualityMonitor() {
+    if (qualityMonitorInterval) {
+      clearInterval(qualityMonitorInterval);
+      qualityMonitorInterval = null;
+    }
+    poorQualityDuration = 0;
+    goodQualityDuration = 0;
+  }
+
 
   function toggleFullscreen() {
     const el = document.querySelector('#video-container');
@@ -582,6 +782,14 @@
   </div>
 {/if}
 
+<!-- Auto Quality Adaptation Notification -->
+{#if autoAdaptNotification}
+  <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-blue-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]">
+    <Settings class="w-4 h-4" />
+    <span class="text-sm font-medium">{autoAdaptNotification}</span>
+  </div>
+{/if}
+
 <!-- First Viewer Celebration -->
 {#if showFirstViewerCelebration}
   <div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease]">
@@ -674,10 +882,13 @@
             <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
               <div class="flex items-center gap-2">
                 <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span class="text-sm text-slate-700 font-mono">{viewer.viewerId.slice(0, 8)}...</span>
+                <div class="min-w-0">
+                  <span class="block text-sm text-slate-700 font-semibold truncate">@{viewer.name || viewer.viewerId.slice(0, 8)}</span>
+                  <span class="block text-[10px] text-slate-400 font-mono">{viewer.viewerId.slice(0, 8)}...</span>
+                </div>
               </div>
               <button
-                onclick={() => kickViewer(viewer.viewerId)}
+                onclick={() => kickViewer(viewer.name || viewer.viewerId)}
                 class="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-medium hover:bg-red-200 active:scale-95 transition-all"
               >
                 Expulsar
@@ -687,7 +898,7 @@
         </div>
       {/if}
       <div class="mt-4 pt-3 border-t border-slate-100">
-        <p class="text-xs text-slate-400">También puedes usar <span class="font-mono bg-slate-100 px-1 rounded">/kick &lt;viewerId&gt;</span> en el chat</p>
+        <p class="text-xs text-slate-400">También puedes usar <span class="font-mono bg-slate-100 px-1 rounded">/kick &lt;username&gt;</span> en el chat</p>
       </div>
     </div>
   </div>
@@ -725,6 +936,17 @@
       >
         <Users class="w-4 h-4 text-slate-500" />
         <span class="text-slate-700 text-sm font-medium">{viewerCount}</span>
+      </button>
+      <button
+        onclick={toggleNotificationsMuted}
+        class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
+        title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+      >
+        {#if notificationsMuted}
+          <BellOff class="w-5 h-5 text-slate-400" />
+        {:else}
+          <Bell class="w-5 h-5 text-slate-600" />
+        {/if}
       </button>
       <button
         onclick={() => { showChat = !showChat; }}
@@ -890,6 +1112,48 @@
           <!-- Quality Settings Panel -->
           {#if showSettings}
             <div class="space-y-2 p-3 bg-slate-50 rounded-xl">
+              <!-- Audio Toggle -->
+              <div class="flex items-center justify-between p-2">
+                <div class="flex items-center gap-2">
+                  {#if includeAudio}
+                    <Volume2 class="w-4 h-4 text-slate-600" />
+                  {:else}
+                    <VolumeX class="w-4 h-4 text-slate-400" />
+                  {/if}
+                  <span class="text-sm text-slate-700 font-medium">Incluir audio</span>
+                </div>
+                <button
+                  onclick={() => { includeAudio = !includeAudio; }}
+                  class="relative w-10 h-6 rounded-full transition-colors duration-200 {includeAudio ? 'bg-slate-800' : 'bg-slate-300'}"
+                >
+                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 {includeAudio ? 'translate-x-4' : 'translate-x-0'}"></div>
+                </button>
+              </div>
+
+              <!-- Auto Quality Adapt Toggle -->
+              <div class="flex items-center justify-between p-2">
+                <div class="flex items-center gap-2">
+                  <Settings class="w-4 h-4 text-slate-600" />
+                  <span class="text-sm text-slate-700 font-medium">Adaptacion automatica</span>
+                </div>
+                <button
+                  onclick={() => {
+                    autoAdaptQuality = !autoAdaptQuality;
+                    if (autoAdaptQuality && isSharing) {
+                      poorQualityDuration = 0;
+                      goodQualityDuration = 0;
+                      startQualityMonitor();
+                    } else if (!autoAdaptQuality) {
+                      stopQualityMonitor();
+                    }
+                  }}
+                  class="relative w-10 h-6 rounded-full transition-colors duration-200 {autoAdaptQuality ? 'bg-slate-800' : 'bg-slate-300'}"
+                >
+                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 {autoAdaptQuality ? 'translate-x-4' : 'translate-x-0'}"></div>
+                </button>
+              </div>
+
+              <!-- Quality Presets -->
               {#each Object.entries(presets) as [key, preset]}
                 <button
                   onclick={() => { qualityPreset = key; showSettings = false; }}
@@ -957,16 +1221,57 @@
         {/if}
 
         {#if isSharing}
-          <div class="flex items-center justify-center gap-2 pt-2">
-            {#each ['👍', '❤️', '🔥', '👏', '😂'] as emoji}
+          <div class="relative pt-2">
+            <!-- Favorites row -->
+            <div class="flex items-center justify-center gap-2">
+              {#each favoriteEmojis as emoji}
+                <button
+                  onclick={() => handleSendReaction(emoji)}
+                  class="w-10 h-10 flex items-center justify-center text-xl bg-slate-100 rounded-xl hover:bg-slate-200 active:scale-90 transition-all"
+                  title="Enviar reacción"
+                >
+                  {emoji}
+                </button>
+              {/each}
               <button
-                onclick={() => handleSendReaction(emoji)}
-                class="w-10 h-10 flex items-center justify-center text-xl bg-slate-100 rounded-xl hover:bg-slate-200 active:scale-90 transition-all"
-                title="Enviar reacción"
+                onclick={() => (showEmotePicker = !showEmotePicker)}
+                class="w-10 h-10 flex items-center justify-center rounded-xl
+                       hover:bg-slate-200 active:scale-90 transition-all
+                       {showEmotePicker ? 'bg-slate-200 text-slate-800' : 'bg-slate-100 text-slate-500'}"
+                title="Más emojis"
               >
-                {emoji}
+                <SmilePlus class="w-5 h-5" />
               </button>
-            {/each}
+            </div>
+
+            <!-- Expandable emote grid -->
+            {#if showEmotePicker}
+              <div class="absolute bottom-full left-0 right-0 mb-2 mx-1
+                          bg-white border border-slate-200 rounded-xl shadow-2xl
+                          p-3 z-10 max-h-64 overflow-y-auto">
+                {#each EMOTE_CATEGORIES as category}
+                  <div class="mb-2 last:mb-0">
+                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
+                      {category.label}
+                    </p>
+                    <div class="grid grid-cols-5 gap-1">
+                      {#each category.emojis as emoji}
+                        <button
+                          onclick={() => handleSendReaction(emoji)}
+                          class="w-10 h-10 flex items-center justify-center text-xl
+                                 bg-slate-50 rounded-xl
+                                 hover:bg-slate-100 active:scale-90
+                                 transition-all duration-150"
+                          title="Enviar {emoji}"
+                        >
+                          {emoji}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
 

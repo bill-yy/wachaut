@@ -3,23 +3,35 @@
   import { page } from '$app/stores';
   import { io } from 'socket.io-client';
   import {
-    Monitor,
-    Lock,
-    Wifi,
-    WifiOff,
-    AlertTriangle,
-    Maximize,
-    Minimize,
-    Volume2,
-    Volume1,
-    VolumeX,
-    MessageCircle,
-    Send,
-    Activity,
-    Share2,
-    User,
-    Users
-  } from 'lucide-svelte';
+      Monitor,
+      Lock,
+      Wifi,
+      WifiOff,
+      AlertTriangle,
+      Maximize,
+      Minimize,
+      Volume2,
+      Volume1,
+      VolumeX,
+      MessageCircle,
+      Send,
+      Activity,
+      Share2,
+      User,
+      Users,
+      HelpCircle,
+      MessageSquare,
+      Bell,
+      BellOff
+    } from 'lucide-svelte';
+  import {
+    playViewerJoin,
+    playViewerLeave,
+    playHostMuted,
+    playChatMessage,
+    isMuted as isNotifMuted,
+    setMuted as setNotifMuted
+  } from '$lib/notificationSounds';
 
   const roomId = $derived($page.params.roomId);
 
@@ -74,6 +86,12 @@
   let chatInput = $state('');
   let chatContainer = $state(null);
 
+  // --- Mobile & Keyboard Shortcuts ---
+  let chatOpen = $state(false);
+  let showShortcuts = $state(false);
+  let chatInputEl = $state(null);
+  let shortcutsTimeout = $state(null);
+
   // --- Connection Stats ---
   let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
   let statsInterval = $state(null);
@@ -81,10 +99,58 @@
   let lastStatsTime = $state(0);
 
   // --- Reactions ---
-  const ALLOWED_REACTIONS = ['👍', '❤️', '🔥', '👏', '😂'];
+  const ALL_EMOTES = [
+    // Reactions
+    '👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡',
+    // Gestures
+    '👋', '✌️', '💪', '🙏',
+    // Objects
+    '⭐', '💯', '🎯', '💡', '🎵',
+    // Food
+    '☕', '🍕', '🎂'
+  ];
+  const EMOTE_CATEGORIES = [
+    { label: 'Reacciones', emojis: ['👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡'] },
+    { label: 'Gestos', emojis: ['👋', '✌️', '💪', '🙏'] },
+    { label: 'Objetos', emojis: ['⭐', '💯', '🎯', '💡', '🎵'] },
+    { label: 'Comida', emojis: ['☕', '🍕', '🎂'] }
+  ];
+  let showEmotePicker = $state(false);
+  let favoriteEmojis = $state(loadFavorites());
   let animatingReaction = $state(null);
   let floatingReactions = $state([]);
   let reactionCounter = 0;
+
+  // --- Notifications ---
+  let notificationsMuted = $state(isNotifMuted());
+  function toggleNotificationsMuted() {
+    notificationsMuted = !notificationsMuted;
+    setNotifMuted(notificationsMuted);
+  }
+
+  const FAVORITES_KEY = 'wachaut.viewer.favorites';
+  function loadFavorites() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(FAVORITES_KEY));
+      if (Array.isArray(stored) && stored.length >= 5) return stored.slice(0, 5);
+    } catch { /* ignore */ }
+    return ['👍', '❤️', '🔥', '👏', '😂'];
+  }
+  function saveFavorites(emojis) {
+    try {
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(emojis.slice(0, 5)));
+    } catch { /* ignore */ }
+  }
+  function trackFavorite(emoji) {
+    const current = [...favoriteEmojis];
+    const idx = current.indexOf(emoji);
+    if (idx !== -1) {
+      current.splice(idx, 1);
+    }
+    current.unshift(emoji);
+    favoriteEmojis = current.slice(0, 5);
+    saveFavorites(favoriteEmojis);
+  }
 
   // --- Derived ---
   function getStatusLabel(s) {
@@ -208,6 +274,7 @@
           timestamp: msg.timestamp || new Date().toISOString()
         }
       ];
+      playChatMessage();
     });
 
     // Reactions
@@ -301,6 +368,7 @@
 
     socket.on('host:muted', () => {
       hostMuted = true;
+      playHostMuted();
     });
 
     socket.on('host:unmuted', () => {
@@ -479,8 +547,9 @@
 
   function sendReaction(emoji) {
     if (!socket) return;
-    if (!ALLOWED_REACTIONS.includes(emoji)) return;
-
+    if (!ALL_EMOTES.includes(emoji)) return;
+    trackFavorite(emoji);
+    showEmotePicker = false;
     socket.emit('reaction:send', { emoji });
     animatingReaction = emoji;
     setTimeout(() => {
@@ -491,7 +560,7 @@
   }
 
   function addFloatingReaction(emoji) {
-    if (!ALLOWED_REACTIONS.includes(emoji)) return;
+    if (!ALL_EMOTES.includes(emoji)) return;
     const id = ++reactionCounter;
     const reaction = {
       id,
@@ -576,8 +645,72 @@
       minute: '2-digit'
     });
   }
+  // --- Keyboard Shortcuts ---
+  function handleKeydown(e) {
+    const tag = document.activeElement?.tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
 
+    // '/' focuses chat input when not in an input
+    if (e.key === '/' && !isInput && status === 'live') {
+      e.preventDefault();
+      if (chatInputEl) chatInputEl.focus();
+      return;
+    }
+
+    // Enter sends chat message when chat input is focused
+    if (e.key === 'Enter' && !e.shiftKey && isInput && document.activeElement === chatInputEl) {
+      e.preventDefault();
+      sendChatMessage();
+      return;
+    }
+
+    // Don't process single-key shortcuts when typing in inputs
+    if (isInput) return;
+
+    if (status !== 'live') return;
+
+    switch (e.key.toLowerCase()) {
+      case 'm':
+        e.preventDefault();
+        toggleMute();
+        break;
+      case 'f':
+        e.preventDefault();
+        toggleFullscreen();
+        break;
+      case 'escape':
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+          isFullscreen = false;
+        }
+        break;
+    }
+  }
+
+  function showShortcutsOverlay() {
+    showShortcuts = true;
+    if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
+     shortcutsTimeout = setTimeout(() => {
+      showShortcuts = false;
+    }, 3000);
+  }
+
+  function toggleChat() {
+    chatOpen = !chatOpen;
+  }
+
+  // Show shortcuts overlay when entering live mode
+  $effect(() => {
+    if (status === 'live') {
+      showShortcutsOverlay();
+      // On mobile, auto-open chat when going live
+      if (window.innerWidth < 768) {
+        chatOpen = true;
+      }
+    }
+  });
   onDestroy(() => {
+    if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
     stopStatsPolling();
     disconnect();
   });
@@ -629,6 +762,8 @@
   }
 </style>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="min-h-screen bg-slate-950 text-slate-100">
   <!-- Non-live states: centered cards -->
   {#if status !== 'live'}
@@ -638,6 +773,18 @@
           <Monitor class="h-3.5 w-3.5 text-slate-900" />
         </div>
         <span class="text-lg font-bold text-white">Wachaut</span>
+        <div class="flex-1"></div>
+        <button
+          onclick={toggleNotificationsMuted}
+          class="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+          title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+        >
+          {#if notificationsMuted}
+            <BellOff class="w-5 h-5 text-slate-500" />
+          {:else}
+            <Bell class="w-5 h-5 text-slate-300" />
+          {/if}
+        </button>
       </div>
     </header>
 
@@ -776,10 +923,11 @@
 
   <!-- LIVE: Twitch/Discord layout -->
   {:else}
-    <div class="flex h-[calc(100vh-49px)] overflow-hidden">
+    <div class="flex flex-col md:flex-row h-[calc(100vh-49px)] overflow-hidden">
       <!-- Video Area (left, flex-1) -->
       <div
-        class="flex-1 relative bg-black group"
+        class="w-full md:w-auto md:flex-1 relative bg-black group shrink-0 md:shrink"
+        style="height: 50vh;"
         onmouseenter={() => (isHovering = true)}
         onmouseleave={() => (isHovering = false)}
         role="region"
@@ -812,7 +960,7 @@
           {/if}
           <!-- Username badge -->
           {#if assignedUsername}
-            <div class="flex items-center gap-1 bg-slate-800/80 backdrop-blur-sm text-slate-300 px-2 py-1 rounded-full text-xs font-medium">
+            <div class="hidden md:flex items-center gap-1 bg-slate-800/80 backdrop-blur-sm text-slate-300 px-2 py-1 rounded-full text-xs font-medium">
               <User class="w-3 h-3" />
               {assignedUsername}
             </div>
@@ -843,7 +991,7 @@
             </button>
 
             <!-- Volume slider -->
-            <div class="flex items-center gap-2 flex-1 max-w-[160px]">
+            <div class="hidden md:flex items-center gap-2 flex-1 max-w-[160px]">
               <input
                 type="range"
                 min="0"
@@ -879,6 +1027,14 @@
                 <Maximize class="w-5 h-5" />
               {/if}
             </button>
+            <!-- Shortcuts help -->
+            <button
+              onclick={showShortcutsOverlay}
+              class="text-white/50 hover:text-white/80 transition-colors p-1 text-xs font-mono"
+              title="Atajos de teclado"
+            >
+              ?
+            </button>
           </div>
         </div>
 
@@ -902,16 +1058,29 @@
             <span class="text-sm font-semibold text-slate-200">Chat</span>
             <span class="text-xs text-slate-500">({chatMessages.length})</span>
           </div>
-          <!-- Connection stats -->
-          {#if connectionStats.resolution}
-            <div class="flex items-center gap-1 text-[10px] text-slate-500">
-              <Activity class="w-3 h-3" />
-              <span>{connectionStats.resolution}</span>
-              {#if connectionStats.bitrate}
-                <span>· {connectionStats.bitrate}</span>
+          <div class="flex items-center gap-2">
+            <!-- Connection stats -->
+            {#if connectionStats.resolution}
+              <div class="flex items-center gap-1 text-[10px] text-slate-500">
+                <Activity class="w-3 h-3" />
+                <span>{connectionStats.resolution}</span>
+                {#if connectionStats.bitrate}
+                  <span>· {connectionStats.bitrate}</span>
+                {/if}
+              </div>
+            {/if}
+            <button
+              onclick={toggleNotificationsMuted}
+              class="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+              title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+            >
+              {#if notificationsMuted}
+                <BellOff class="w-4 h-4 text-slate-600" />
+              {:else}
+                <Bell class="w-4 h-4 text-slate-400" />
               {/if}
-            </div>
-          {/if}
+            </button>
+          </div>
         </div>
 
         <!-- Messages -->
@@ -952,20 +1121,63 @@
         </div>
 
         <!-- Reactions Row -->
-        <div class="px-4 py-2 border-t border-slate-800 flex items-center justify-center gap-1.5 shrink-0">
-          {#each ALLOWED_REACTIONS as emoji}
+        <div class="px-4 py-2 border-t border-slate-800 shrink-0 relative">
+          <!-- Favorites row -->
+          <div class="flex items-center justify-center gap-1.5">
+            {#each favoriteEmojis as emoji}
+              <button
+                onclick={() => sendReaction(emoji)}
+                class="w-9 h-9 flex items-center justify-center text-lg
+                       bg-slate-800/50 rounded-lg
+                       hover:bg-slate-700/70 active:scale-90
+                       transition-all duration-150
+                       {animatingReaction === emoji ? 'scale-125 bg-slate-700' : ''}"
+                title="Enviar reacción"
+              >
+                {emoji}
+              </button>
+            {/each}
             <button
-              onclick={() => sendReaction(emoji)}
+              onclick={() => (showEmotePicker = !showEmotePicker)}
               class="w-9 h-9 flex items-center justify-center text-lg
                      bg-slate-800/50 rounded-lg
                      hover:bg-slate-700/70 active:scale-90
                      transition-all duration-150
-                     {animatingReaction === emoji ? 'scale-125 bg-slate-700' : ''}"
-              title="Enviar reacción"
+                     {showEmotePicker ? 'bg-slate-700 text-white' : 'text-slate-400'}"
+              title="Más emojis"
             >
-              {emoji}
+              <SmilePlus class="w-5 h-5" />
             </button>
-          {/each}
+          </div>
+
+          <!-- Expandable emote grid -->
+          {#if showEmotePicker}
+            <div class="absolute bottom-full left-0 right-0 mb-2 mx-1
+                        bg-slate-900 border border-slate-700 rounded-xl shadow-2xl
+                        p-3 z-10 max-h-64 overflow-y-auto">
+              {#each EMOTE_CATEGORIES as category}
+                <div class="mb-2 last:mb-0">
+                  <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
+                    {category.label}
+                  </p>
+                  <div class="grid grid-cols-5 gap-1">
+                    {#each category.emojis as emoji}
+                      <button
+                        onclick={() => sendReaction(emoji)}
+                        class="w-9 h-9 flex items-center justify-center text-lg
+                               bg-slate-800/50 rounded-lg
+                               hover:bg-slate-700/70 active:scale-90
+                               transition-all duration-150"
+                        title="Enviar {emoji}"
+                      >
+                        {emoji}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
 
         <!-- Chat Input -->
