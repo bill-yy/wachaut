@@ -927,8 +927,7 @@
     <div class="flex flex-col md:flex-row h-[calc(100vh-49px)] overflow-hidden">
       <!-- Video Area (left, flex-1) -->
       <div
-        class="w-full md:w-auto md:flex-1 relative bg-black group shrink-0 md:shrink"
-        style="height: 50vh;"
+        class="w-full h-[50vh] md:h-auto md:w-auto md:flex-1 relative bg-black group shrink-0 md:shrink"
         onmouseenter={() => (isHovering = true)}
         onmouseleave={() => (isHovering = false)}
         role="region"
@@ -1051,7 +1050,10 @@
       </div>
 
       <!-- Chat Sidebar (right, fixed width) -->
-      <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0">
+      <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0
+                     max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50
+                     max-md:w-80 max-md:transition-transform max-md:duration-300
+                     {chatOpen ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}">
         <!-- Chat Header -->
         <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-2">
@@ -1209,6 +1211,31 @@
           <p class="text-[10px] text-slate-600 mt-1.5 px-1">/help para comandos</p>
         </div>
       </aside>
+
+      <!-- Mobile chat toggle button -->
+      <button
+        onclick={toggleChat}
+        class="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-slate-800 text-white
+               rounded-full shadow-xl flex items-center justify-center z-40
+               hover:bg-slate-700 active:scale-95 transition-all"
+        title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+      >
+        <MessageCircle class="w-6 h-6" />
+        {#if !chatOpen && chatMessages.length > 0}
+          <span class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+            {chatMessages.length > 9 ? '9+' : chatMessages.length}
+          </span>
+        {/if}
+      </button>
+
+      <!-- Mobile backdrop -->
+      {#if chatOpen}
+        <div
+          class="md:hidden fixed inset-0 bg-black/50 z-40"
+          onclick={toggleChat}
+          role="presentation"
+        ></div>
+      {/if}
     </div>
   {/if}
 </div>
