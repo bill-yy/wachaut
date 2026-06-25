@@ -22,7 +22,8 @@
       HelpCircle,
       MessageSquare,
       Bell,
-      BellOff
+      BellOff,
+      SmilePlus
     } from 'lucide-svelte';
   import {
     playViewerJoin,
