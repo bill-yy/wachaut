@@ -568,7 +568,11 @@
   }
 
   function addFloatingReaction(emoji) {
-    if (!ALL_EMOTES.includes(emoji)) return;
+    if (!ALL_EMOTES.includes(emoji)) {
+      console.log('[viewer] addFloatingReaction rejected:', emoji, 'not in ALL_EMOTES');
+      return;
+    }
+    console.log('[viewer] addFloatingReaction:', emoji);
     const id = ++reactionCounter;
     const reaction = {
       id,
@@ -581,6 +585,7 @@
       createdAt: Date.now()
     };
     floatingReactions = [...floatingReactions, reaction];
+    console.log('[viewer] floatingReactions count:', floatingReactions.length);
     setTimeout(() => {
       floatingReactions = floatingReactions.filter(r => r.id !== id);
     }, (reaction.duration + reaction.delay) * 1000 + 200);
@@ -1047,8 +1052,8 @@
         <!-- Floating Reactions -->
         {#each floatingReactions as reaction (reaction.id)}
           <div
-            class="absolute text-3xl pointer-events-none select-none"
-            style="left: {reaction.x}%; bottom: 80px; font-size: {reaction.scale * 2}rem; animation: floatUp {reaction.duration}s ease-out {reaction.delay}s forwards; opacity: 0;"
+            class="absolute text-3xl pointer-events-none select-none z-10"
+            style="left: {reaction.x}%; bottom: 80px; font-size: {reaction.scale * 2}rem; animation: floatUp {reaction.duration}s ease-out {reaction.delay}s both;"
           >
             {reaction.emoji}
           </div>
