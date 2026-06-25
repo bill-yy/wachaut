@@ -1050,8 +1050,11 @@
       <!-- Floating Reactions -->
       {#each [...activeReactions.values()] as reaction (reaction.id)}
         <div
-          class="absolute text-4xl pointer-events-none select-none"
-          style="left: {reaction.x}%; bottom: 80px; font-size: {reaction.scale * 2.5}rem; animation: floatUp {reaction.duration}s ease-out {reaction.delay}s forwards; opacity: 0;"
+          class="absolute text-4xl pointer-events-none select-none z-10"
+          style:left="{reaction.x}%"
+          style:bottom="80px"
+          style:font-size="{reaction.scale * 2.5}rem"
+          style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
         >
           {reaction.emoji}
         </div>
