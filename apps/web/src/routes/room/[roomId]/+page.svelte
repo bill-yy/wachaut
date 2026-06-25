@@ -11,11 +11,14 @@
     Maximize,
     Minimize,
     Volume2,
+    Volume1,
     VolumeX,
     MessageCircle,
     Send,
     Activity,
-    Share2
+    Share2,
+    User,
+    Users
   } from 'lucide-svelte';
 
   const roomId = $derived($page.params.roomId);
@@ -24,6 +27,9 @@
   let status = $state('idle'); // idle, connecting, auth, waiting, live, error, disconnected
   let errorMessage = $state('');
   let pin = $state('');
+  let username = $state('');
+  let assignedUsername = $state('');
+  const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
 
   // --- Socket & WebRTC ---
   let socket = $state(null);
@@ -58,12 +64,12 @@
   // --- Video ---
   let videoEl = $state(null);
   let isMuted = $state(true);
+  let volume = $state(100);
   let isFullscreen = $state(false);
   let isHovering = $state(false);
   let hostMuted = $state(false);
 
   // --- Chat ---
-  let chatOpen = $state(false);
   let chatMessages = $state([]);
   let chatInput = $state('');
   let chatContainer = $state(null);
@@ -108,6 +114,8 @@
   $effect(() => {
     if (pendingStream && videoEl) {
       videoEl.srcObject = pendingStream;
+      videoEl.volume = volume / 100;
+      videoEl.muted = isMuted;
       videoEl.play().catch(() => {});
       pendingStream = null;
     }
@@ -115,7 +123,7 @@
 
   // Auto-scroll chat when new messages arrive
   $effect(() => {
-    if (chatOpen && chatMessages.length > 0 && chatContainer) {
+    if (chatMessages.length > 0 && chatContainer) {
       tick().then(() => {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       });
@@ -125,6 +133,15 @@
   // --- Functions ---
 
   async function connect() {
+    const cleanedUsername = sanitizeUsername(username);
+    username = cleanedUsername;
+
+    if (cleanedUsername.length < 2) {
+      errorMessage = 'Ingresa un username de al menos 2 caracteres';
+      status = 'error';
+      return;
+    }
+
     if (!pin || pin.length < 4) {
       errorMessage = 'Ingresa un PIN válido';
       status = 'error';
@@ -142,7 +159,7 @@
     });
 
     socket.on('connect', () => {
-      socket.emit('viewer:join', { roomId, pin });
+      socket.emit('viewer:join', { roomId, pin, username: cleanedUsername });
       status = 'auth';
     });
 
@@ -162,7 +179,10 @@
       cleanupSocket();
     });
 
-    socket.on('room:joined', () => {
+    socket.on('room:joined', (data) => {
+      assignedUsername = data?.username || cleanedUsername;
+      username = assignedUsername;
+      saveUsername(assignedUsername);
       status = 'waiting';
     });
 
@@ -205,6 +225,8 @@
             const remoteStream = event.streams[0];
             if (videoEl) {
               videoEl.srcObject = remoteStream;
+              videoEl.volume = volume / 100;
+              videoEl.muted = isMuted;
               videoEl.play().catch(() => {});
             } else {
               pendingStream = remoteStream;
@@ -331,8 +353,8 @@
     }
     status = 'idle';
     pin = '';
+    assignedUsername = '';
     // Don't clear chatMessages on disconnect so they persist if reconnecting
-    chatOpen = false;
     errorMessage = '';
     connectionStats = { resolution: '', fps: '', bitrate: '' };
   }
@@ -351,14 +373,47 @@
   }
 
   function handlePinKeydown(e) {
-    if (e.key === 'Enter' && pin.length >= 4) {
+    if (e.key === 'Enter' && pin.length >= 4 && username.trim().length >= 2) {
       connect();
+    }
+  }
+
+  function sanitizeUsername(value) {
+    return value
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 24);
+  }
+
+  function handleUsernameInput(e) {
+    username = sanitizeUsername(e.target.value);
+  }
+
+  function saveUsername(value) {
+    try {
+      localStorage.setItem(USERNAME_STORAGE_KEY, value);
+    } catch {
+      // Ignore private browsing/storage failures.
     }
   }
 
   function toggleMute() {
     if (videoEl) {
+      if (videoEl.muted && volume === 0) {
+        volume = 50;
+        videoEl.volume = 0.5;
+      }
       videoEl.muted = !videoEl.muted;
+      isMuted = videoEl.muted;
+    }
+  }
+
+  function handleVolumeInput(e) {
+    volume = Number(e.target.value);
+    if (videoEl) {
+      videoEl.volume = volume / 100;
+      videoEl.muted = volume === 0;
       isMuted = videoEl.muted;
     }
   }
@@ -450,10 +505,6 @@
     }, 3000);
   }
 
-  function toggleChat() {
-    chatOpen = !chatOpen;
-  }
-
   function retry() {
     status = 'idle';
     errorMessage = '';
@@ -530,257 +581,386 @@
     stopStatsPolling();
     disconnect();
   });
+
+  onMount(() => {
+    try {
+      username = localStorage.getItem(USERNAME_STORAGE_KEY) || '';
+    } catch {
+      username = '';
+    }
+  });
 </script>
 
 <style>
   @keyframes floatUp {
-    0% {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: translateY(-60px) scale(1.2);
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(-140px) scale(0.8);
-    }
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    50% { opacity: 1; transform: translateY(-60px) scale(1.2); }
+    100% { opacity: 0; transform: translateY(-140px) scale(0.8); }
+  }
+
+  /* Custom volume slider */
+  input[type="range"].volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.2);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"].volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  input[type="range"].volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 </style>
 
-<div class="min-h-screen bg-slate-50">
-  <!-- Header -->
-  <header class="bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
-    <div class="max-w-5xl mx-auto flex items-center justify-between">
+<div class="min-h-screen bg-slate-950 text-slate-100">
+  <!-- Non-live states: centered cards -->
+  {#if status !== 'live'}
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 shadow-sm">
       <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800">
-          <Monitor class="h-3.5 w-3.5 text-white" />
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
+          <Monitor class="h-3.5 w-3.5 text-slate-900" />
         </div>
-        <span class="text-lg font-bold text-slate-800">Wachaut</span>
+        <span class="text-lg font-bold text-white">Wachaut</span>
       </div>
-      <span class="text-xs text-slate-400">
-        Sala: {roomId}
-      </span>
-    </div>
-  </header>
+    </header>
 
-  <main class="max-w-5xl mx-auto px-4 py-6">
-    <!-- IDLE: PIN Input -->
-    {#if status === 'idle'}
-      <div
-        class="flex items-center justify-center"
-        style="min-height: 60vh;"
-      >
-        <div
-          class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm
-                 border border-slate-200"
-        >
-          <div class="flex flex-col items-center mb-6">
-            <div
-              class="w-14 h-14 bg-slate-100 rounded-full flex items-center
-                     justify-center mb-4"
-            >
-              <Lock class="w-7 h-7 text-slate-600" />
+    <main class="max-w-5xl mx-auto px-4 py-6">
+      <!-- IDLE: PIN + Username Input -->
+      {#if status === 'idle'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-slate-200">
+            <div class="flex flex-col items-center mb-6">
+              <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <Lock class="w-7 h-7 text-slate-600" />
+              </div>
+              <h2 class="text-lg font-semibold text-slate-800">Unirse a la sala</h2>
+              <p class="text-sm text-slate-500 mt-1">Ingresa tu nombre y el PIN de acceso</p>
             </div>
-            <h2 class="text-lg font-semibold text-slate-800">
-              Unirse a la sala
-            </h2>
-            <p class="text-sm text-slate-500 mt-1">
-              Ingresa el PIN proporcionado por el anfitrión
+
+            <label class="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
+            <div class="relative mb-4">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="tu-nombre"
+                value={username}
+                oninput={handleUsernameInput}
+                onkeydown={handlePinKeydown}
+                maxlength="24"
+                autocomplete="username"
+                class="w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pl-10 pr-4
+                       text-sm font-semibold text-slate-800 placeholder:text-slate-300
+                       focus:outline-none focus:ring-2 focus:ring-slate-400
+                       focus:border-transparent transition-all"
+              />
+            </div>
+
+            <label class="block text-xs font-semibold text-slate-500 mb-1.5">PIN</label>
+            <input
+              type="text"
+              inputmode="numeric"
+              placeholder="••••••"
+              value={pin}
+              oninput={handlePinInput}
+              onkeydown={handlePinKeydown}
+              maxlength="6"
+              class="w-full text-center text-2xl tracking-[0.5em]
+                     font-mono py-3 px-4 border border-slate-300
+                     rounded-xl bg-slate-50 text-slate-800
+                     focus:outline-none focus:ring-2 focus:ring-slate-400
+                     focus:border-transparent transition-all
+                     placeholder:text-slate-300"
+            />
+
+            <button
+              onclick={connect}
+              disabled={pin.length < 4 || username.trim().length < 2}
+              class="w-full mt-4 py-3 bg-slate-800 text-white font-medium
+                     rounded-xl hover:bg-slate-700 disabled:opacity-40
+                     disabled:cursor-not-allowed transition-colors"
+            >
+              Conectar
+            </button>
+          </div>
+        </div>
+
+      <!-- CONNECTING / AUTH -->
+      {:else if status === 'connecting' || status === 'auth'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Wifi class="w-8 h-8 text-slate-400" />
+            </div>
+            <p class="text-slate-600 font-medium">
+              {status === 'connecting' ? 'Conectando...' : 'Autenticando...'}
             </p>
+            <p class="text-sm text-slate-400 mt-1">Verificando PIN con el anfitrión</p>
           </div>
-
-          <input
-            type="text"
-            inputmode="numeric"
-            placeholder="••••••"
-            value={pin}
-            oninput={handlePinInput}
-            onkeydown={handlePinKeydown}
-            maxlength="6"
-            class="w-full text-center text-2xl tracking-[0.5em]
-                   font-mono py-3 px-4 border border-slate-300
-                   rounded-xl bg-slate-50 text-slate-800
-                   focus:outline-none focus:ring-2 focus:ring-slate-400
-                   focus:border-transparent transition-all
-                   placeholder:text-slate-300"
-          />
-
-          <button
-            onclick={connect}
-            disabled={pin.length < 4}
-            class="w-full mt-4 py-3 bg-slate-800 text-white font-medium
-                   rounded-xl hover:bg-slate-700 disabled:opacity-40
-                   disabled:cursor-not-allowed transition-colors"
-          >
-            Conectar
-          </button>
         </div>
-      </div>
 
-    <!-- CONNECTING / AUTH -->
-    {:else if status === 'connecting' || status === 'auth'}
+      <!-- WAITING -->
+      {:else if status === 'waiting'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="text-center">
+            <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Monitor class="w-10 h-10 text-slate-400" />
+            </div>
+            <h2 class="text-lg font-semibold text-slate-700 mb-2">Esperando al anfitrión</h2>
+            <p class="text-sm text-slate-500 mb-6">El anfitrión comenzará a compartir pronto</p>
+            <button
+              onclick={disconnect}
+              class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg
+                     hover:bg-slate-300 transition-colors text-sm font-medium"
+            >
+              Salir de la sala
+            </button>
+          </div>
+        </div>
+
+      <!-- ERROR -->
+      {:else if status === 'error'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
+            <div class="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle class="w-7 h-7 text-red-500" />
+            </div>
+            <h2 class="text-lg font-semibold text-slate-800 mb-2">Error</h2>
+            <p class="text-sm text-slate-500 mb-6">{errorMessage}</p>
+            <button
+              onclick={retry}
+              class="px-6 py-3 bg-slate-800 text-white font-medium
+                     rounded-xl hover:bg-slate-700 transition-colors"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        </div>
+
+      <!-- DISCONNECTED -->
+      {:else if status === 'disconnected'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
+            <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <WifiOff class="w-7 h-7 text-slate-400" />
+            </div>
+            <h2 class="text-lg font-semibold text-slate-800 mb-2">Desconectado</h2>
+            <p class="text-sm text-slate-500 mb-6">Se perdió la conexión con el servidor</p>
+            <button
+              onclick={() => connect()}
+              class="px-6 py-3 bg-slate-800 text-white font-medium
+                     rounded-xl hover:bg-slate-700 transition-colors"
+            >
+              Reconectar
+            </button>
+          </div>
+        </div>
+      {/if}
+    </main>
+
+  <!-- LIVE: Twitch/Discord layout -->
+  {:else}
+    <div class="flex h-[calc(100vh-49px)] overflow-hidden">
+      <!-- Video Area (left, flex-1) -->
       <div
-        class="flex items-center justify-center"
-        style="min-height: 60vh;"
+        class="flex-1 relative bg-black group"
+        onmouseenter={() => (isHovering = true)}
+        onmouseleave={() => (isHovering = false)}
+        role="region"
+        aria-label="Video en vivo"
       >
-        <div class="text-center">
-          <div
-            class="w-16 h-16 bg-slate-100 rounded-full flex items-center
-                   justify-center mx-auto mb-4 animate-pulse"
-          >
-            <Wifi class="w-8 h-8 text-slate-400" />
-          </div>
-          <p class="text-slate-600 font-medium">
-            {status === 'connecting' ? 'Conectando...' : 'Autenticando...'}
-          </p>
-          <p class="text-sm text-slate-400 mt-1">
-            Verificando PIN con el anfitrión
-          </p>
-        </div>
-      </div>
+        <!-- Video Element -->
+        <video
+          bind:this={videoEl}
+          autoplay
+          muted
+          playsinline
+          onclick={() => { if (videoEl) { videoEl.muted = false; isMuted = false; } }}
+          class="w-full h-full object-contain cursor-pointer"
+          title="Haz clic para activar audio"
+        ></video>
 
-    <!-- WAITING -->
-    {:else if status === 'waiting'}
-      <div
-        class="flex items-center justify-center"
-        style="min-height: 60vh;"
-      >
-        <div class="text-center">
-          <div
-            class="w-20 h-20 bg-slate-100 rounded-full flex items-center
-                   justify-center mx-auto mb-4"
-          >
-            <Monitor class="w-10 h-10 text-slate-400" />
-          </div>
-          <h2 class="text-lg font-semibold text-slate-700 mb-2">
-            Esperando al anfitrión
-          </h2>
-          <p class="text-sm text-slate-500 mb-6">
-            El anfitrión comenzará a compartir pronto
-          </p>
-
-          <button
-            onclick={disconnect}
-            class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg
-                   hover:bg-slate-300 transition-colors text-sm font-medium"
-          >
-            Salir de la sala
-          </button>
-        </div>
-      </div>
-
-    <!-- LIVE -->
-    {:else if status === 'live'}
-      <div class="relative">
-        <!-- Video Container -->
-        <div
-          class="relative rounded-2xl overflow-hidden bg-black
-                 shadow-xl aspect-video"
-          onmouseenter={() => (isHovering = true)}
-          onmouseleave={() => (isHovering = false)}
-          role="region"
-          aria-label="Video en vivo"
-        >
-          <!-- Video Element -->
-          <video
-            bind:this={videoEl}
-            autoplay
-            muted
-            playsinline
-            onclick={() => { if (videoEl) { videoEl.muted = false; isMuted = false; } }}
-            class="w-full h-full object-contain cursor-pointer"
-            title="Haz clic para activar audio"
-          ></video>
-
+        <!-- Top-left overlays -->
+        <div class="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
           <!-- Live Badge -->
-          <div
-            class="absolute top-4 left-4 flex items-center gap-2
-                   bg-red-500/90 backdrop-blur-sm text-white px-3 py-1
-                   rounded-full text-sm font-semibold"
-          >
-            <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+          <div class="flex items-center gap-1.5 bg-red-500/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-semibold">
+            <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
             EN VIVO
           </div>
-
           <!-- Host Muted Indicator -->
           {#if hostMuted}
-            <div
-              class="absolute top-4 left-32 flex items-center gap-1.5
-                     bg-amber-500/90 backdrop-blur-sm text-white px-2.5 py-1
-                     rounded-full text-xs font-medium animate-[fadeIn_0.3s_ease]"
-            >
-              <VolumeX class="w-3.5 h-3.5" />
+            <div class="flex items-center gap-1 bg-amber-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-medium animate-[floatUp_0.3s_ease]">
+              <VolumeX class="w-3 h-3" />
               Silenciado
             </div>
           {/if}
+          <!-- Username badge -->
+          {#if assignedUsername}
+            <div class="flex items-center gap-1 bg-slate-800/80 backdrop-blur-sm text-slate-300 px-2 py-1 rounded-full text-xs font-medium">
+              <User class="w-3 h-3" />
+              {assignedUsername}
+            </div>
+          {/if}
+        </div>
 
-          <!-- Hover Controls -->
-          {#if isHovering}
-            <div
-              class="absolute bottom-4 left-1/2 -translate-x-1/2
-                     flex items-center gap-2 bg-black/60 backdrop-blur-sm
-                     rounded-full px-4 py-2 transition-opacity"
+        <!-- Bottom controls (on hover) -->
+        <div
+          class="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-10
+                 bg-gradient-to-t from-black/80 via-black/40 to-transparent
+                 opacity-0 group-hover:opacity-100 transition-opacity duration-300
+                 pointer-events-none"
+        >
+          <div class="flex items-center gap-3 pointer-events-auto">
+            <!-- Mute button -->
+            <button
+              onclick={toggleMute}
+              class="text-white hover:text-white/80 transition-colors p-1"
+              title={isMuted ? 'Activar sonido' : 'Silenciar'}
             >
-              <button
-                onclick={toggleMute}
-                class="text-white hover:text-slate-200 transition-colors p-1"
-                title={isMuted ? 'Activar sonido' : 'Silenciar'}
-              >
-                {#if isMuted}
-                  <VolumeX class="w-5 h-5" />
-                {:else}
-                  <Volume2 class="w-5 h-5" />
-                {/if}
-              </button>
+              {#if isMuted || volume === 0}
+                <VolumeX class="w-5 h-5" />
+              {:else if volume < 50}
+                <Volume1 class="w-5 h-5" />
+              {:else}
+                <Volume2 class="w-5 h-5" />
+              {/if}
+            </button>
 
-              <button
-                onclick={toggleFullscreen}
-                class="text-white hover:text-slate-200 transition-colors p-1"
-                title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-              >
-                {#if isFullscreen}
-                  <Minimize class="w-5 h-5" />
-                {:else}
-                  <Maximize class="w-5 h-5" />
-                {/if}
-              </button>
+            <!-- Volume slider -->
+            <div class="flex items-center gap-2 flex-1 max-w-[160px]">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                oninput={handleVolumeInput}
+                class="volume-slider flex-1"
+                title="Volumen: {volume}%"
+              />
+              <span class="text-white/60 text-[10px] font-mono w-8 text-right">{volume}%</span>
+            </div>
+
+            <div class="flex-1"></div>
+
+            <!-- Share -->
+            <button
+              onclick={shareLink}
+              class="text-white/70 hover:text-white transition-colors p-1"
+              title="Compartir enlace"
+            >
+              <Share2 class="w-4 h-4" />
+            </button>
+
+            <!-- Fullscreen -->
+            <button
+              onclick={toggleFullscreen}
+              class="text-white/70 hover:text-white transition-colors p-1"
+              title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            >
+              {#if isFullscreen}
+                <Minimize class="w-5 h-5" />
+              {:else}
+                <Maximize class="w-5 h-5" />
+              {/if}
+            </button>
+          </div>
+        </div>
+
+        <!-- Floating Reactions -->
+        {#each floatingReactions as reaction (reaction.id)}
+          <div
+            class="absolute text-3xl pointer-events-none select-none"
+            style="left: {reaction.x}%; bottom: 80px; animation: floatUp 3s ease-out forwards;"
+          >
+            {reaction.emoji}
+          </div>
+        {/each}
+      </div>
+
+      <!-- Chat Sidebar (right, fixed width) -->
+      <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0">
+        <!-- Chat Header -->
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <MessageCircle class="w-4 h-4 text-slate-400" />
+            <span class="text-sm font-semibold text-slate-200">Chat</span>
+            <span class="text-xs text-slate-500">({chatMessages.length})</span>
+          </div>
+          <!-- Connection stats -->
+          {#if connectionStats.resolution}
+            <div class="flex items-center gap-1 text-[10px] text-slate-500">
+              <Activity class="w-3 h-3" />
+              <span>{connectionStats.resolution}</span>
+              {#if connectionStats.bitrate}
+                <span>· {connectionStats.bitrate}</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Messages -->
+        <div
+          bind:this={chatContainer}
+          class="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0"
+        >
+          {#if chatMessages.length === 0}
+            <div class="flex flex-col items-center justify-center h-full text-center">
+              <MessageCircle class="w-8 h-8 text-slate-700 mb-2" />
+              <p class="text-slate-500 text-sm">No hay mensajes aún</p>
+              <p class="text-slate-600 text-xs mt-1">Los mensajes aparecerán aquí</p>
             </div>
           {/if}
 
-          <!-- Floating Reactions -->
-          {#each floatingReactions as reaction (reaction.id)}
-            <div
-              class="absolute text-4xl pointer-events-none select-none"
-              style="left: {reaction.x}%; bottom: 80px; animation: floatUp 3s ease-out forwards;"
-            >
-              {reaction.emoji}
+          {#each chatMessages as msg (msg.id)}
+            <div class="flex flex-col {msg.sender === 'Sistema' ? 'items-center' : ''}">
+              {#if msg.sender !== 'Sistema'}
+                <div class="flex items-baseline gap-2">
+                  <span class="text-xs font-semibold
+                    {msg.sender === 'Anfitrión' ? 'text-amber-400' : 'text-slate-300'}">
+                    {msg.sender}
+                  </span>
+                  <span class="text-slate-600 text-[10px]">
+                    {formatTime(msg.timestamp)}
+                  </span>
+                </div>
+              {/if}
+              <p class="{msg.sender === 'Sistema'
+                ? 'text-slate-500 text-xs italic bg-slate-800/50 px-3 py-1 rounded-lg'
+                : msg.sender === 'Anfitrión'
+                  ? 'text-slate-100 text-sm'
+                  : 'text-slate-300 text-sm'} mt-0.5 break-words">
+                {msg.text}
+              </p>
             </div>
           {/each}
         </div>
 
-        <!-- Connection Stats Bar -->
-        {#if connectionStats.resolution}
-          <div class="flex items-center justify-center gap-2 mt-3 px-2 text-xs text-slate-400">
-            <Activity class="w-3 h-3" />
-            <span>{connectionStats.resolution} · {connectionStats.fps} fps</span>
-            {#if connectionStats.bitrate}
-              <span>· {connectionStats.bitrate}</span>
-            {/if}
-          </div>
-        {/if}
-
         <!-- Reactions Row -->
-        <div class="flex items-center justify-center gap-3 mt-4">
+        <div class="px-4 py-2 border-t border-slate-800 flex items-center justify-center gap-1.5 shrink-0">
           {#each ALLOWED_REACTIONS as emoji}
             <button
               onclick={() => sendReaction(emoji)}
-              class="w-12 h-12 bg-white border border-slate-200 rounded-xl
-                     flex items-center justify-center text-xl
-                     hover:bg-slate-100 hover:border-slate-300
-                     transition-all duration-200
-                     {animatingReaction === emoji ? 'scale-125' : ''}"
+              class="w-9 h-9 flex items-center justify-center text-lg
+                     bg-slate-800/50 rounded-lg
+                     hover:bg-slate-700/70 active:scale-90
+                     transition-all duration-150
+                     {animatingReaction === emoji ? 'scale-125 bg-slate-700' : ''}"
               title="Enviar reacción"
             >
               {emoji}
@@ -788,204 +968,34 @@
           {/each}
         </div>
 
-        <!-- Connection Info & Leave -->
-        <div
-          class="flex items-center justify-between mt-4 px-2"
-        >
-          <div class="flex items-center gap-2 text-sm text-slate-500">
-            <span
-              class="w-2 h-2 rounded-full {statusColor}"
-            ></span>
-            <span>{getStatusLabel(status)}</span>
-          </div>
-
+        <!-- Chat Input -->
+        <div class="px-3 py-3 border-t border-slate-800 shrink-0">
           <div class="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Escribe un mensaje..."
+              value={chatInput}
+              oninput={(e) => (chatInput = e.target.value)}
+              onkeydown={handleChatKeydown}
+              class="flex-1 bg-slate-800 text-white text-sm px-3 py-2.5
+                     rounded-lg border border-slate-700
+                     focus:outline-none focus:border-slate-500
+                     placeholder:text-slate-500 transition-colors"
+            />
             <button
-              onclick={shareLink}
-              class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg
-                     hover:bg-slate-200 transition-colors text-sm font-medium
-                     flex items-center gap-1.5"
-              title="Compartir enlace"
+              onclick={sendChatMessage}
+              disabled={!chatInput.trim()}
+              class="w-9 h-9 bg-slate-700 text-white rounded-lg
+                     flex items-center justify-center shrink-0
+                     hover:bg-slate-600 disabled:opacity-40
+                     disabled:cursor-not-allowed transition-colors"
             >
-              <Share2 class="w-3.5 h-3.5" />
-              Compartir
-            </button>
-            <button
-              onclick={disconnect}
-              class="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg
-                     hover:bg-red-100 transition-colors text-sm font-medium"
-            >
-              Salir
+              <Send class="w-4 h-4" />
             </button>
           </div>
+          <p class="text-[10px] text-slate-600 mt-1.5 px-1">/help para comandos</p>
         </div>
-      </div>
-
-    <!-- ERROR -->
-    {:else if status === 'error'}
-      <div
-        class="flex items-center justify-center"
-        style="min-height: 60vh;"
-      >
-        <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
-          <div
-            class="w-14 h-14 bg-red-50 rounded-full flex items-center
-                   justify-center mx-auto mb-4"
-          >
-            <AlertTriangle class="w-7 h-7 text-red-500" />
-          </div>
-          <h2 class="text-lg font-semibold text-slate-800 mb-2">
-            Error
-          </h2>
-          <p class="text-sm text-slate-500 mb-6">
-            {errorMessage}
-          </p>
-          <button
-            onclick={retry}
-            class="px-6 py-3 bg-slate-800 text-white font-medium
-                   rounded-xl hover:bg-slate-700 transition-colors"
-          >
-            Intentar de nuevo
-          </button>
-        </div>
-      </div>
-
-    <!-- DISCONNECTED -->
-    {:else if status === 'disconnected'}
-      <div
-        class="flex items-center justify-center"
-        style="min-height: 60vh;"
-      >
-        <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
-          <div
-            class="w-14 h-14 bg-slate-100 rounded-full flex items-center
-                   justify-center mx-auto mb-4"
-          >
-            <WifiOff class="w-7 h-7 text-slate-400" />
-          </div>
-          <h2 class="text-lg font-semibold text-slate-800 mb-2">
-            Desconectado
-          </h2>
-          <p class="text-sm text-slate-500 mb-6">
-            Se perdió la conexión con el servidor
-          </p>
-          <button
-            onclick={() => connect()}
-            class="px-6 py-3 bg-slate-800 text-white font-medium
-                   rounded-xl hover:bg-slate-700 transition-colors"
-          >
-            Reconectar
-          </button>
-        </div>
-      </div>
-    {/if}
-  </main>
-
-  <!-- Chat Toggle Button -->
-  {#if status !== 'idle' && status !== 'connecting' && status !== 'auth'}
-    <button
-      onclick={toggleChat}
-      class="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 text-white
-             rounded-full shadow-lg flex items-center justify-center
-             hover:bg-slate-700 transition-all z-40
-             {chatOpen ? 'ring-2 ring-slate-400' : ''}"
-      title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
-    >
-      <MessageCircle class="w-5 h-5" />
-      {#if !chatOpen && chatMessages.length > 0}
-        <span
-          class="absolute -top-1 -right-1 w-5 h-5 bg-red-500
-                 text-white text-xs rounded-full flex items-center
-                 justify-center font-bold"
-        >
-          {chatMessages.length > 9 ? '9+' : chatMessages.length}
-        </span>
-      {/if}
-    </button>
-  {/if}
-
-  <!-- Chat Panel -->
-  {#if chatOpen}
-    <div
-      class="fixed top-0 right-0 h-full w-full max-w-sm z-50
-             bg-slate-900/95 backdrop-blur-md border-l border-slate-700
-             flex flex-col"
-    >
-      <!-- Chat Header -->
-      <div
-        class="flex items-center justify-between px-4 py-3
-               border-b border-slate-700"
-      >
-        <div class="flex items-center gap-2">
-          <MessageCircle class="w-5 h-5 text-slate-300" />
-          <span class="text-white font-semibold text-sm">Chat</span>
-        </div>
-        <button
-          onclick={toggleChat}
-          class="text-slate-400 hover:text-white transition-colors text-sm"
-        >
-          ✕
-        </button>
-      </div>
-
-      <!-- Messages -->
-      <div
-        bind:this={chatContainer}
-        class="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-      >
-        {#if chatMessages.length === 0}
-          <p class="text-slate-500 text-sm text-center mt-10">
-            No hay mensajes aún
-          </p>
-        {/if}
-
-        {#each chatMessages as msg (msg.id)}
-          <div class="flex flex-col {msg.sender === 'Sistema' ? 'items-center' : ''}">
-            {#if msg.sender !== 'Sistema'}
-              <div class="flex items-baseline gap-2">
-                <span class="text-slate-300 text-xs font-semibold">
-                  {msg.sender}
-                </span>
-                <span class="text-slate-600 text-[10px]">
-                  {formatTime(msg.timestamp)}
-                </span>
-              </div>
-            {/if}
-            <p class="{msg.sender === 'Sistema' ? 'text-slate-500 text-xs italic bg-slate-800/50 px-3 py-1 rounded-lg' : 'text-slate-200 text-sm'} mt-0.5 break-words">
-              {msg.text}
-            </p>
-          </div>
-        {/each}
-      </div>
-
-      <!-- Chat Input -->
-      <div
-        class="px-4 py-3 border-t border-slate-700"
-      >
-        <div class="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Escribe un mensaje o /comando..."
-            value={chatInput}
-            oninput={(e) => (chatInput = e.target.value)}
-            onkeydown={handleChatKeydown}
-            class="flex-1 bg-slate-800 text-white text-sm px-4 py-2.5
-                   rounded-xl border border-slate-700
-                   focus:outline-none focus:border-slate-500
-                   placeholder:text-slate-500 transition-colors"
-          />
-          <button
-            onclick={sendChatMessage}
-            disabled={!chatInput.trim()}
-            class="w-10 h-10 bg-slate-700 text-white rounded-xl
-                   flex items-center justify-center
-                   hover:bg-slate-600 disabled:opacity-40
-                   disabled:cursor-not-allowed transition-colors"
-          >
-            <Send class="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      </aside>
     </div>
   {/if}
 </div>
