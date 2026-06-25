@@ -184,6 +184,9 @@
       trackHostFavorite(emoji);
     }
     showEmotePicker = false;
+    // Show locally immediately
+    addReaction(emoji);
+    // Send to server for others
     socket.emit('reaction:send', { emoji, roomId });
   }
 

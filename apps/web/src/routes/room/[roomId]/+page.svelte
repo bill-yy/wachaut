@@ -555,6 +555,9 @@
     if (!ALL_EMOTES.includes(emoji)) return;
     trackFavorite(emoji);
     showEmotePicker = false;
+    // Show locally immediately
+    addFloatingReaction(emoji);
+    // Send to server for others
     socket.emit('reaction:send', { emoji });
     animatingReaction = emoji;
     setTimeout(() => {
