@@ -169,7 +169,7 @@
     status === 'waiting' || status === 'live'
   );
 
-  let statusColor = $derived(() => {
+  let statusColor = $derived.by(() => {
     if (status === 'live') return 'bg-red-500';
     if (isConnected) return 'bg-green-500';
     return 'bg-slate-500';
@@ -301,6 +301,10 @@
             }
             status = 'live';
             startStatsPolling();
+            showShortcutsOverlay();
+            if (window.innerWidth < 768) {
+              chatOpen = true;
+            }
           }
         };
 
@@ -705,15 +709,8 @@
   }
 
   // Show shortcuts overlay when entering live mode
-  $effect(() => {
-    if (status === 'live') {
-      showShortcutsOverlay();
-      // On mobile, auto-open chat when going live
-      if (window.innerWidth < 768) {
-        chatOpen = true;
-      }
-    }
-  });
+  // NOTE: moved to host:signal handler to avoid effect_update_depth_exceeded
+  // (writing chatOpen inside an $effect that reads status causes infinite loop)
   onDestroy(() => {
     if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
     stopStatsPolling();
