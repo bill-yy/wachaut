@@ -97,11 +97,10 @@ jobs:
           file: ./Dockerfile
           target: sfu
           push: true
+          no-cache: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sfu:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sfu:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   deploy:
     needs: [build-web, build-server, build-sfu]
