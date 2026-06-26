@@ -73,12 +73,9 @@ WORKDIR /app
 # Install tsx globally
 RUN npm install -g tsx
 
-# Copy package.json and install fresh with npm (avoids pnpm symlink issues)
+# Install SFU dependencies fresh with npm (no pnpm symlinks)
 COPY apps/sfu/package.json ./package.json
 RUN npm install --omit=dev
-
-# Copy mediasoup native worker from builder (prebuilt binary)
-COPY --from=sfu-dependencies /app/node_modules/mediasoup/worker ./node_modules/mediasoup/worker
 
 # Copy SFU source
 COPY apps/sfu/src ./src
