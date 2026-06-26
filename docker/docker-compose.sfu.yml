@@ -1,40 +1,29 @@
 # Wachaut SFU — Docker Compose for Dokploy
-# Deploy as "Docker Compose" service in Dokploy
-#
-# Image is pre-built by GitHub Actions → GHCR
-# This compose file pulls the prebuilt image (no build step needed in Dokploy)
-#
-# Required environment variables (set in Dokploy):
-#   RTC_ANNOUNCED_IP = 167.86.110.249 (server public IP)
+# Builds from Dockerfile and deploys as Docker Compose service
 
 services:
   sfu:
-    image: ghcr.io/bill-yy/wachaut/sfu:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: sfu
     container_name: wachaut-sfu
     restart: unless-stopped
     ports:
       - "3002:3002"                        # Socket.IO signaling
-      - "10000-10100:10000-10100/udp"      # WebRTC media
+      - "20000-20100:20000-20100/udp"      # WebRTC media
     environment:
       - PORT=3002
       - HOST=0.0.0.0
-      - RTC_MIN_PORT=10000
-      - RTC_MAX_PORT=10100
+      - RTC_MIN_PORT=20000
+      - RTC_MAX_PORT=20100
       - RTC_LISTEN_IP=0.0.0.0
-      - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP:-167.86.110.249}
+      - RTC_ANNOUNCED_IP=167.86.110.249
       - NUM_WORKERS=4
       - NODE_ENV=production
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "4"
-        reservations:
-          memory: 1G
-          cpus: "1"
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
