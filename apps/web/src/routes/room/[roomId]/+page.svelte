@@ -37,11 +37,15 @@
   const roomId = $derived($page.params.roomId);
 
   // --- Connection state ---
-  let status = $state('idle'); // idle, connecting, auth, waiting, live, error, disconnected
+  let status = $state('idle'); // idle, connecting, auth, waiting, live, error, disconnected, reconnecting
   let errorMessage = $state('');
   let pin = $state('');
   let username = $state('');
   let assignedUsername = $state('');
+  let reconnectAttempt = $state(0);
+  let reconnectTimer = $state(null);
+  let disconnectedSince = $state(0);
+  let visibilityPaused = $state(false);
   const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
 
   // --- Socket & WebRTC ---
@@ -162,6 +166,7 @@
     if (s === 'live') return 'En vivo';
     if (s === 'error') return 'Error';
     if (s === 'disconnected') return 'Desconectado';
+    if (s === 'reconnecting') return 'Reconectando...';
     return '';
   }
 
@@ -173,6 +178,13 @@
     if (status === 'live') return 'bg-red-500';
     if (isConnected) return 'bg-green-500';
     return 'bg-slate-500';
+  });
+
+  let connectionQuality = $derived.by(() => {
+    const res = connectionStats.resolution || '';
+    if (res.includes('1920')) return 'buena';
+    if (res.includes('1280')) return 'regular';
+    return 'desconocida';
   });
 
   // --- Effects ---
@@ -200,6 +212,11 @@
   // --- Functions ---
 
   async function connect() {
+    // Cleanup any existing socket/peer before reconnecting
+    cleanupSocket();
+    if (peer) { peer.close(); peer = null; }
+    pendingCandidates = [];
+
     const cleanedUsername = sanitizeUsername(username);
     username = cleanedUsername;
 
@@ -300,6 +317,8 @@
               pendingStream = remoteStream;
             }
             status = 'live';
+            reconnectAttempt = 0;
+            disconnectedSince = 0;
             startStatsPolling();
             showShortcutsOverlay();
             if (window.innerWidth < 768) {
@@ -318,7 +337,23 @@
           console.log(`[viewer] connectionState=${peer.connectionState} iceState=${peer.iceConnectionState}`);
           if (peer.connectionState === 'disconnected' ||
               peer.connectionState === 'failed') {
-            status = 'waiting';
+            if (peer.connectionState === 'failed') {
+              console.log('[viewer] Connection failed, attempting ICE restart...');
+              try {
+                peer.restartIce();
+              } catch(e) {
+                console.error('[viewer] ICE restart failed:', e);
+                status = 'error';
+                errorMessage = 'Conexión perdida. Reconectando...';
+              }
+            } else {
+              disconnectedSince = Date.now();
+              status = 'reconnecting';
+              scheduleReconnect();
+            }
+          } else if (peer.connectionState === 'connected') {
+            status = 'live';
+            disconnectedSince = 0;
           }
         };
 
@@ -409,12 +444,14 @@
     socket.on('disconnect', () => {
       if (status !== 'error') {
         status = 'disconnected';
+        scheduleReconnect();
       }
     });
   }
 
   function disconnect() {
     stopStatsPolling();
+    cleanupReconnect();
     if (peer) {
       peer.close();
       peer = null;
@@ -438,6 +475,30 @@
       socket.disconnect();
       socket = null;
     }
+  }
+
+  function scheduleReconnect() {
+    if (reconnectAttempt >= 3) {
+      status = 'error';
+      errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
+      reconnectAttempt = 0;
+      return;
+    }
+    const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 8000);
+    reconnectAttempt++;
+    console.log(`[viewer] Reconnect attempt ${reconnectAttempt} in ${delay}ms`);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      connect().catch(() => {});
+    }, delay);
+  }
+
+  function cleanupReconnect() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    reconnectAttempt = 0;
   }
 
   function handlePinInput(e) {
@@ -594,6 +655,7 @@
   }
 
   function retry() {
+    cleanupReconnect();
     status = 'idle';
     errorMessage = '';
     // Don't clear pin so user can reconnect with same PIN
@@ -713,6 +775,20 @@
       showShortcuts = false;
     }, 3000);
   }
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      visibilityPaused = true;
+      stopStatsPolling();
+      console.log('[viewer] Tab hidden, pausing stats polling');
+    } else {
+      visibilityPaused = false;
+      if (status === 'live') {
+        startStatsPolling();
+        console.log('[viewer] Tab visible, resuming stats polling');
+      }
+    }
+  }
+
 
   function toggleChat() {
     chatOpen = !chatOpen;
@@ -724,6 +800,8 @@
   onDestroy(() => {
     if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
     stopStatsPolling();
+    cleanupReconnect();
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     disconnect();
   });
 
@@ -733,6 +811,7 @@
     } catch {
       username = '';
     }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
   });
 </script>
 
@@ -932,6 +1011,31 @@
             </button>
           </div>
         </div>
+
+      <!-- RECONNECTING -->
+      {:else if status === 'reconnecting'}
+        <div class="flex items-center justify-center" style="min-height: 60vh;">
+          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
+            <div class="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <Wifi class="w-7 h-7 text-amber-500" />
+            </div>
+            <h2 class="text-lg font-semibold text-slate-800 mb-2">Reconectando...</h2>
+            <p class="text-sm text-slate-500 mb-2">Intento {reconnectAttempt} de 3</p>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-6">
+              <div
+                class="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                style:width="{Math.min(reconnectAttempt / 3 * 100, 100)}%"
+              ></div>
+            </div>
+            <button
+              onclick={() => { cleanupReconnect(); disconnect(); }}
+              class="px-6 py-3 bg-slate-200 text-slate-600 font-medium
+                     rounded-xl hover:bg-slate-300 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       {/if}
     </main>
 
@@ -1083,6 +1187,7 @@
             {#if connectionStats.resolution}
               <div class="flex items-center gap-1 text-[10px] text-slate-500">
                 <Activity class="w-3 h-3" />
+                <span class="w-1.5 h-1.5 rounded-full {connectionQuality === 'buena' ? 'bg-green-500' : connectionQuality === 'regular' ? 'bg-amber-500' : 'bg-slate-500'}"></span>
                 <span>{connectionStats.resolution}</span>
                 {#if connectionStats.bitrate}
                   <span>· {connectionStats.bitrate}</span>
