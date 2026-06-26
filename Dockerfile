@@ -59,7 +59,7 @@ CMD ["node", "dist/index.js"]
 # ── Dependencies (SFU with mediasoup) ───────────────────────────────
 FROM base AS sfu-dependencies
 ARG BUILD_TS=0
-RUN echo "Build: $BUILD_TS" && apt-get update && apt-get install -y python3 python-is-python3 make g++ git && rm -rf /var/lib/apt/lists/*
+RUN echo "Build: $BUILD_TS" && apt-get update && apt-get install -y python3 make g++ git && ln -sf /usr/bin/python3 /usr/bin/python && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/sfu/package.json apps/sfu/
 COPY packages/ packages/
