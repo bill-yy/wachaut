@@ -70,11 +70,15 @@ FROM node:22-bookworm-slim AS sfu
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-# Install tsx globally (avoids pnpm symlink issues)
+# Install tsx globally
 RUN npm install -g tsx
 
-# Copy node_modules from builder (includes mediasoup with native bindings)
-COPY --from=sfu-dependencies /app/node_modules ./node_modules
+# Copy package.json and install fresh with npm (avoids pnpm symlink issues)
+COPY apps/sfu/package.json ./package.json
+RUN npm install --omit=dev
+
+# Copy mediasoup native worker from builder (prebuilt binary)
+COPY --from=sfu-dependencies /app/node_modules/mediasoup/worker ./node_modules/mediasoup/worker
 
 # Copy SFU source
 COPY apps/sfu/src ./src
