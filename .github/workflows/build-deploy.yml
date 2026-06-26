@@ -94,7 +94,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/Dockerfile.sfu
+          file: ./Dockerfile
+          target: sfu
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/sfu:latest
