@@ -182,7 +182,7 @@ io.on('connection', (socket) => {
         setTimeout(() => {
           const currentRoom = rooms.get(roomId);
           if (currentRoom && currentRoom.hostId === socket.id) {
-            socket.to(roomId).emit('room:closed');
+            io.to(roomId).emit('room:closed');
             rooms.delete(roomId);
             for (const [viewerId] of currentRoom.viewers) {
               viewerToRoom.delete(viewerId);
@@ -227,6 +227,11 @@ io.on('connection', (socket) => {
       isMuted: false
     };
     
+    if (rooms.has(roomId)) {
+      socket.emit('room:error', { message: 'Ya existe una sala con ese ID.' });
+      return;
+    }
+
     rooms.set(roomId, room);
     socket.join(roomId);
     fastify.log.info(`Room created: ${roomId}`);
@@ -239,7 +244,7 @@ io.on('connection', (socket) => {
 
   socket.on('host:stop-sharing', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
-    if (room) {
+    if (room && room.hostId === socket.id) {
       room.isSharing = false;
       socket.to(roomId).emit('host:stopped-sharing');
     }
@@ -247,7 +252,7 @@ io.on('connection', (socket) => {
 
   socket.on('host:close-room', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
-    if (room) {
+    if (room && room.hostId === socket.id) {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
       for (const [viewerId] of room.viewers) {
