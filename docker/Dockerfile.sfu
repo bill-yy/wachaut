@@ -41,3 +41,4 @@ EXPOSE 10000-10100/udp
 
 # tsx is in node_modules/.bin from the builder stage
 CMD ["node_modules/.bin/tsx", "src/index.ts"]
+# Build: 1782490969
