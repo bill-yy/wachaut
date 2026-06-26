@@ -1,27 +1,27 @@
 # Wachaut SFU — Docker Compose for Dokploy
 # Deploy as "Docker Compose" service in Dokploy
 #
+# Image is pre-built by GitHub Actions → GHCR
+# This compose file pulls the prebuilt image (no build step needed in Dokploy)
+#
 # Required environment variables (set in Dokploy):
-#   RTC_ANNOUNCED_IP = <your-server-public-ip>
-#   TURN_SECRET      = <your-turn-secret>
+#   RTC_ANNOUNCED_IP = 167.86.110.249 (server public IP)
 
 services:
   sfu:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.sfu
+    image: ghcr.io/bill-yy/wachaut/sfu:latest
     container_name: wachaut-sfu
     restart: unless-stopped
     ports:
-      - "3002:3002"            # Socket.IO signaling
-      - "10000-10100:10000-10100/udp"  # WebRTC media
+      - "3002:3002"                        # Socket.IO signaling
+      - "10000-10100:10000-10100/udp"      # WebRTC media
     environment:
       - PORT=3002
       - HOST=0.0.0.0
       - RTC_MIN_PORT=10000
       - RTC_MAX_PORT=10100
       - RTC_LISTEN_IP=0.0.0.0
-      - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP:-}
+      - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP:-167.86.110.249}
       - NUM_WORKERS=4
       - NODE_ENV=production
     deploy:
