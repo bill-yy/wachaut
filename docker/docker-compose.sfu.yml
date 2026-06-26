@@ -7,6 +7,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       target: sfu
+      args:
+        - BUILD_TS=20260626
     container_name: wachaut-sfu
     restart: unless-stopped
     ports:
