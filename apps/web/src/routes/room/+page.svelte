@@ -1,5 +1,5 @@
 <script>
-  import { tick } from 'svelte';
+  import { tick, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import {
     Monitor,
@@ -64,6 +64,69 @@
   // Reactions
   let activeReactions = $state(new Map());
   let reactionIdCounter = $state(0);
+
+  // ─── Connection Health ──────────────────────────────────────────────
+  let connectionHealth = $state('good'); // 'good' | 'degraded' | 'poor'
+
+  function updateConnectionHealth() {
+    if (!isSharing || peers.size === 0) {
+      connectionHealth = 'good';
+      return;
+    }
+    let degraded = false;
+    let poor = false;
+    for (const [, pc] of peers) {
+      const ice = pc.iceConnectionState;
+      if (ice === 'disconnected' || ice === 'failed') {
+        poor = true;
+      } else if (ice === 'checking' || ice === 'connecting') {
+        degraded = true;
+      }
+    }
+    connectionHealth = poor ? 'poor' : degraded ? 'degraded' : 'good';
+  }
+
+  // ─── Page Visibility ────────────────────────────────────────────────
+  let tabHidden = $state(false);
+
+  function handleVisibilityChange() {
+    tabHidden = document.hidden;
+    if (tabHidden) {
+      // Pause quality monitor polling when tab is hidden
+      if (qualityMonitorInterval) {
+        clearInterval(qualityMonitorInterval);
+        qualityMonitorInterval = null;
+      }
+    } else if (isSharing && autoAdaptQuality) {
+      // Resume quality monitor polling when tab is visible again
+      startQualityMonitor();
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
+
+  // ─── Lifecycle Cleanup ──────────────────────────────────────────────
+  function cleanup() {
+    stopSharing();
+    if (socket) {
+      socket.emit('host:close-room', { roomId });
+      socket.disconnect();
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', cleanup);
+    }
+  }
+
+  onDestroy(cleanup);
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', cleanup);
+  }
 
   // ─── Emote Picker ──────────────────────────────────────────────────
   const EMOTE_CATEGORIES = [
@@ -476,10 +539,12 @@
     pc.onconnectionstatechange = () => {
       console.log(`[host] viewer=${viewerId} connectionState=${pc.connectionState} iceState=${pc.iceConnectionState}`);
       if (pc.connectionState === 'failed') { pc.close(); peers.delete(viewerId); }
+      updateConnectionHealth();
     };
 
     pc.oniceconnectionstatechange = () => {
       console.log(`[host] viewer=${viewerId} iceConnectionState=${pc.iceConnectionState}`);
+      updateConnectionHealth();
     };
 
     if (localStream) {
@@ -571,7 +636,7 @@
     pendingCandidates.clear();
 
     if (socket && connected) {
-      socket.emit('host:sharing-stopped', { roomId });
+      socket.emit('host:stop-sharing', { roomId });
     }
   }
 
@@ -940,6 +1005,10 @@
         <div class="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-full animate-[fadeIn_0.3s_ease]">
           <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
           <span class="text-red-600 text-sm font-semibold">EN VIVO</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-full" title={connectionHealth === 'good' ? 'Conexión estable' : connectionHealth === 'degraded' ? 'Conexión estableciéndose' : 'Conexión inestable'}>
+          <div class="w-2 h-2 rounded-full {connectionHealth === 'good' ? 'bg-green-500' : connectionHealth === 'degraded' ? 'bg-amber-500' : 'bg-red-500'}"></div>
+          <span class="text-xs font-medium {connectionHealth === 'good' ? 'text-green-600' : connectionHealth === 'degraded' ? 'text-amber-600' : 'text-red-600'}">{connectionHealth === 'good' ? 'Estable' : connectionHealth === 'degraded' ? 'Estableciendo' : 'Inestable'}</span>
         </div>
       {/if}
       <button
