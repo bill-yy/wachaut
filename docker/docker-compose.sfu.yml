@@ -1,16 +1,10 @@
 # Wachaut SFU — Docker Compose for Dokploy
-# Builds from Dockerfile and deploys as Docker Compose service
+# Pulls prebuilt image from GHCR (built by GitHub Actions)
 
 services:
   sfu:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: sfu
-      args:
-        - BUILD_TS=20260626
-    container_name: wachaut-sfu
-    restart: unless-stopped
+    image: ghcr.io/bill-yy/wachaut/sfu:latest
+    restart: always
     ports:
       - "3002:3002"                        # Socket.IO signaling
       - "20000-20100:20000-20100/udp"      # WebRTC media
