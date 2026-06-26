@@ -1,0 +1,40 @@
+# Wachaut SFU — Docker Compose for Dokploy
+# Deploy as "Docker Compose" service in Dokploy
+#
+# Required environment variables (set in Dokploy):
+#   RTC_ANNOUNCED_IP = <your-server-public-ip>
+#   TURN_SECRET      = <your-turn-secret>
+
+services:
+  sfu:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sfu
+    container_name: wachaut-sfu
+    restart: unless-stopped
+    ports:
+      - "3002:3002"            # Socket.IO signaling
+      - "10000-10100:10000-10100/udp"  # WebRTC media
+    environment:
+      - PORT=3002
+      - HOST=0.0.0.0
+      - RTC_MIN_PORT=10000
+      - RTC_MAX_PORT=10100
+      - RTC_LISTEN_IP=0.0.0.0
+      - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP:-}
+      - NUM_WORKERS=4
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4"
+        reservations:
+          memory: 1G
+          cpus: "1"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
