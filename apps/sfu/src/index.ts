@@ -137,7 +137,7 @@ async function createRouter(): Promise<mediasoup.types.Router> {
 // ─── Fastify ───────────────────────────────────────────────────────────
 const fastify = Fastify({ logger: true });
 
-await fastify.register(cors, {
+fastify.register(cors, {
   origin: [
     'https://wachaut.billytech.es',
     'http://localhost:5173',
