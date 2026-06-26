@@ -68,10 +68,18 @@ RUN pnpm install --frozen-lockfile
 FROM node:22-bookworm-slim AS sfu
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+
+# Install tsx globally (avoids pnpm symlink issues)
+RUN npm install -g tsx
+
+# Copy node_modules from builder (includes mediasoup with native bindings)
 COPY --from=sfu-dependencies /app/node_modules ./node_modules
-COPY --from=sfu-dependencies /app/apps/sfu/package.json ./package.json
+
+# Copy SFU source
 COPY apps/sfu/src ./src
+
 ENV NODE_ENV=production
 EXPOSE 3002
-EXPOSE 10000-10100/udp
-CMD ["node_modules/.bin/tsx", "src/index.ts"]
+EXPOSE 20000-20100/udp
+
+CMD ["tsx", "src/index.ts"]
