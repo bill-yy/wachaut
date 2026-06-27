@@ -215,6 +215,24 @@ export class SfuClient {
       this.#producer = null;
     }
   }
+  /**
+   * Get RTC stats from the receive transport's internal PeerConnection.
+   * Returns null if no receive transport is active.
+   */
+  async getStats(): Promise<RTCStatsReport | null> {
+    if (!this.#recvTransport) return null;
+    try {
+      // mediasoup-client stores the PeerConnection on the handler
+      const handler = (this.#recvTransport as any)._handler;
+      const pc = handler?._pc;
+      if (pc && typeof pc.getStats === 'function') {
+        return await pc.getStats();
+      }
+    } catch (err) {
+      console.error('[sfu-client] getStats error:', err);
+    }
+    return null;
+  }
 
   disconnect() {
     this.stopProducing();

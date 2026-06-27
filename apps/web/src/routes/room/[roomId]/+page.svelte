@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { page } from '$app/stores';
   import { io } from 'socket.io-client';
+  import { SfuClient } from '$lib/sfu-client';
   import {
       Monitor,
       Lock,
@@ -48,35 +49,9 @@
   let visibilityPaused = $state(false);
   const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
 
-  // --- Socket & WebRTC ---
+  // --- Socket & SFU ---
   let socket = $state(null);
-  let peer = $state(null);
-  let pendingStream = $state(null);
-  let iceServers = $state(null);
-  let pendingCandidates = [];
-
-  async function fetchIceServers() {
-    if (iceServers) return iceServers;
-    try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
-      const httpUrl = wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-      const res = await fetch(`${httpUrl}/turn-credentials?id=${socket?.id || crypto.randomUUID()}`, {
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      iceServers = data.iceServers;
-      console.log('[viewer] ICE servers loaded:', iceServers.map(s => s.urls));
-      return iceServers;
-    } catch (e) {
-      console.error('[viewer] Failed to fetch TURN credentials, falling back to STUN:', e);
-      iceServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ];
-      return iceServers;
-    }
-  }
+  let sfuClient = $state(null);
 
   // --- Video ---
   let videoEl = $state(null);
@@ -189,17 +164,6 @@
 
   // --- Effects ---
 
-  // Attach pending stream to video element when both are available
-  $effect(() => {
-    if (pendingStream && videoEl) {
-      videoEl.srcObject = pendingStream;
-      videoEl.volume = volume / 100;
-      videoEl.muted = isMuted;
-      videoEl.play().catch(() => {});
-      pendingStream = null;
-    }
-  });
-
   // Auto-scroll chat when new messages arrive
   $effect(() => {
     if (chatMessages.length > 0 && chatContainer) {
@@ -212,10 +176,10 @@
   // --- Functions ---
 
   async function connect() {
-    // Cleanup any existing socket/peer before reconnecting
+    // Cleanup any existing socket/sfu before reconnecting
     cleanupSocket();
-    if (peer) { peer.close(); peer = null; }
-    pendingCandidates = [];
+    sfuClient?.disconnect();
+    sfuClient = null;
 
     const cleanedUsername = sanitizeUsername(username);
     username = cleanedUsername;
@@ -234,9 +198,6 @@
 
     status = 'connecting';
 
-    // Preload ICE servers before joining so peer creation is synchronous
-    await fetchIceServers();
-
     const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
     socket = io(wsUrl, {
       transports: ['websocket']
@@ -249,6 +210,7 @@
 
     socket.on('room:auth-success', () => {
       status = 'waiting';
+      connectSfu(cleanedUsername);
     });
 
     socket.on('room:auth-failed', (data) => {
@@ -268,6 +230,7 @@
       username = assignedUsername;
       saveUsername(assignedUsername);
       status = 'waiting';
+      connectSfu(assignedUsername);
     });
 
   // Chat events
@@ -300,106 +263,10 @@
       addFloatingReaction(data.emoji);
     });
 
-    // WebRTC signaling — server protocol: { signal } objects
-    socket.on('host:signal', async (data) => {
-      if (!peer) {
-        peer = new RTCPeerConnection({ iceServers });
-
-        peer.ontrack = (event) => {
-          if (event.streams && event.streams[0]) {
-            const remoteStream = event.streams[0];
-            if (videoEl) {
-              videoEl.srcObject = remoteStream;
-              videoEl.volume = volume / 100;
-              videoEl.muted = isMuted;
-              videoEl.play().catch(() => {});
-            } else {
-              pendingStream = remoteStream;
-            }
-            status = 'live';
-            reconnectAttempt = 0;
-            disconnectedSince = 0;
-            startStatsPolling();
-            showShortcutsOverlay();
-            if (window.innerWidth < 768) {
-              chatOpen = true;
-            }
-          }
-        };
-
-        peer.onicecandidate = (event) => {
-          if (event.candidate && socket) {
-            socket.emit('viewer:signal', { signal: event.candidate });
-          }
-        };
-
-        peer.onconnectionstatechange = () => {
-          console.log(`[viewer] connectionState=${peer.connectionState} iceState=${peer.iceConnectionState}`);
-          if (peer.connectionState === 'disconnected' ||
-              peer.connectionState === 'failed') {
-            if (peer.connectionState === 'failed') {
-              console.log('[viewer] Connection failed, attempting ICE restart...');
-              try {
-                peer.restartIce();
-              } catch(e) {
-                console.error('[viewer] ICE restart failed:', e);
-                status = 'error';
-                errorMessage = 'Conexión perdida. Reconectando...';
-              }
-            } else {
-              disconnectedSince = Date.now();
-              status = 'reconnecting';
-              scheduleReconnect();
-            }
-          } else if (peer.connectionState === 'connected') {
-            status = 'live';
-            disconnectedSince = 0;
-          }
-        };
-
-        peer.oniceconnectionstatechange = () => {
-          console.log(`[viewer] iceConnectionState=${peer.iceConnectionState}`);
-        };
-      }
-
-      // data.signal is RTCSessionDescriptionInit or RTCIceCandidateInit
-      const sig = data.signal;
-      if (!sig) return;
-
-      if (sig.type === 'offer') {
-        try {
-          await peer.setRemoteDescription(new RTCSessionDescription(sig));
-          // Apply any candidates that arrived before the offer
-          for (const candidate of pendingCandidates) {
-            await peer.addIceCandidate(candidate);
-          }
-          pendingCandidates = [];
-          const answer = await peer.createAnswer();
-          await peer.setLocalDescription(answer);
-          socket.emit('viewer:signal', { signal: peer.localDescription });
-        } catch (err) {
-          console.error('Error handling offer:', err);
-        }
-      } else if (sig.candidate) {
-        try {
-          const candidate = new RTCIceCandidate(sig);
-          if (peer.remoteDescription) {
-            await peer.addIceCandidate(candidate);
-          } else {
-            pendingCandidates.push(candidate);
-          }
-        } catch (err) {
-          console.error('Error adding ICE candidate:', err);
-        }
-      }
-    });
-
     socket.on('host:stopped-sharing', () => {
-      if (peer) {
-        peer.close();
-        peer = null;
-      }
-      pendingCandidates = [];
+      sfuClient?.disconnect();
+      sfuClient = null;
+      stopStatsPolling();
       if (videoEl) {
         videoEl.srcObject = null;
       }
@@ -424,21 +291,17 @@
     socket.on('host:disconnected', () => {
       errorMessage = 'El anfitrión se desconectó';
       status = 'error';
-      if (peer) {
-        peer.close();
-        peer = null;
-      }
-      pendingCandidates = [];
+      sfuClient?.disconnect();
+      sfuClient = null;
+      stopStatsPolling();
     });
 
     socket.on('room:closed', () => {
       errorMessage = 'La sala se cerró';
       status = 'error';
-      if (peer) {
-        peer.close();
-        peer = null;
-      }
-      pendingCandidates = [];
+      sfuClient?.disconnect();
+      sfuClient = null;
+      stopStatsPolling();
     });
 
     socket.on('disconnect', () => {
@@ -452,11 +315,8 @@
   function disconnect() {
     stopStatsPolling();
     cleanupReconnect();
-    if (peer) {
-      peer.close();
-      peer = null;
-    }
-    pendingCandidates = [];
+    sfuClient?.disconnect();
+    sfuClient = null;
     cleanupSocket();
     if (videoEl) {
       videoEl.srcObject = null;
@@ -661,10 +521,57 @@
     // Don't clear pin so user can reconnect with same PIN
   }
 
-  async function updateStats() {
-    if (!peer || status !== 'live') return;
+  async function connectSfu(displayName) {
     try {
-      const stats = await peer.getStats();
+      const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
+      sfuClient = new SfuClient(sfuUrl);
+
+      sfuClient.on('stream-ready', (stream) => {
+        if (videoEl) {
+          videoEl.srcObject = stream;
+          videoEl.volume = volume / 100;
+          videoEl.muted = isMuted;
+          videoEl.play().catch(() => {});
+        }
+        status = 'live';
+        reconnectAttempt = 0;
+        disconnectedSince = 0;
+        startStatsPolling();
+        showShortcutsOverlay();
+        if (window.innerWidth < 768) {
+          chatOpen = true;
+        }
+      });
+
+      sfuClient.on('error', (msg) => {
+        console.error('[viewer] SFU error:', msg);
+        errorMessage = msg;
+        setTimeout(() => { errorMessage = ''; }, 5000);
+      });
+
+      sfuClient.on('disconnected', (reason) => {
+        console.log('[viewer] SFU disconnected:', reason);
+        if (status === 'live') {
+          status = 'reconnecting';
+          disconnectedSince = Date.now();
+        }
+      });
+
+      await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
+      console.log('[viewer] Joined SFU room');
+    } catch (err) {
+      console.error('[viewer] Failed to connect to SFU:', err);
+      // Don't crash — show a warning but keep socket connection alive
+      errorMessage = 'No se pudo conectar al SFU. La calidad puede ser reducida.';
+      setTimeout(() => { errorMessage = ''; }, 8000);
+    }
+  }
+
+  async function updateStats() {
+    if (!sfuClient || status !== 'live') return;
+    try {
+      const stats = await sfuClient.getStats();
+      if (!stats) return;
       stats.forEach(report => {
         if (report.type === 'inbound-rtp' && report.kind === 'video') {
           connectionStats.resolution = `${report.frameWidth || '?'}x${report.frameHeight || '?'}`;
