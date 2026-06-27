@@ -527,16 +527,25 @@
       const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
       sfuClient = new SfuClient(sfuUrl);
 
-      sfuClient.on('stream-ready', (stream) => {
+      sfuClient.on('stream-ready', async (stream) => {
+        // Set status first so Svelte renders the <video> element
+        status = 'live';
+        reconnectAttempt = 0;
+        disconnectedSince = 0;
+
+        // Wait for Svelte to render the video element after status change
+        await tick();
+
         if (videoEl) {
           videoEl.srcObject = stream;
           videoEl.volume = volume / 100;
           videoEl.muted = isMuted;
           videoEl.play().catch(() => {});
+          console.log('[viewer] Video attached, tracks:', stream.getTracks().length);
+        } else {
+          console.error('[viewer] videoEl still null after tick!');
         }
-        status = 'live';
-        reconnectAttempt = 0;
-        disconnectedSince = 0;
+
         startStatsPolling();
         showShortcutsOverlay();
         if (window.innerWidth < 768) {
