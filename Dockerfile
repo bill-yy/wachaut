@@ -33,17 +33,6 @@ COPY apps/server/ apps/server/
 COPY packages/ packages/
 RUN pnpm --filter @wachaut/server build
 
-# ── Production: Web ─────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS web
-WORKDIR /app
-COPY --from=web-builder /app/apps/web/build ./build
-COPY --from=web-builder /app/apps/web/package.json ./
-RUN npm install --omit=dev --legacy-peer-deps 2>/dev/null || true
-EXPOSE 3000
-ENV NODE_ENV=production
-ENV PORT=3000
-CMD ["npx", "serve", "build", "-l", "3000", "-s"]
-
 # ── Production: Server ──────────────────────────────────────────────
 FROM node:22-bookworm-slim AS server
 WORKDIR /app
@@ -58,8 +47,7 @@ CMD ["node", "dist/index.js"]
 
 # ── Dependencies (SFU with mediasoup) ───────────────────────────────
 FROM base AS sfu-dependencies
-ARG BUILD_TS=20260626-final
-RUN echo "Build: $BUILD_TS" && apt-get update && apt-get install -y python3 make g++ git && ln -sf /usr/bin/python3 /usr/bin/python && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 make g++ git && ln -sf /usr/bin/python3 /usr/bin/python && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/sfu/package.json apps/sfu/
 COPY packages/ packages/
@@ -86,3 +74,14 @@ EXPOSE 3002
 EXPOSE 20000-20100/udp
 
 CMD ["tsx", "src/index.ts"]
+
+# ── Production: Web (LAST STAGE — default build target) ─────────────
+FROM node:22-bookworm-slim AS web
+WORKDIR /app
+COPY --from=web-builder /app/apps/web/build ./build
+COPY --from=web-builder /app/apps/web/package.json ./
+RUN npm install --omit=dev --legacy-peer-deps 2>/dev/null || true
+EXPOSE 3000
+ENV NODE_ENV=production
+ENV PORT=3000
+CMD ["npx", "serve", "build", "-l", "3000", "-s"]
