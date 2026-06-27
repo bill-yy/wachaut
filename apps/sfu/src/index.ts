@@ -317,7 +317,14 @@ io.on('connection', (socket) => {
     // Auto-consume for all viewers
     for (const [viewerId, viewer] of room.peers) {
       if (viewerId !== socket.id && viewer.transport) {
-        await createConsumer(room, producer, viewer);
+        console.log(`[sfu] Auto-consuming for viewer ${viewer.displayName} (${viewerId}), transport exists: true`);
+        const canConsume = room.router.canConsume({ producerId: producer.id, rtpCapabilities: room.router.rtpCapabilities });
+        console.log(`[sfu] canConsume: ${canConsume}`);
+        if (canConsume) {
+          await createConsumer(room, producer, viewer);
+        }
+      } else if (viewerId !== socket.id) {
+        console.log(`[sfu] Skipping viewer ${viewer.displayName} — no transport`);
       }
     }
 
