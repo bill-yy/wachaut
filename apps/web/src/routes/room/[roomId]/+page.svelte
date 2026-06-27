@@ -210,7 +210,7 @@
 
     socket.on('room:auth-success', () => {
       status = 'waiting';
-      connectSfu(cleanedUsername);
+      // SFU connection happens in room:joined handler (after username assignment)
     });
 
     socket.on('room:auth-failed', (data) => {
@@ -522,6 +522,7 @@
   }
 
   async function connectSfu(displayName) {
+    if (sfuClient) return; // Already connected, prevent double call
     try {
       const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
       sfuClient = new SfuClient(sfuUrl);
