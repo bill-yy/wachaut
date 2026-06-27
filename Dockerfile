@@ -67,7 +67,7 @@ RUN pnpm install --frozen-lockfile
 
 # ── Production: SFU ─────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS sfu
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 python3-pip make g++ && ln -sf /usr/bin/python3 /usr/bin/python && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install tsx globally
@@ -75,6 +75,7 @@ RUN npm install -g tsx
 
 # Install SFU dependencies fresh with npm (no pnpm symlinks)
 COPY apps/sfu/package.json ./package.json
+ENV MEDIASOUP_DOWNLOAD_BIN=1
 RUN npm install --omit=dev
 
 # Copy SFU source
