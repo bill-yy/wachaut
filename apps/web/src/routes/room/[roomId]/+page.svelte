@@ -559,6 +559,8 @@
 
       await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
       console.log('[viewer] Joined SFU room');
+      // Start consuming the host's stream
+      await sfuClient.consume();
     } catch (err) {
       console.error('[viewer] Failed to connect to SFU:', err);
       // Don't crash — show a warning but keep socket connection alive

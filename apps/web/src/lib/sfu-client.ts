@@ -92,10 +92,6 @@ export class SfuClient {
         this.#emit('peer-left', data);
       });
 
-      this.#socket.on('new-consumer', async (data: any) => {
-        await this.#handleNewConsumer(data);
-      });
-
       this.#socket.on('connect_error', (err) => {
         reject(err);
       });
