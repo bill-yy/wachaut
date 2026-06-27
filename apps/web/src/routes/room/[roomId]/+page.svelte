@@ -559,9 +559,10 @@
       });
 
       await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
-      console.log('[viewer] Joined SFU room');
+      console.log('[viewer] Joined SFU room, device loaded:', sfuClient.isDeviceLoaded);
       // Start consuming the host's stream
-      await sfuClient.consume();
+      const stream = await sfuClient.consume();
+      console.log('[viewer] consume() returned, tracks:', stream?.getTracks().length);
     } catch (err) {
       console.error('[viewer] Failed to connect to SFU:', err);
       // Don't crash — show a warning but keep socket connection alive

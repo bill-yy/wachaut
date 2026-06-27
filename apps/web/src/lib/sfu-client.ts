@@ -238,6 +238,10 @@ export class SfuClient {
     return null;
   }
 
+  get isDeviceLoaded() {
+    return this.#device.loaded;
+  }
+
   disconnect() {
     this.stopProducing();
     for (const [, consumer] of this.#consumers) consumer.close();
