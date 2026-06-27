@@ -41,4 +41,4 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 
 # Web (port 3000) + Server (port 3001) simultaneously
-CMD ["sh", "-c", "serve web/build -l 3000 -s & node server/dist/index.js"]
+CMD ["sh", "-c", "serve web/build -l 3000 -s & PORT=3001 node server/dist/index.js"]
