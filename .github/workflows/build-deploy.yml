@@ -94,8 +94,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
-          target: sfu
+          file: ./docker/Dockerfile.sfu
           push: true
           no-cache: true
           tags: |
