@@ -29,6 +29,8 @@ export class SfuClient {
   #url: string;
   #listeners: Map<string, Function[]> = new Map();
   #rtpCapabilities: any = null;
+  #pendingConsumers: Array<any> = [];
+  #stream: MediaStream | null = null;
 
   constructor(url: string) {
     this.#url = url;
@@ -163,6 +165,23 @@ export class SfuClient {
     }
     if (!this.#device.loaded) throw new Error('Device not loaded');
 
+    this.#stream = new MediaStream();
+
+    // Register new-consumer listener BEFORE creating transport.
+    // Buffer any events that arrive before the recv transport is ready.
+    this.#socket!.on('new-consumer', async (data: any) => {
+      if (this.#recvTransport) {
+        const consumer = await this.#handleNewConsumer(data);
+        if (consumer && this.#stream) {
+          this.#stream.addTrack(consumer.track);
+          this.#emit('stream-ready', this.#stream);
+        }
+      } else {
+        // Transport not ready yet — queue for processing after transport creation
+        this.#pendingConsumers.push(data);
+      }
+    });
+
     // Create receive transport
     const transportParams = await this.#createTransport('cons');
     this.#recvTransport = this.#device.createRecvTransport(transportParams);
@@ -175,17 +194,20 @@ export class SfuClient {
       callback();
     });
 
-    const stream = new MediaStream();
-
-    this.#socket!.on('new-consumer', async (data: any) => {
-      const consumer = await this.#handleNewConsumer(data);
-      if (consumer) {
-        stream.addTrack(consumer.track);
-        this.#emit('stream-ready', stream);
+    // Process any consumers that arrived before the transport was ready
+    if (this.#pendingConsumers.length > 0) {
+      console.log(`[sfu-client] Processing ${this.#pendingConsumers.length} pending consumers`);
+      for (const data of this.#pendingConsumers) {
+        const consumer = await this.#handleNewConsumer(data);
+        if (consumer && this.#stream) {
+          this.#stream.addTrack(consumer.track);
+          this.#emit('stream-ready', this.#stream);
+        }
       }
-    });
+      this.#pendingConsumers = [];
+    }
 
-    return stream;
+    return this.#stream;
   }
 
   async #handleNewConsumer(data: any): Promise<mediasoupClient.Consumer | null> {
@@ -219,6 +241,7 @@ export class SfuClient {
       this.#producer = null;
     }
   }
+
   /**
    * Get RTC stats from the receive transport's internal PeerConnection.
    * Returns null if no receive transport is active.
@@ -246,10 +269,12 @@ export class SfuClient {
     this.stopProducing();
     for (const [, consumer] of this.#consumers) consumer.close();
     this.#consumers.clear();
+    this.#pendingConsumers = [];
     this.#sendTransport?.close();
     this.#recvTransport?.close();
     this.#socket?.disconnect();
     this.#socket = null;
+    this.#stream = null;
     this.#listeners.clear();
   }
 }

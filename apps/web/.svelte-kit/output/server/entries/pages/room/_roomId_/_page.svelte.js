@@ -302,7 +302,6 @@ function _page($$renderer, $$props) {
 			});
 			socket.on("room:auth-success", () => {
 				status = "waiting";
-				connectSfu(cleanedUsername);
 			});
 			socket.on("room:auth-failed", (data) => {
 				errorMessage = data?.message || "PIN incorrecto";
@@ -479,6 +478,7 @@ function _page($$renderer, $$props) {
 			}, (reaction.duration + reaction.delay) * 1e3 + 200);
 		}
 		async function connectSfu(displayName) {
+			if (sfuClient) return;
 			try {
 				sfuClient = new SfuClient("wss://sfu-wachaut.billytech.es");
 				sfuClient.on("stream-ready", (stream) => {
@@ -500,7 +500,9 @@ function _page($$renderer, $$props) {
 					if (status === "live") status = "reconnecting";
 				});
 				await sfuClient.joinRoom(roomId(), pin, displayName, "viewer");
-				console.log("[viewer] Joined SFU room");
+				console.log("[viewer] Joined SFU room, device loaded:", sfuClient.isDeviceLoaded);
+				const stream = await sfuClient.consume();
+				console.log("[viewer] consume() returned, tracks:", stream?.getTracks().length);
 			} catch (err) {
 				console.error("[viewer] Failed to connect to SFU:", err);
 				errorMessage = "No se pudo conectar al SFU. La calidad puede ser reducida.";

@@ -1,5 +1,5 @@
 import { i as onDestroy } from "../../../chunks/internal.js";
-import { d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
+import { a as derived, d as sanitize_props, f as slot, h as stringify, j as escape_html, k as attr, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class } from "../../../chunks/server.js";
 import { n as Icon, t as Monitor } from "../../../chunks/monitor.js";
 import { a as playViewerLeave, c as Volume_x, d as Send, f as Message_circle, h as Bell_off, i as playViewerJoin, l as Smile_plus, m as Bell, n as playChatMessage, o as SfuClient, p as Maximize, s as Triangle_alert, t as isMuted, u as Share_2 } from "../../../chunks/notificationSounds.js";
 import { n as Shield, r as Link_2, t as Users } from "../../../chunks/navigation.js";
@@ -499,14 +499,14 @@ function _page($$renderer, $$props) {
 		};
 		let autoAdaptQuality = true;
 		let qualityMonitorInterval = null;
-		const roomId = crypto.randomUUID();
+		let roomId = crypto.randomUUID();
 		function generatePin() {
 			const arr = /* @__PURE__ */ new Uint32Array(1);
 			crypto.getRandomValues(arr);
 			return String(1e5 + arr[0] % 9e5);
 		}
 		const pin = generatePin();
-		const roomUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/room/${roomId}`;
+		const roomUrl = derived(() => `${typeof window !== "undefined" ? window.location.origin : ""}/room/${roomId}`);
 		function addReaction(emoji) {
 			const id = ++reactionIdCounter;
 			const idx = reactionIdCounter % 4;
@@ -579,24 +579,29 @@ function _page($$renderer, $$props) {
 					roomId,
 					pin
 				});
-				sfuClient = new SfuClient("wss://sfu-wachaut.billytech.es");
-				sfuClient.on("error", (msg) => {
-					console.error("[sfu]", msg);
+				socket.once("room:created", (data) => {
+					if (data?.roomId) {
+						roomId = data.roomId;
+						sfuClient = new SfuClient("wss://sfu-wachaut.billytech.es");
+						sfuClient.on("error", (msg) => {
+							console.error("[sfu]", msg);
+						});
+						sfuClient.on("peer-joined", (d) => {
+							console.log("[sfu] peer-joined:", d);
+						});
+						sfuClient.on("peer-left", (d) => {
+							console.log("[sfu] peer-left:", d);
+						});
+						sfuClient.joinRoom(roomId, pin, "Anfitrión", "host").then(() => {
+							console.log("[sfu] joined room");
+						}).catch((err) => {
+							console.error("[sfu] join failed:", err);
+						});
+					}
+					setTimeout(() => {
+						loading = false;
+					}, 800);
 				});
-				sfuClient.on("peer-joined", (data) => {
-					console.log("[sfu] peer-joined:", data);
-				});
-				sfuClient.on("peer-left", (data) => {
-					console.log("[sfu] peer-left:", data);
-				});
-				sfuClient.joinRoom(roomId, pin, "Anfitrión", "host").then(() => {
-					console.log("[sfu] joined room");
-				}).catch((err) => {
-					console.error("[sfu] join failed:", err);
-				});
-				setTimeout(() => {
-					loading = false;
-				}, 800);
 			});
 			socket.on("disconnect", () => {
 				connected = false;
@@ -838,7 +843,7 @@ function _page($$renderer, $$props) {
 		$$renderer.push(`<!--]--></button></div> <p class="text-2xl font-mono font-bold text-slate-800 tracking-[0.2em] svelte-ek3c68">${escape_html(pin)}</p></div> <div class="bg-slate-50 rounded-xl p-3 svelte-ek3c68"><div class="flex items-center justify-between mb-1 svelte-ek3c68"><span class="text-xs text-slate-500 font-medium svelte-ek3c68">Enlace de sala</span> <button class="p-1 hover:bg-slate-200 rounded-lg active:scale-95 transition-all svelte-ek3c68" title="Copiar enlace">`);
 		$$renderer.push("<!--[-1-->");
 		Link_2($$renderer, { class: "w-3.5 h-3.5 text-slate-400" });
-		$$renderer.push(`<!--]--></button></div> <p class="text-xs text-slate-600 truncate font-mono svelte-ek3c68">${escape_html(roomUrl)}</p></div></div> <div class="p-4 border-b border-slate-100 space-y-2 svelte-ek3c68">`);
+		$$renderer.push(`<!--]--></button></div> <p class="text-xs text-slate-600 truncate font-mono svelte-ek3c68">${escape_html(roomUrl())}</p></div></div> <div class="p-4 border-b border-slate-100 space-y-2 svelte-ek3c68">`);
 		if (!isSharing) {
 			$$renderer.push("<!--[0-->");
 			$$renderer.push(`<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all svelte-ek3c68">`);

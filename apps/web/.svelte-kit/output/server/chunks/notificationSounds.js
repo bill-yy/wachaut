@@ -399,6 +399,9 @@ var SfuClient = class {
 	#consumers = /* @__PURE__ */ new Map();
 	#url;
 	#listeners = /* @__PURE__ */ new Map();
+	#rtpCapabilities = null;
+	#pendingConsumers = [];
+	#stream = null;
 	constructor(url) {
 		this.#url = url;
 		this.#device = new mediasoupClient.Device();
@@ -428,6 +431,7 @@ var SfuClient = class {
 						reject(new Error(response.error));
 						return;
 					}
+					this.#rtpCapabilities = response.rtpCapabilities;
 					await this.#device.load({ routerRtpCapabilities: response.rtpCapabilities });
 					this.#emit("connected");
 					resolve(response);
@@ -442,15 +446,13 @@ var SfuClient = class {
 			this.#socket.on("peer-left", (data) => {
 				this.#emit("peer-left", data);
 			});
-			this.#socket.on("new-consumer", async (data) => {
-				await this.#handleNewConsumer(data);
-			});
 			this.#socket.on("connect_error", (err) => {
 				reject(err);
 			});
 		});
 	}
 	async produce(screenStream) {
+		if (!this.#device.loaded && this.#rtpCapabilities) await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
 		if (!this.#device.loaded) throw new Error("Device not loaded");
 		const transportParams = await this.#createTransport("prod");
 		this.#sendTransport = this.#device.createSendTransport(transportParams);
@@ -488,7 +490,18 @@ var SfuClient = class {
 		});
 	}
 	async consume() {
+		if (!this.#device.loaded && this.#rtpCapabilities) await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
 		if (!this.#device.loaded) throw new Error("Device not loaded");
+		this.#stream = new MediaStream();
+		this.#socket.on("new-consumer", async (data) => {
+			if (this.#recvTransport) {
+				const consumer = await this.#handleNewConsumer(data);
+				if (consumer && this.#stream) {
+					this.#stream.addTrack(consumer.track);
+					this.#emit("stream-ready", this.#stream);
+				}
+			} else this.#pendingConsumers.push(data);
+		});
 		const transportParams = await this.#createTransport("cons");
 		this.#recvTransport = this.#device.createRecvTransport(transportParams);
 		this.#recvTransport.on("connect", async ({ dtlsParameters }, callback) => {
@@ -498,15 +511,18 @@ var SfuClient = class {
 			});
 			callback();
 		});
-		const stream = new MediaStream();
-		this.#socket.on("new-consumer", async (data) => {
-			const consumer = await this.#handleNewConsumer(data);
-			if (consumer) {
-				stream.addTrack(consumer.track);
-				this.#emit("stream-ready", stream);
+		if (this.#pendingConsumers.length > 0) {
+			console.log(`[sfu-client] Processing ${this.#pendingConsumers.length} pending consumers`);
+			for (const data of this.#pendingConsumers) {
+				const consumer = await this.#handleNewConsumer(data);
+				if (consumer && this.#stream) {
+					this.#stream.addTrack(consumer.track);
+					this.#emit("stream-ready", this.#stream);
+				}
 			}
-		});
-		return stream;
+			this.#pendingConsumers = [];
+		}
+		return this.#stream;
 	}
 	async #handleNewConsumer(data) {
 		if (!this.#recvTransport) return null;
@@ -546,14 +562,19 @@ var SfuClient = class {
 		}
 		return null;
 	}
+	get isDeviceLoaded() {
+		return this.#device.loaded;
+	}
 	disconnect() {
 		this.stopProducing();
 		for (const [, consumer] of this.#consumers) consumer.close();
 		this.#consumers.clear();
+		this.#pendingConsumers = [];
 		this.#sendTransport?.close();
 		this.#recvTransport?.close();
 		this.#socket?.disconnect();
 		this.#socket = null;
+		this.#stream = null;
 		this.#listeners.clear();
 	}
 };

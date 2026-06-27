@@ -50,6 +50,8 @@ declare module '$env/static/private' {
 	export const PROCESSOR_REVISION: string;
 	export const DISCORD_ALLOWED_CHANNELS: string;
 	export const BROWSERBASE_PROXIES: string;
+	export const COLOR: string;
+	export const EDITOR: string;
 	export const LOGONSERVER: string;
 	export const TERMINAL_SINGULARITY_IMAGE: string;
 	export const HERMES_MAX_ITERATIONS: string;
@@ -74,7 +76,6 @@ declare module '$env/static/private' {
 	export const HERMES_AGENT_NOTIFY_INTERVAL: string;
 	export const HERMES_GATEWAY_BUSY_INPUT_MODE: string;
 	export const DRIVERDATA: string;
-	export const EDITOR: string;
 	export const MATRIX_ALLOWED_ROOMS: string;
 	export const npm_package_devDependencies__tailwindcss_vite: string;
 	export const EXEPATH: string;
@@ -100,7 +101,6 @@ declare module '$env/static/private' {
 	export const HERMES_SESSION_CHAT_ID: string;
 	export const HERMES_SESSION_MESSAGE_ID: string;
 	export const HERMES_SESSION_PLATFORM: string;
-	export const MINGW_PREFIX: string;
 	export const HOMEDRIVE: string;
 	export const npm_package_devDependencies_typescript_eslint: string;
 	export const npm_config_recursive: string;
@@ -114,6 +114,7 @@ declare module '$env/static/private' {
 	export const MANPATH: string;
 	export const npm_config_user_agent: string;
 	export const MINGW_PACKAGE_PREFIX: string;
+	export const MINGW_PREFIX: string;
 	export const MOA_TOOLS_DEBUG: string;
 	export const MSYSTEM: string;
 	export const MSYSTEM_CARCH: string;
@@ -123,14 +124,23 @@ declare module '$env/static/private' {
 	export const NODE_ENV: string;
 	export const NODE_PATH: string;
 	export const npm_command: string;
+	export const npm_config_cache: string;
 	export const npm_config_frozen_lockfile: string;
+	export const npm_config_globalconfig: string;
+	export const npm_config_global_prefix: string;
+	export const npm_config_init_module: string;
+	export const npm_config_local_prefix: string;
 	export const npm_package_type: string;
 	export const npm_config_manage_package_manager_versions: string;
 	export const npm_package_scripts_check: string;
 	export const npm_config_node_gyp: string;
+	export const npm_package_devDependencies_eslint_plugin_svelte: string;
+	export const npm_config_npm_version: string;
 	export const npm_config_only_built_dependencies: string;
+	export const npm_config_prefix: string;
 	export const PATHEXT: string;
 	export const npm_config_registry: string;
+	export const npm_config_userconfig: string;
 	export const npm_execpath: string;
 	export const npm_lifecycle_event: string;
 	export const npm_node_execpath: string;
@@ -145,7 +155,6 @@ declare module '$env/static/private' {
 	export const npm_package_devDependencies_autoprefixer: string;
 	export const USERPROFILE: string;
 	export const npm_package_devDependencies_eslint_config_prettier: string;
-	export const npm_package_devDependencies_eslint_plugin_svelte: string;
 	export const USERDOMAIN_ROAMINGPROFILE: string;
 	export const npm_package_devDependencies_globals: string;
 	export const npm_package_devDependencies_lucide_svelte: string;
@@ -234,6 +243,7 @@ declare module '$env/static/private' {
 	export const VIRTUAL_ENV: string;
 	export const WEB_TOOLS_DEBUG: string;
 	export const WINDIR: string;
+	export const _: string;
 	export const _HERMES_GATEWAY: string;
 	export const SVELTEKIT_FORK: string;
 }
@@ -334,6 +344,8 @@ declare module '$env/dynamic/private' {
 		PROCESSOR_REVISION: string;
 		DISCORD_ALLOWED_CHANNELS: string;
 		BROWSERBASE_PROXIES: string;
+		COLOR: string;
+		EDITOR: string;
 		LOGONSERVER: string;
 		TERMINAL_SINGULARITY_IMAGE: string;
 		HERMES_MAX_ITERATIONS: string;
@@ -358,7 +370,6 @@ declare module '$env/dynamic/private' {
 		HERMES_AGENT_NOTIFY_INTERVAL: string;
 		HERMES_GATEWAY_BUSY_INPUT_MODE: string;
 		DRIVERDATA: string;
-		EDITOR: string;
 		MATRIX_ALLOWED_ROOMS: string;
 		npm_package_devDependencies__tailwindcss_vite: string;
 		EXEPATH: string;
@@ -384,7 +395,6 @@ declare module '$env/dynamic/private' {
 		HERMES_SESSION_CHAT_ID: string;
 		HERMES_SESSION_MESSAGE_ID: string;
 		HERMES_SESSION_PLATFORM: string;
-		MINGW_PREFIX: string;
 		HOMEDRIVE: string;
 		npm_package_devDependencies_typescript_eslint: string;
 		npm_config_recursive: string;
@@ -398,6 +408,7 @@ declare module '$env/dynamic/private' {
 		MANPATH: string;
 		npm_config_user_agent: string;
 		MINGW_PACKAGE_PREFIX: string;
+		MINGW_PREFIX: string;
 		MOA_TOOLS_DEBUG: string;
 		MSYSTEM: string;
 		MSYSTEM_CARCH: string;
@@ -407,14 +418,23 @@ declare module '$env/dynamic/private' {
 		NODE_ENV: string;
 		NODE_PATH: string;
 		npm_command: string;
+		npm_config_cache: string;
 		npm_config_frozen_lockfile: string;
+		npm_config_globalconfig: string;
+		npm_config_global_prefix: string;
+		npm_config_init_module: string;
+		npm_config_local_prefix: string;
 		npm_package_type: string;
 		npm_config_manage_package_manager_versions: string;
 		npm_package_scripts_check: string;
 		npm_config_node_gyp: string;
+		npm_package_devDependencies_eslint_plugin_svelte: string;
+		npm_config_npm_version: string;
 		npm_config_only_built_dependencies: string;
+		npm_config_prefix: string;
 		PATHEXT: string;
 		npm_config_registry: string;
+		npm_config_userconfig: string;
 		npm_execpath: string;
 		npm_lifecycle_event: string;
 		npm_node_execpath: string;
@@ -429,7 +449,6 @@ declare module '$env/dynamic/private' {
 		npm_package_devDependencies_autoprefixer: string;
 		USERPROFILE: string;
 		npm_package_devDependencies_eslint_config_prettier: string;
-		npm_package_devDependencies_eslint_plugin_svelte: string;
 		USERDOMAIN_ROAMINGPROFILE: string;
 		npm_package_devDependencies_globals: string;
 		npm_package_devDependencies_lucide_svelte: string;
@@ -518,6 +537,7 @@ declare module '$env/dynamic/private' {
 		VIRTUAL_ENV: string;
 		WEB_TOOLS_DEBUG: string;
 		WINDIR: string;
+		_: string;
 		_HERMES_GATEWAY: string;
 		SVELTEKIT_FORK: string;
 		[key: `PUBLIC_${string}`]: undefined;
