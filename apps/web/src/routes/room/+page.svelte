@@ -62,7 +62,7 @@
   let showChat = $state(false);
 
   // Reactions
-  let activeReactions = $state(new Map());
+  let activeReactions = new Map();
   let reactionIdCounter = $state(0);
 
   // ─── Connection Health ──────────────────────────────────────────────
@@ -109,6 +109,7 @@
 
   // ─── Lifecycle Cleanup ──────────────────────────────────────────────
   function cleanup() {
+    if (celebrationTimeout) clearTimeout(celebrationTimeout);
     stopSharing();
     if (socket) {
       socket.emit('host:close-room', { roomId });
@@ -171,6 +172,7 @@
   }
 
   // First viewer celebration
+  let celebrationTimeout = null;
   let showFirstViewerCelebration = $state(false);
   let confettiParticles = $state([]);
 
@@ -210,7 +212,12 @@
 
   // Room info
   const roomId = crypto.randomUUID();
-  const pin = String(Math.floor(100000 + Math.random() * 900000));
+  function generatePin() {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return String(100000 + (arr[0] % 900000));
+  }
+  const pin = generatePin();
   const roomUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}`;
 
   // Attach stream to video element when both are available
@@ -395,6 +402,12 @@
   function initSocket() {
     const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
     socket = io(wsUrl, { transports: ['websocket'] });
+
+    socket.on('connect_error', (err) => {
+      error = 'No se pudo conectar al servidor. Verifica tu conexión.';
+      loading = false;
+      setTimeout(() => { error = ''; }, 5000);
+    });
 
     socket.on('connect', () => {
       connected = true;
@@ -828,7 +841,7 @@
       });
     }
     confettiParticles = particles;
-    setTimeout(() => {
+    celebrationTimeout = setTimeout(() => {
       showFirstViewerCelebration = false;
       confettiParticles = [];
     }, 3500);
