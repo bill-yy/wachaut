@@ -34,7 +34,7 @@ interface Peer {
   role: 'host' | 'viewer';
   sendTransport?: mediasoup.types.WebRtcTransport;
   recvTransport?: mediasoup.types.WebRtcTransport;
-  producer?: mediasoup.types.Producer;
+  producers: mediasoup.types.Producer[];
   consumers: Map<string, mediasoup.types.Consumer>;
 }
 
@@ -146,15 +146,6 @@ fastify.get('/health', async () => ({
   totalPeers: Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0),
 }));
 
-fastify.get('/rtp-capabilities', async (_req, reply) => {
-  if (workers.length === 0) {
-    reply.status(503);
-    return { error: 'Router not ready' };
-  }
-  // Use any available room's router or create a temp reference
-  return { error: 'Use socket join-room to get rtpCapabilities' };
-});
-
 // ─── Socket.IO ─────────────────────────────────────────────────────────
 const io = new Server(fastify.server, {
   cors: {
@@ -215,6 +206,7 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       displayName,
       role,
+      producers: [],
       consumers: new Map(),
     };
 
@@ -224,15 +216,17 @@ io.on('connection', (socket) => {
 
     socket.join(roomId);
 
-    // Collect existing producers for the new peer
+    // Collect ALL existing producers for the new peer
     const existingProducers: Array<{ producerId: string; kind: string; peerId: string }> = [];
     for (const [peerId, p] of room.peers) {
-      if (peerId !== socket.id && p.producer) {
-        existingProducers.push({
-          producerId: p.producer.id,
-          kind: p.producer.kind,
-          peerId,
-        });
+      if (peerId !== socket.id) {
+        for (const prod of p.producers) {
+          existingProducers.push({
+            producerId: prod.id,
+            kind: prod.kind,
+            peerId,
+          });
+        }
       }
     }
 
@@ -244,7 +238,7 @@ io.on('connection', (socket) => {
         id: p.id,
         displayName: p.displayName,
         role: p.role,
-        hasProducer: !!p.producer,
+        producerCount: p.producers.length,
       })),
       existingProducers,
     });
@@ -256,7 +250,7 @@ io.on('connection', (socket) => {
       role,
     });
 
-    console.log(`[sfu] ${displayName} joined room ${roomId} (${room.peers.size} peers)`);
+    console.log(`[sfu] ${displayName} joined room ${roomId} (${room.peers.size} peers, ${existingProducers.length} existing producers)`);
   });
 
   // ── Create WebRTC Transport ────────────────────────────────────────
@@ -292,18 +286,22 @@ io.on('connection', (socket) => {
       dtlsParameters: transport.dtlsParameters,
     });
 
-    // AUTO-CONSUME: when a viewer creates a recv transport, consume all existing producers
+    // AUTO-CONSUME: when a viewer creates a recv transport, consume ALL existing producers
     if (direction === 'cons' && peer && peer.role === 'viewer') {
       console.log(`[sfu] Viewer ${peer.displayName} created recv transport, checking for existing producers...`);
       for (const [, otherPeer] of room.peers) {
-        if (otherPeer.producer && otherPeer.id !== socket.id) {
-          const canConsume = room.router.canConsume({
-            producerId: otherPeer.producer.id,
-            rtpCapabilities: room.router.rtpCapabilities,
-          });
-          console.log(`[sfu] Auto-consume for ${peer.displayName}: producer ${otherPeer.producer.id} (${otherPeer.producer.kind}), canConsume: ${canConsume}`);
-          if (canConsume) {
-            await createConsumer(room, otherPeer.producer, peer);
+        if (otherPeer.id !== socket.id) {
+          for (const producer of otherPeer.producers) {
+            console.log(`[sfu] Auto-consume for ${peer.displayName}: producer ${producer.id} (${producer.kind}) from ${otherPeer.displayName}`);
+            const canConsume = room.router.canConsume({
+              producerId: producer.id,
+              rtpCapabilities: room.router.rtpCapabilities,
+            });
+            if (canConsume) {
+              await createConsumer(room, producer, peer);
+            } else {
+              console.log(`[sfu] canConsume=false for ${producer.id}`);
+            }
           }
         }
       }
@@ -315,7 +313,6 @@ io.on('connection', (socket) => {
     const peer = socketToPeer.get(socket.id);
     if (!peer) { callback?.({ error: 'No peer' }); return; }
 
-    // Check both send and recv transports
     const transport = peer.sendTransport?.id === transportId
       ? peer.sendTransport
       : peer.recvTransport?.id === transportId
@@ -340,8 +337,9 @@ io.on('connection', (socket) => {
       appData: { ...appData, peerId: socket.id },
     });
 
-    peer.producer = producer;
-    console.log(`[sfu] Producer ${producer.id} created by ${peer.displayName} (${kind})`);
+    // Store producer in array (host creates video + audio)
+    peer.producers.push(producer);
+    console.log(`[sfu] Producer ${producer.id} (${kind}) created by ${peer.displayName}, total producers: ${peer.producers.length}`);
 
     // Auto-consume for all viewers that have recv transports
     for (const [viewerId, viewer] of room.peers) {
@@ -354,8 +352,6 @@ io.on('connection', (socket) => {
         if (canConsume) {
           await createConsumer(room, producer, viewer);
         }
-      } else if (viewerId !== socket.id && !viewer.recvTransport) {
-        console.log(`[sfu] Skipping viewer ${viewer.displayName} — no recv transport yet`);
       }
     }
 
@@ -365,16 +361,10 @@ io.on('connection', (socket) => {
   // ── Close Producer ─────────────────────────────────────────────────
   socket.on('close-producer', async ({ producerId }, callback) => {
     const peer = socketToPeer.get(socket.id);
-    if (peer?.producer?.id === producerId) {
-      peer.producer.close();
-      peer.producer = undefined;
-
-      // Close all consumers that were consuming this producer
-      for (const [, consumer] of peer.consumers) {
-        if (consumer.producerId === producerId) {
-          consumer.close();
-        }
-      }
+    const idx = peer?.producers.findIndex((p) => p.id === producerId) ?? -1;
+    if (idx >= 0) {
+      peer!.producers[idx].close();
+      peer!.producers.splice(idx, 1);
     }
     callback?.({ ok: true });
   });
@@ -385,28 +375,8 @@ io.on('connection', (socket) => {
     const consumer = peer?.consumers.get(consumerId);
     if (consumer) {
       await consumer.resume();
+      console.log(`[sfu] Consumer ${consumerId} resumed for ${peer?.displayName}`);
     }
-    callback?.({ ok: true });
-  });
-
-  // ── Get RTP Parameters for Consumer ────────────────────────────────
-  socket.on('consume', async ({ producerId }, callback) => {
-    const room = getRoom(socket);
-    const peer = socketToPeer.get(socket.id);
-    if (!room || !peer?.recvTransport) { callback?.({ error: 'Not ready' }); return; }
-
-    // Find the producer
-    let producer: mediasoup.types.Producer | undefined;
-    for (const [, p] of room.peers) {
-      if (p.producer?.id === producerId) {
-        producer = p.producer;
-        break;
-      }
-    }
-
-    if (!producer) { callback?.({ error: 'Producer not found' }); return; }
-
-    await createConsumer(room, producer, peer);
     callback?.({ ok: true });
   });
 
@@ -418,17 +388,18 @@ io.on('connection', (socket) => {
     if (roomId && peer) {
       const room = rooms.get(roomId);
       if (room) {
-        // Close peer's producer
-        peer.producer?.close();
-
-        // Close all consumers referencing this peer's producer
-        for (const [, p] of room.peers) {
-          for (const [cId, consumer] of p.consumers) {
-            if (consumer.producerId === peer.producer?.id) {
-              consumer.close();
-              p.consumers.delete(cId);
+        // Close all peer's producers
+        for (const producer of peer.producers) {
+          // Close all consumers referencing this producer
+          for (const [, p] of room.peers) {
+            for (const [cId, consumer] of p.consumers) {
+              if (consumer.producerId === producer.id) {
+                consumer.close();
+                p.consumers.delete(cId);
+              }
             }
           }
+          producer.close();
         }
 
         // Close peer's transports
@@ -449,7 +420,7 @@ io.on('connection', (socket) => {
           for (const [, p] of room.peers) {
             p.sendTransport?.close();
             p.recvTransport?.close();
-            p.producer?.close();
+            for (const prod of p.producers) prod.close();
             for (const [, c] of p.consumers) c.close();
           }
           room.router.close();
