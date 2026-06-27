@@ -208,14 +208,14 @@
   let showViewersPanel = $state(false);
 
   // Room info
-  const roomId = crypto.randomUUID();
+  let roomId = $state(crypto.randomUUID());
   function generatePin() {
     const arr = new Uint32Array(1);
     crypto.getRandomValues(arr);
     return String(100000 + (arr[0] % 900000));
   }
   const pin = generatePin();
-  const roomUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}`;
+  const roomUrl = $derived(`${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}`);
 
   // Attach stream to video element when both are available
   $effect(() => {
@@ -409,22 +409,28 @@
     socket.on('connect', () => {
       connected = true;
       socket.emit('host:create-room', { roomId, pin });
-      // Connect to SFU for media routing
-      const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
-      sfuClient = new SfuClient(sfuUrl);
-      sfuClient.on('error', (msg) => {
-        console.error('[sfu]', msg);
+      // Wait for server to confirm with the actual roomId
+      socket.once('room:created', (data) => {
+        if (data?.roomId) {
+          roomId = data.roomId;
+          // Connect to SFU with the server-assigned roomId
+          const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
+          sfuClient = new SfuClient(sfuUrl);
+          sfuClient.on('error', (msg) => {
+            console.error('[sfu]', msg);
+          });
+          sfuClient.on('peer-joined', (d) => {
+            console.log('[sfu] peer-joined:', d);
+          });
+          sfuClient.on('peer-left', (d) => {
+            console.log('[sfu] peer-left:', d);
+          });
+          sfuClient.joinRoom(roomId, pin, 'Anfitrión', 'host')
+            .then(() => { console.log('[sfu] joined room'); })
+            .catch((err) => { console.error('[sfu] join failed:', err); });
+        }
+        setTimeout(() => { loading = false; }, 800);
       });
-      sfuClient.on('peer-joined', (data) => {
-        console.log('[sfu] peer-joined:', data);
-      });
-      sfuClient.on('peer-left', (data) => {
-        console.log('[sfu] peer-left:', data);
-      });
-      sfuClient.joinRoom(roomId, pin, 'Anfitrión', 'host')
-        .then(() => { console.log('[sfu] joined room'); })
-        .catch((err) => { console.error('[sfu] join failed:', err); });
-      setTimeout(() => { loading = false; }, 800);
     });
 
     socket.on('disconnect', () => {
