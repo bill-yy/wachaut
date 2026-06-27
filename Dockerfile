@@ -13,7 +13,7 @@ WORKDIR /app
 FROM base AS builder
 COPY . .
 ENV VITE_WS_URL=wss://api-wachaut.billytech.es
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter @wachaut/web --filter @wachaut/server
 RUN pnpm --filter @wachaut/web build
 RUN pnpm --filter @wachaut/server build
 
