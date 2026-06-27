@@ -1,5 +1,7 @@
 import { d as sanitize_props, f as slot, p as spread_props } from "./server.js";
 import { n as Icon } from "./monitor.js";
+import { io } from "socket.io-client";
+import * as mediasoupClient from "mediasoup-client";
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/bell-off.svelte
 function Bell_off($$renderer, $$props) {
 	/**
@@ -63,6 +65,45 @@ function Bell($$renderer, $$props) {
 			*
 			*/
 			iconNode: [["path", { "d": "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" }], ["path", { "d": "M10.3 21a1.94 1.94 0 0 0 3.4 0" }]],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/maximize.svelte
+function Maximize($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "maximize" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name Maximize
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNOCAzSDVhMiAyIDAgMCAwLTIgMnYzIiAvPgogIDxwYXRoIGQ9Ik0yMSA4VjVhMiAyIDAgMCAwLTItMmgtMyIgLz4KICA8cGF0aCBkPSJNMyAxNnYzYTIgMiAwIDAgMCAyIDJoMyIgLz4KICA8cGF0aCBkPSJNMTYgMjFoM2EyIDIgMCAwIDAgMi0ydi0zIiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/maximize
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [
+				["path", { "d": "M8 3H5a2 2 0 0 0-2 2v3" }],
+				["path", { "d": "M21 8V5a2 2 0 0 0-2-2h-3" }],
+				["path", { "d": "M3 16v3a2 2 0 0 0 2 2h3" }],
+				["path", { "d": "M16 21h3a2 2 0 0 0 2-2v-3" }]
+			],
 			children: ($$renderer) => {
 				$$renderer.push(`<!--[-->`);
 				slot($$renderer, $$props, "default", {}, null);
@@ -203,6 +244,105 @@ function Share_2($$renderer, $$props) {
 	]));
 }
 //#endregion
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/smile-plus.svelte
+function Smile_plus($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "smile-plus" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name SmilePlus
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMjIgMTF2MWExMCAxMCAwIDEgMS05LTEwIiAvPgogIDxwYXRoIGQ9Ik04IDE0czEuNSAyIDQgMiA0LTIgNC0yIiAvPgogIDxsaW5lIHgxPSI5IiB4Mj0iOS4wMSIgeTE9IjkiIHkyPSI5IiAvPgogIDxsaW5lIHgxPSIxNSIgeDI9IjE1LjAxIiB5MT0iOSIgeTI9IjkiIC8+CiAgPHBhdGggZD0iTTE2IDVoNiIgLz4KICA8cGF0aCBkPSJNMTkgMnY2IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/smile-plus
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [
+				["path", { "d": "M22 11v1a10 10 0 1 1-9-10" }],
+				["path", { "d": "M8 14s1.5 2 4 2 4-2 4-2" }],
+				["line", {
+					"x1": "9",
+					"x2": "9.01",
+					"y1": "9",
+					"y2": "9"
+				}],
+				["line", {
+					"x1": "15",
+					"x2": "15.01",
+					"y1": "9",
+					"y2": "9"
+				}],
+				["path", { "d": "M16 5h6" }],
+				["path", { "d": "M19 2v6" }]
+			],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
+//#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/volume-x.svelte
+function Volume_x($$renderer, $$props) {
+	/**
+	* @license lucide-svelte v0.460.1 - ISC
+	*
+	* This source code is licensed under the ISC license.
+	* See the LICENSE file in the root directory of this source tree.
+	*/
+	Icon($$renderer, spread_props([
+		{ name: "volume-x" },
+		sanitize_props($$props),
+		{
+			/**
+			* @component @name VolumeX
+			* @description Lucide SVG icon component, renders SVG Element with children.
+			*
+			* @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8cGF0aCBkPSJNMTEgNC43MDJhLjcwNS43MDUgMCAwIDAtMS4yMDMtLjQ5OEw2LjQxMyA3LjU4N0ExLjQgMS40IDAgMCAxIDUuNDE2IDhIM2ExIDEgMCAwIDAtMSAxdjZhMSAxIDAgMCAwIDEgMWgyLjQxNmExLjQgMS40IDAgMCAxIC45OTcuNDEzbDMuMzgzIDMuMzg0QS43MDUuNzA1IDAgMCAwIDExIDE5LjI5OHoiIC8+CiAgPGxpbmUgeDE9IjIyIiB4Mj0iMTYiIHkxPSI5IiB5Mj0iMTUiIC8+CiAgPGxpbmUgeDE9IjE2IiB4Mj0iMjIiIHkxPSI5IiB5Mj0iMTUiIC8+Cjwvc3ZnPgo=) - https://lucide.dev/icons/volume-x
+			* @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
+			*
+			* @param {Object} props - Lucide icons props and any valid SVG attribute
+			* @returns {FunctionalComponent} Svelte component
+			*
+			*/
+			iconNode: [
+				["path", { "d": "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" }],
+				["line", {
+					"x1": "22",
+					"x2": "16",
+					"y1": "9",
+					"y2": "15"
+				}],
+				["line", {
+					"x1": "16",
+					"x2": "22",
+					"y1": "9",
+					"y2": "15"
+				}]
+			],
+			children: ($$renderer) => {
+				$$renderer.push(`<!--[-->`);
+				slot($$renderer, $$props, "default", {}, null);
+				$$renderer.push(`<!--]-->`);
+			},
+			$$slots: { default: true }
+		}
+	]));
+}
+//#endregion
 //#region ../../node_modules/.pnpm/lucide-svelte@0.460.1_svelte@5.56.4_@typescript-eslint+types@8.62.0_/node_modules/lucide-svelte/dist/icons/triangle-alert.svelte
 function Triangle_alert($$renderer, $$props) {
 	/**
@@ -241,6 +381,183 @@ function Triangle_alert($$renderer, $$props) {
 	]));
 }
 //#endregion
+//#region src/lib/sfu-client.ts
+/**
+* Wachaut SFU Client — wraps mediasoup-client for use in Svelte 5.
+*
+* Usage:
+*   const sfu = new SfuClient('wss://api-sfu-wachaut.billytech.es');
+*   await sfu.joinRoom(roomId, pin, displayName, 'viewer');
+*   const stream = await sfu.consume();
+*/
+var SfuClient = class {
+	#socket = null;
+	#device;
+	#sendTransport = null;
+	#recvTransport = null;
+	#producer = null;
+	#consumers = /* @__PURE__ */ new Map();
+	#url;
+	#listeners = /* @__PURE__ */ new Map();
+	constructor(url) {
+		this.#url = url;
+		this.#device = new mediasoupClient.Device();
+	}
+	on(event, fn) {
+		if (!this.#listeners.has(event)) this.#listeners.set(event, []);
+		this.#listeners.get(event).push(fn);
+	}
+	off(event, fn) {
+		const fns = this.#listeners.get(event);
+		if (fns) this.#listeners.set(event, fns.filter((f) => f !== fn));
+	}
+	#emit(event, ...args) {
+		this.#listeners.get(event)?.forEach((fn) => fn(...args));
+	}
+	async joinRoom(roomId, pin, displayName, role) {
+		return new Promise((resolve, reject) => {
+			this.#socket = io(this.#url, { transports: ["websocket"] });
+			this.#socket.on("connect", () => {
+				this.#socket.emit("join-room", {
+					roomId,
+					pin,
+					displayName,
+					role
+				}, async (response) => {
+					if (response.error) {
+						reject(new Error(response.error));
+						return;
+					}
+					await this.#device.load({ routerRtpCapabilities: response.rtpCapabilities });
+					this.#emit("connected");
+					resolve(response);
+				});
+			});
+			this.#socket.on("disconnect", (reason) => {
+				this.#emit("disconnected", reason);
+			});
+			this.#socket.on("peer-joined", (data) => {
+				this.#emit("peer-joined", data);
+			});
+			this.#socket.on("peer-left", (data) => {
+				this.#emit("peer-left", data);
+			});
+			this.#socket.on("new-consumer", async (data) => {
+				await this.#handleNewConsumer(data);
+			});
+			this.#socket.on("connect_error", (err) => {
+				reject(err);
+			});
+		});
+	}
+	async produce(screenStream) {
+		if (!this.#device.loaded) throw new Error("Device not loaded");
+		const transportParams = await this.#createTransport("prod");
+		this.#sendTransport = this.#device.createSendTransport(transportParams);
+		this.#sendTransport.on("connect", async ({ dtlsParameters }, callback) => {
+			this.#socket.emit("connect-transport", {
+				transportId: this.#sendTransport.id,
+				dtlsParameters
+			});
+			callback();
+		});
+		this.#sendTransport.on("produce", async ({ kind, rtpParameters, appData }, callback) => {
+			callback({ id: (await new Promise((resolve) => {
+				this.#socket.emit("produce", {
+					transportId: this.#sendTransport.id,
+					kind,
+					rtpParameters,
+					appData
+				}, resolve);
+			})).id });
+		});
+		const videoTrack = screenStream.getVideoTracks()[0];
+		if (videoTrack) this.#producer = await this.#sendTransport.produce({
+			track: videoTrack,
+			appData: { mediaTag: "screen-video" },
+			encodings: [{
+				maxBitrate: 5e6,
+				scaleXResolutionDownBy: 1
+			}],
+			codecOptions: { videoGoogleStartBitrate: 1e6 }
+		});
+		const audioTrack = screenStream.getAudioTracks()[0];
+		if (audioTrack) await this.#sendTransport.produce({
+			track: audioTrack,
+			appData: { mediaTag: "screen-audio" }
+		});
+	}
+	async consume() {
+		if (!this.#device.loaded) throw new Error("Device not loaded");
+		const transportParams = await this.#createTransport("cons");
+		this.#recvTransport = this.#device.createRecvTransport(transportParams);
+		this.#recvTransport.on("connect", async ({ dtlsParameters }, callback) => {
+			this.#socket.emit("connect-transport", {
+				transportId: this.#recvTransport.id,
+				dtlsParameters
+			});
+			callback();
+		});
+		const stream = new MediaStream();
+		this.#socket.on("new-consumer", async (data) => {
+			const consumer = await this.#handleNewConsumer(data);
+			if (consumer) {
+				stream.addTrack(consumer.track);
+				this.#emit("stream-ready", stream);
+			}
+		});
+		return stream;
+	}
+	async #handleNewConsumer(data) {
+		if (!this.#recvTransport) return null;
+		const consumer = await this.#recvTransport.consume({
+			id: data.consumerId,
+			producerId: data.producerId,
+			kind: data.kind,
+			rtpParameters: data.rtpParameters
+		});
+		this.#consumers.set(consumer.id, consumer);
+		this.#socket.emit("resume-consumer", { consumerId: consumer.id });
+		return consumer;
+	}
+	async #createTransport(direction) {
+		return new Promise((resolve) => {
+			this.#socket.emit("create-transport", { direction }, resolve);
+		});
+	}
+	stopProducing() {
+		if (this.#producer) {
+			this.#producer.close();
+			this.#socket?.emit("close-producer", { producerId: this.#producer.id });
+			this.#producer = null;
+		}
+	}
+	/**
+	* Get RTC stats from the receive transport's internal PeerConnection.
+	* Returns null if no receive transport is active.
+	*/
+	async getStats() {
+		if (!this.#recvTransport) return null;
+		try {
+			const pc = this.#recvTransport._handler?._pc;
+			if (pc && typeof pc.getStats === "function") return await pc.getStats();
+		} catch (err) {
+			console.error("[sfu-client] getStats error:", err);
+		}
+		return null;
+	}
+	disconnect() {
+		this.stopProducing();
+		for (const [, consumer] of this.#consumers) consumer.close();
+		this.#consumers.clear();
+		this.#sendTransport?.close();
+		this.#recvTransport?.close();
+		this.#socket?.disconnect();
+		this.#socket = null;
+		this.#listeners.clear();
+	}
+};
+//#endregion
 //#region src/lib/notificationSounds.js
 /**
 * Web Audio API notification sounds for Wachaut.
@@ -250,7 +567,11 @@ var audioCtx = null;
 var NOTIFICATIONS_STORAGE_KEY = "wachaut.notifications.muted";
 var NOTIFICATIONS_VOLUME_KEY = "wachaut.notifications.volume";
 function getCtx() {
-	if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+	if (!audioCtx) try {
+		audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+	} catch {
+		return null;
+	}
 	return audioCtx;
 }
 function isMuted() {
@@ -277,6 +598,7 @@ function getVolume() {
 function playTonePair(freq1, freq2, duration = .08) {
 	if (isMuted()) return;
 	const ctx = getCtx();
+	if (!ctx) return;
 	const vol = getVolume();
 	const now = ctx.currentTime;
 	const osc1 = ctx.createOscillator();
@@ -313,11 +635,32 @@ function playViewerLeave() {
 	playTonePair(660, 440, .07);
 }
 /**
+* Host muted — single low tone
+*/
+function playHostMuted() {
+	if (isMuted()) return;
+	const ctx = getCtx();
+	if (!ctx) return;
+	const vol = getVolume();
+	const now = ctx.currentTime;
+	const osc = ctx.createOscillator();
+	const gain = ctx.createGain();
+	osc.frequency.value = 330;
+	osc.type = "sine";
+	gain.gain.setValueAtTime(vol * .4, now);
+	gain.gain.exponentialRampToValueAtTime(.001, now + .2);
+	osc.connect(gain);
+	gain.connect(ctx.destination);
+	osc.start(now);
+	osc.stop(now + .2);
+}
+/**
 * New chat message — very subtle soft click/tap
 */
 function playChatMessage() {
 	if (isMuted()) return;
 	const ctx = getCtx();
+	if (!ctx) return;
 	const vol = getVolume();
 	const now = ctx.currentTime;
 	const osc = ctx.createOscillator();
@@ -332,4 +675,4 @@ function playChatMessage() {
 	osc.stop(now + .05);
 }
 //#endregion
-export { Triangle_alert as a, Message_circle as c, playViewerLeave as i, Bell as l, playChatMessage as n, Share_2 as o, playViewerJoin as r, Send as s, isMuted as t, Bell_off as u };
+export { playViewerLeave as a, Volume_x as c, Send as d, Message_circle as f, Bell_off as h, playViewerJoin as i, Smile_plus as l, Bell as m, playChatMessage as n, SfuClient as o, Maximize as p, playHostMuted as r, Triangle_alert as s, isMuted as t, Share_2 as u };

@@ -149,7 +149,7 @@
       "_server.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.BSQtW-Ha.css"
+      "_app/immutable/assets/_layout.DuHZZyou.css"
     ]
   },
   "src/routes/+layout.ts": {
@@ -184,7 +184,7 @@
       "_navigation.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.DrAm8rXH.css"
+      "_app/immutable/assets/_page.DolCDlq-.css"
     ]
   },
   "src/routes/room/[roomId]/+page.svelte": {
@@ -201,7 +201,7 @@
       "_wifi.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.pDu00E1x.css"
+      "_app/immutable/assets/_page.DTNd2lNQ.css"
     ]
   },
   "virtual:__sveltekit/env": {

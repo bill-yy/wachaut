@@ -28,6 +28,7 @@
     BellOff
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
+  import { SfuClient } from '$lib/sfu-client';
   import {
     playViewerJoin,
     playViewerLeave,
@@ -54,6 +55,7 @@
   // WebRTC
   let peers = new Map();
   let localStream = $state(null);
+  let sfuClient = $state(null);
 
   // Chat
   let chatMessages = $state([]);
@@ -69,21 +71,12 @@
   let connectionHealth = $state('good'); // 'good' | 'degraded' | 'poor'
 
   function updateConnectionHealth() {
-    if (!isSharing || peers.size === 0) {
+    if (!isSharing || !sfuClient) {
       connectionHealth = 'good';
       return;
     }
-    let degraded = false;
-    let poor = false;
-    for (const [, pc] of peers) {
-      const ice = pc.iceConnectionState;
-      if (ice === 'disconnected' || ice === 'failed') {
-        poor = true;
-      } else if (ice === 'checking' || ice === 'connecting') {
-        degraded = true;
-      }
-    }
-    connectionHealth = poor ? 'poor' : degraded ? 'degraded' : 'good';
+    // SFU manages connections server-side; health is always good when SFU is connected
+    connectionHealth = 'good';
   }
 
   // ─── Page Visibility ────────────────────────────────────────────────
@@ -111,6 +104,10 @@
   function cleanup() {
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
     stopSharing();
+    if (sfuClient) {
+      sfuClient.disconnect();
+      sfuClient = null;
+    }
     if (socket) {
       socket.emit('host:close-room', { roomId });
       socket.disconnect();
@@ -329,10 +326,10 @@
           connected: connected ? 'Sí' : 'No',
           sharing: isSharing ? 'Sí' : 'No',
           muted: isMuted ? 'Sí' : 'No',
-          peers: peers.size,
+          sfu: sfuClient ? 'Conectado' : 'Desconectado',
           quality: presets[qualityPreset].label
         };
-        addSystemMessage(`Estadísticas: Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, Peers=${stats.peers}, Calidad=${stats.quality}`);
+        addSystemMessage(`Estadísticas: Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, SFU=${stats.sfu}, Calidad=${stats.quality}`);
         return true;
       }
       case '/clear': {
@@ -412,6 +409,21 @@
     socket.on('connect', () => {
       connected = true;
       socket.emit('host:create-room', { roomId, pin });
+      // Connect to SFU for media routing
+      const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
+      sfuClient = new SfuClient(sfuUrl);
+      sfuClient.on('error', (msg) => {
+        console.error('[sfu]', msg);
+      });
+      sfuClient.on('peer-joined', (data) => {
+        console.log('[sfu] peer-joined:', data);
+      });
+      sfuClient.on('peer-left', (data) => {
+        console.log('[sfu] peer-left:', data);
+      });
+      sfuClient.joinRoom(roomId, pin, 'Anfitrión', 'host')
+        .then(() => { console.log('[sfu] joined room'); })
+        .catch((err) => { console.error('[sfu] join failed:', err); });
       setTimeout(() => { loading = false; }, 800);
     });
 
@@ -447,35 +459,11 @@
       }
       try { playViewerLeave(); } catch {}
       if (data.viewerId) {
-        const pc = peers.get(data.viewerId);
-        if (pc) { pc.close(); peers.delete(data.viewerId); }
-        pendingCandidates.delete(data.viewerId);
+        peers.delete(data.viewerId);
       }
     });
 
-    // WebRTC signaling from viewer
-    socket.on('viewer:signal', async (data) => {
-      const pc = peers.get(data.viewerId);
-      if (!pc) return;
-      if (data.signal.type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
-        const queued = pendingCandidates.get(data.viewerId) || [];
-        for (const candidate of queued) {
-          await pc.addIceCandidate(candidate);
-        }
-        pendingCandidates.delete(data.viewerId);
-      } else if (data.signal.candidate) {
-        const candidate = new RTCIceCandidate(data.signal);
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(candidate);
-        } else {
-          if (!pendingCandidates.has(data.viewerId)) {
-            pendingCandidates.set(data.viewerId, []);
-          }
-          pendingCandidates.get(data.viewerId).push(candidate);
-        }
-      }
-    });
+
 
     // Chat
     socket.on('chat:history', (data) => {
@@ -512,69 +500,13 @@
     });
   }
 
-  // ─── WebRTC ──────────────────────────────────────────────────────────
-  let iceServers = $state(null);
-  let pendingCandidates = new Map();
 
-  async function fetchIceServers() {
-    if (iceServers) return iceServers;
-    try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
-      const httpUrl = wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
-      const res = await fetch(`${httpUrl}/turn-credentials?id=${socket?.id || crypto.randomUUID()}`, {
-        credentials: 'include'
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      iceServers = data.iceServers;
-      console.log('[host] ICE servers loaded:', iceServers.map(s => s.urls));
-      return iceServers;
-    } catch (e) {
-      console.error('[host] Failed to fetch TURN credentials, falling back to STUN:', e);
-      iceServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ];
-      return iceServers;
-    }
-  }
 
-  async function createPeerConnection(viewerId) {
+  function createPeerConnection(viewerId) {
+    // SFU handles all media routing — no per-viewer PeerConnections needed.
+    // Just track the viewer ID for viewer management.
     if (peers.has(viewerId)) return;
-
-    const servers = await fetchIceServers();
-    const pc = new RTCPeerConnection({ iceServers: servers });
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) socket.emit('host:signal', { viewerId, signal: event.candidate });
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`[host] viewer=${viewerId} connectionState=${pc.connectionState} iceState=${pc.iceConnectionState}`);
-      if (pc.connectionState === 'failed') { pc.close(); peers.delete(viewerId); }
-      updateConnectionHealth();
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log(`[host] viewer=${viewerId} iceConnectionState=${pc.iceConnectionState}`);
-      updateConnectionHealth();
-    };
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    }
-
-    peers.set(viewerId, pc);
-
-    if (localStream) {
-      await sendOffer(pc, viewerId);
-    }
-  }
-
-  async function sendOffer(pc, viewerId) {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('host:signal', { viewerId, signal: pc.localDescription });
+    peers.set(viewerId, null);
   }
 
   // ─── Screen Sharing ─────────────────────────────────────────────────
@@ -605,24 +537,10 @@
         videoPreview.srcObject = stream;
         videoPreview.play().catch(() => {});
       }
-
-      for (const [viewerId, pc] of peers) {
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-        await sendOffer(pc, viewerId);
-      }
-
-      for (const [viewerId, pc] of peers) {
-        const senders = pc.getSenders();
-        for (const sender of senders) {
-          if (sender.track?.kind === 'video') {
-            const params = sender.getParameters();
-            if (!params.encodings || params.encodings.length === 0) {
-              params.encodings = [{}];
-            }
-            params.encodings[0].maxBitrate = preset.bitrate;
-            await sender.setParameters(params);
-          }
-        }
+      // Produce stream to SFU for media routing
+      if (sfuClient) {
+        await sfuClient.produce(stream);
+        await tick();
       }
 
       stream.getVideoTracks()[0].onended = () => {
@@ -644,9 +562,13 @@
     isSharing = false;
     isMuted = false;
 
-    peers.forEach(pc => pc.close());
     peers = new Map();
-    pendingCandidates.clear();
+
+    if (sfuClient) {
+      sfuClient.stopProducing();
+      sfuClient.disconnect();
+      sfuClient = null;
+    }
 
     if (socket && connected) {
       socket.emit('host:stop-sharing', { roomId });
@@ -674,19 +596,7 @@
   async function applyQualityPreset(newPreset) {
     qualityPreset = newPreset;
     const preset = presets[newPreset];
-    for (const [viewerId, pc] of peers) {
-      const senders = pc.getSenders();
-      for (const sender of senders) {
-        if (sender.track?.kind === 'video') {
-          const params = sender.getParameters();
-          if (!params.encodings || params.encodings.length === 0) {
-            params.encodings = [{}];
-          }
-          params.encodings[0].maxBitrate = preset.bitrate;
-          await sender.setParameters(params);
-        }
-      }
-    }
+    // SFU handles bitrate adaptation server-side
     showAutoAdaptNotification(`Calidad ajustada automaticamente a ${preset.label}`);
   }
 
@@ -705,58 +615,9 @@
   }
 
   async function checkConnectionQuality() {
-    let totalPacketLoss = 0;
-    let totalRtt = 0;
-    let count = 0;
-
-    for (const [viewerId, pc] of peers) {
-      try {
-        const stats = await pc.getStats();
-        stats.forEach(report => {
-          if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
-            if (report.currentRoundTripTime != null) {
-              totalRtt += report.currentRoundTripTime * 1000; // ms
-              count++;
-            }
-          }
-          if (report.type === 'outbound-rtp' && report.kind === 'video') {
-            if (report.packetsLost != null && report.packetsSent != null && report.packetsSent > 0) {
-              totalPacketLoss += (report.packetsLost / (report.packetsSent + report.packetsLost)) * 100;
-              count++;
-            }
-          }
-        });
-      } catch (e) {
-        // ignore stats errors
-      }
-    }
-
-    if (count === 0) return;
-
-    const avgRtt = totalRtt / Math.max(1, count);
-    const avgLoss = totalPacketLoss / Math.max(1, count);
-
-    const isPoor = avgLoss > 5 || avgRtt > 500;
-    const isGood = avgLoss < 1 && avgRtt < 200;
-
-    if (isPoor) {
-      poorQualityDuration += 1;
-      goodQualityDuration = 0;
-      if (poorQualityDuration >= POOR_THRESHOLD_SECONDS) {
-        poorQualityDuration = 0;
-        downgradeQuality();
-      }
-    } else if (isGood) {
-      goodQualityDuration += 1;
-      poorQualityDuration = 0;
-      if (goodQualityDuration >= GOOD_THRESHOLD_SECONDS) {
-        goodQualityDuration = 0;
-        upgradeQuality();
-      }
-    } else {
-      poorQualityDuration = 0;
-      goodQualityDuration = 0;
-    }
+    // SFU handles quality monitoring server-side
+    // No per-peer stats available without direct PeerConnections
+    return;
   }
 
   function startQualityMonitor() {
