@@ -42,6 +42,9 @@ interface ChatMessage {
 const rooms = new Map<string, Room>();
 const viewerToRoom = new Map<string, string>(); // socketId -> roomId
 
+// Per-room join attempt rate limiting
+const joinAttempts = new Map<string, { count: number; resetAt: number }>(); // `${ip}:${roomId}` -> rate info
+
 // Rate limiting
 const connectionCounts = new Map<string, number>(); // IP -> count
 const eventCounts = new Map<string, { count: number; resetAt: number }>(); // socketId -> rate info
@@ -131,13 +134,19 @@ for (const [roomId, room] of rooms) {
 }
 
 // Cleanup rate limit entries
-const nowMs = Date.now();
-for (const [key, entry] of eventCounts) {
-  if (nowMs > entry.resetAt) {
-    eventCounts.delete(key);
-  }
-}
-}, 5 * 60 * 1000);
+    const nowMs = Date.now();
+    for (const [key, entry] of eventCounts) {
+      if (nowMs > entry.resetAt) {
+        eventCounts.delete(key);
+      }
+    }
+    // Cleanup join attempt rate limits
+    for (const [key, entry] of joinAttempts) {
+      if (nowMs > entry.resetAt) {
+        joinAttempts.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000);
 
 // Socket.IO setup
 const io = new Server(fastify.server, {
@@ -205,7 +214,7 @@ io.on('connection', (socket) => {
 
   // ─── HOST EVENTS ────────────────────────────────────────
 
-  socket.on('host:create-room', ({ roomId, pin }: { roomId: string; pin: string }) => {
+  socket.on('host:create-room', ({ pin }: { pin: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
@@ -216,6 +225,7 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const roomId = crypto.randomUUID();
     const room: Room = {
       id: roomId,
       pin,
@@ -227,18 +237,18 @@ io.on('connection', (socket) => {
       isMuted: false
     };
     
-    if (rooms.has(roomId)) {
-      socket.emit('room:error', { message: 'Ya existe una sala con ese ID.' });
-      return;
-    }
-
     rooms.set(roomId, room);
     socket.join(roomId);
+    socket.emit('room:created', { roomId });
     fastify.log.info(`Room created: ${roomId}`);
   });
 
   socket.on('host:signal', ({ viewerId, signal }: { viewerId: string; signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
     if (!checkRateLimit(socket.id)) return;
+    if (!viewerId || typeof viewerId !== 'string' || viewerId.length > 100) return;
+    if (!signal || typeof signal !== 'object') return;
+    const sig = signal as any;
+    if (sig.type && !['offer', 'answer'].includes(sig.type)) return;
     socket.to(viewerId).emit('host:signal', { signal });
   });
 
@@ -347,6 +357,20 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Per-room join attempt rate limiting
+    const joinKey = `${socket.handshake.address}:${roomId}`;
+    const joinAttempt = joinAttempts.get(joinKey);
+    const now = Date.now();
+    if (joinAttempt && now < joinAttempt.resetAt && joinAttempt.count >= 5) {
+      socket.emit('room:error', { message: 'Demasiados intentos. Espera un momento.' });
+      return;
+    }
+    if (!joinAttempt || now > joinAttempt.resetAt) {
+      joinAttempts.set(joinKey, { count: 1, resetAt: now + 300000 }); // 5 min window
+    } else {
+      joinAttempt.count++;
+    }
+
     const requestedUsername = sanitizeUsername(username);
     if (requestedUsername.length < 2) {
       socket.emit('room:auth-failed', { message: 'Elige un username de al menos 2 caracteres.' });
@@ -365,6 +389,8 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // PIN correct - reset join attempts
+    joinAttempts.delete(joinKey);
     socket.emit('room:auth-success');
     
     if (room.viewers.size >= 5) {
@@ -399,6 +425,9 @@ io.on('connection', (socket) => {
 
   socket.on('viewer:signal', ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
     if (!checkRateLimit(socket.id)) return;
+    if (!signal || typeof signal !== 'object') return;
+    const sig = signal as any;
+    if (sig.type && !['offer', 'answer'].includes(sig.type)) return;
     const roomId = viewerToRoom.get(socket.id);
     if (!roomId) return;
     
