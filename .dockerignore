@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+**/.svelte-kit
+docker/
+infra/
+_bmad-output/
+*.md
+.env*
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.log
