@@ -1,23 +1,9 @@
 /**
  * Wachaut SFU Client — wraps mediasoup-client for use in Svelte 5.
- *
- * Usage:
- *   const sfu = new SfuClient('wss://api-sfu-wachaut.billytech.es');
- *   await sfu.joinRoom(roomId, pin, displayName, 'viewer');
- *   const stream = await sfu.consume();
  */
 
 import { io, Socket } from 'socket.io-client';
 import * as mediasoupClient from 'mediasoup-client';
-
-type SfuEvents = {
-  connected: () => void;
-  disconnected: (reason: string) => void;
-  'peer-joined': (data: { peerId: string; displayName: string; role: string }) => void;
-  'peer-left': (data: { peerId: string; displayName: string }) => void;
-  'stream-ready': (stream: MediaStream) => void;
-  error: (message: string) => void;
-};
 
 export class SfuClient {
   #socket: Socket | null = null;
@@ -63,6 +49,7 @@ export class SfuClient {
       });
 
       this.#socket.on('connect', () => {
+        console.log('[sfu] socket connected');
         this.#socket!.emit(
           'join-room',
           { roomId, pin, displayName, role },
@@ -72,12 +59,12 @@ export class SfuClient {
               return;
             }
 
-            // Load device with router's RTP capabilities
             this.#rtpCapabilities = response.rtpCapabilities;
             await this.#device.load({
               routerRtpCapabilities: response.rtpCapabilities,
             });
 
+            console.log('[sfu] device loaded, existing producers:', response.existingProducers?.length || 0);
             this.#emit('connected');
             resolve(response);
           }
@@ -85,6 +72,7 @@ export class SfuClient {
       });
 
       this.#socket.on('disconnect', (reason) => {
+        console.log('[sfu] socket disconnected:', reason);
         this.#emit('disconnected', reason);
       });
 
@@ -97,6 +85,7 @@ export class SfuClient {
       });
 
       this.#socket.on('connect_error', (err) => {
+        console.error('[sfu] socket error:', err);
         reject(err);
       });
     });
@@ -108,16 +97,27 @@ export class SfuClient {
     }
     if (!this.#device.loaded) throw new Error('Device not loaded');
 
-    // Create send transport
     const transportParams = await this.#createTransport('prod');
     this.#sendTransport = this.#device.createSendTransport(transportParams);
 
-    this.#sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any) => {
-      this.#socket!.emit('connect-transport', {
-        transportId: this.#sendTransport!.id,
-        dtlsParameters,
-      });
-      callback();
+    this.#sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      console.log('[sfu] send transport connect event');
+      try {
+        this.#socket!.emit('connect-transport', {
+          transportId: this.#sendTransport!.id,
+          dtlsParameters,
+        }, (res: any) => {
+          if (res?.error) {
+            console.error('[sfu] send transport connect error:', res.error);
+            errback(new Error(res.error));
+          } else {
+            console.log('[sfu] send transport connected OK');
+            callback();
+          }
+        });
+      } catch (err) {
+        errback(err);
+      }
     });
 
     this.#sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any) => {
@@ -136,7 +136,6 @@ export class SfuClient {
       callback({ id: response.id });
     });
 
-    // Produce video
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
       this.#producer = await this.#sendTransport.produce({
@@ -149,7 +148,6 @@ export class SfuClient {
       });
     }
 
-    // Produce audio if present
     const audioTrack = screenStream.getAudioTracks()[0];
     if (audioTrack) {
       await this.#sendTransport.produce({
@@ -167,9 +165,9 @@ export class SfuClient {
 
     this.#stream = new MediaStream();
 
-    // Register new-consumer listener BEFORE creating transport.
-    // Buffer any events that arrive before the recv transport is ready.
+    // Register new-consumer listener BEFORE creating transport
     this.#socket!.on('new-consumer', async (data: any) => {
+      console.log('[sfu] new-consumer received:', data.kind, data.consumerId);
       if (this.#recvTransport) {
         const consumer = await this.#handleNewConsumer(data);
         if (consumer && this.#stream) {
@@ -177,7 +175,6 @@ export class SfuClient {
           this.#emit('stream-ready', this.#stream);
         }
       } else {
-        // Transport not ready yet — queue for processing after transport creation
         this.#pendingConsumers.push(data);
       }
     });
@@ -186,17 +183,40 @@ export class SfuClient {
     const transportParams = await this.#createTransport('cons');
     this.#recvTransport = this.#device.createRecvTransport(transportParams);
 
-    this.#recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any) => {
-      this.#socket!.emit('connect-transport', {
-        transportId: this.#recvTransport!.id,
-        dtlsParameters,
-      });
-      callback();
+    this.#recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
+      console.log('[sfu] recv transport connect event');
+      try {
+        this.#socket!.emit('connect-transport', {
+          transportId: this.#recvTransport!.id,
+          dtlsParameters,
+        }, (res: any) => {
+          if (res?.error) {
+            console.error('[sfu] recv transport connect error:', res.error);
+            errback(new Error(res.error));
+          } else {
+            console.log('[sfu] recv transport connected OK');
+            callback();
+          }
+        });
+      } catch (err) {
+        errback(err);
+      }
     });
+
+    // Monitor ICE state on the underlying PeerConnection
+    const pc = (this.#recvTransport as any)._handler?._pc;
+    if (pc) {
+      pc.oniceconnectionstatechange = () => {
+        console.log('[sfu] ICE state:', pc.iceConnectionState);
+      };
+      pc.onconnectionstatechange = () => {
+        console.log('[sfu] PC connection state:', pc.connectionState);
+      };
+    }
 
     // Process any consumers that arrived before the transport was ready
     if (this.#pendingConsumers.length > 0) {
-      console.log(`[sfu-client] Processing ${this.#pendingConsumers.length} pending consumers`);
+      console.log(`[sfu] Processing ${this.#pendingConsumers.length} pending consumers`);
       for (const data of this.#pendingConsumers) {
         const consumer = await this.#handleNewConsumer(data);
         if (consumer && this.#stream) {
@@ -213,6 +233,8 @@ export class SfuClient {
   async #handleNewConsumer(data: any): Promise<mediasoupClient.Consumer | null> {
     if (!this.#recvTransport) return null;
 
+    console.log('[sfu] Creating consumer for', data.kind, 'id:', data.consumerId);
+
     const consumer = await this.#recvTransport.consume({
       id: data.consumerId,
       producerId: data.producerId,
@@ -222,15 +244,32 @@ export class SfuClient {
 
     this.#consumers.set(consumer.id, consumer);
 
-    // Resume consumer
-    this.#socket!.emit('resume-consumer', { consumerId: consumer.id });
+    console.log('[sfu] Consumer created:', consumer.id, 'kind:', consumer.kind, 'paused:', consumer.paused, 'track state:', consumer.track.readyState, 'track enabled:', consumer.track.enabled);
+
+    // Resume consumer — use callback to wait for server confirmation
+    await new Promise<void>((resolve) => {
+      this.#socket!.emit('resume-consumer', { consumerId: consumer.id }, (res: any) => {
+        console.log('[sfu] Resume result for', consumer.kind, ':', res?.ok ? 'OK' : 'FAILED');
+        resolve();
+      });
+    });
+
+    console.log('[sfu] Consumer after resume - paused:', consumer.paused);
 
     return consumer;
   }
 
   async #createTransport(direction: 'prod' | 'cons'): Promise<any> {
-    return new Promise((resolve) => {
-      this.#socket!.emit('create-transport', { direction }, resolve);
+    return new Promise((resolve, reject) => {
+      this.#socket!.emit('create-transport', { direction }, (res: any) => {
+        if (res?.error) {
+          console.error('[sfu] create-transport error:', res.error);
+          reject(new Error(res.error));
+        } else {
+          console.log('[sfu] Transport created, direction:', direction, 'iceCandidates:', res.iceCandidates?.length || 0);
+          resolve(res);
+        }
+      });
     });
   }
 
@@ -242,14 +281,9 @@ export class SfuClient {
     }
   }
 
-  /**
-   * Get RTC stats from the receive transport's internal PeerConnection.
-   * Returns null if no receive transport is active.
-   */
   async getStats(): Promise<RTCStatsReport | null> {
     if (!this.#recvTransport) return null;
     try {
-      // mediasoup-client stores the PeerConnection on the handler
       const handler = (this.#recvTransport as any)._handler;
       const pc = handler?._pc;
       if (pc && typeof pc.getStats === 'function') {

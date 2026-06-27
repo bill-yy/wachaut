@@ -75,9 +75,6 @@ declare module '$env/static/private' {
 	export const LANG: string;
 	export const HERMES_AGENT_NOTIFY_INTERVAL: string;
 	export const HERMES_GATEWAY_BUSY_INPUT_MODE: string;
-	export const npm_package_devDependencies_eslint: string;
-	export const MANPATH: string;
-	export const DK: string;
 	export const DRIVERDATA: string;
 	export const MATRIX_ALLOWED_ROOMS: string;
 	export const npm_package_devDependencies__tailwindcss_vite: string;
@@ -113,6 +110,8 @@ declare module '$env/static/private' {
 	export const PKG_CONFIG_SYSTEM_LIBRARY_PATH: string;
 	export const INIT_CWD: string;
 	export const INFOPATH: string;
+	export const npm_package_devDependencies_eslint: string;
+	export const MANPATH: string;
 	export const npm_config_user_agent: string;
 	export const MINGW_PACKAGE_PREFIX: string;
 	export const MINGW_PREFIX: string;
@@ -370,9 +369,6 @@ declare module '$env/dynamic/private' {
 		LANG: string;
 		HERMES_AGENT_NOTIFY_INTERVAL: string;
 		HERMES_GATEWAY_BUSY_INPUT_MODE: string;
-		npm_package_devDependencies_eslint: string;
-		MANPATH: string;
-		DK: string;
 		DRIVERDATA: string;
 		MATRIX_ALLOWED_ROOMS: string;
 		npm_package_devDependencies__tailwindcss_vite: string;
@@ -408,6 +404,8 @@ declare module '$env/dynamic/private' {
 		PKG_CONFIG_SYSTEM_LIBRARY_PATH: string;
 		INIT_CWD: string;
 		INFOPATH: string;
+		npm_package_devDependencies_eslint: string;
+		MANPATH: string;
 		npm_config_user_agent: string;
 		MINGW_PACKAGE_PREFIX: string;
 		MINGW_PREFIX: string;

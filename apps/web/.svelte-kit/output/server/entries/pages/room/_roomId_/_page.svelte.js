@@ -1,4 +1,4 @@
-import { i as onDestroy } from "../../../../chunks/internal.js";
+import { a as tick, i as onDestroy } from "../../../../chunks/internal.js";
 import { a as derived, d as sanitize_props, f as slot, g as unsubscribe_stores, h as stringify, j as escape_html, k as attr, m as store_get, n as attr_style, p as spread_props, s as ensure_array_like, t as attr_class, x as getContext } from "../../../../chunks/server.js";
 import "../../../../chunks/client.js";
 import { n as Icon, t as Monitor } from "../../../../chunks/monitor.js";
@@ -481,9 +481,11 @@ function _page($$renderer, $$props) {
 			if (sfuClient) return;
 			try {
 				sfuClient = new SfuClient("wss://sfu-wachaut.billytech.es");
-				sfuClient.on("stream-ready", (stream) => {
+				sfuClient.on("stream-ready", async (stream) => {
 					status = "live";
 					reconnectAttempt = 0;
+					await tick();
+					console.error("[viewer] videoEl still null after tick!");
 					startStatsPolling();
 					showShortcutsOverlay();
 					if (window.innerWidth < 768) chatOpen = true;

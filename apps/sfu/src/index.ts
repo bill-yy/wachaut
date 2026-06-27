@@ -321,8 +321,14 @@ io.on('connection', (socket) => {
 
     if (!transport) { callback?.({ error: 'Transport not found' }); return; }
 
-    await transport.connect({ dtlsParameters });
-    callback?.({ ok: true });
+    try {
+      await transport.connect({ dtlsParameters });
+      console.log(`[sfu] Transport ${transportId} connected for ${peer.displayName}`);
+      callback?.({ ok: true });
+    } catch (err: any) {
+      console.error(`[sfu] Transport connect error for ${peer.displayName}:`, err.message);
+      callback?.({ error: err.message });
+    }
   });
 
   // ── Produce (host sends screen/audio) ──────────────────────────────

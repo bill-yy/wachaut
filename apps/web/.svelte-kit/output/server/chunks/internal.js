@@ -714,7 +714,7 @@ var options = {
 		app: ({ head, body, assets, nonce, env }) => "<!DOCTYPE html>\n<html lang=\"es\">\n	<head>\n		<meta charset=\"utf-8\" />\n		<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n		<meta name=\"description\" content=\"Wachaut - Comparte tu pantalla con amigos sin registro\" />\n		<title>Wachaut</title>\n		" + head + "\n	</head>\n	<body data-sveltekit-preload-data=\"hover\">\n		<div style=\"display: contents\">" + body + "</div>\n	</body>\n</html>\n",
 		error: error_template_default
 	},
-	version_hash: "1fq4hn6"
+	version_hash: "15qw4hj"
 };
 async function get_hooks() {
 	let handle;
@@ -735,4 +735,4 @@ async function get_hooks() {
 	};
 }
 //#endregion
-export { read_implementation as a, __commonJSMin as c, onDestroy as i, options as n, set_manifest as o, index_server_exports as r, set_read_implementation as s, get_hooks as t };
+export { tick as a, set_read_implementation as c, onDestroy as i, __commonJSMin as l, options as n, read_implementation as o, index_server_exports as r, set_manifest as s, get_hooks as t };

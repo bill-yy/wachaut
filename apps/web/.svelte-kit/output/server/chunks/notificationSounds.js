@@ -384,11 +384,6 @@ function Triangle_alert($$renderer, $$props) {
 //#region src/lib/sfu-client.ts
 /**
 * Wachaut SFU Client — wraps mediasoup-client for use in Svelte 5.
-*
-* Usage:
-*   const sfu = new SfuClient('wss://api-sfu-wachaut.billytech.es');
-*   await sfu.joinRoom(roomId, pin, displayName, 'viewer');
-*   const stream = await sfu.consume();
 */
 var SfuClient = class {
 	#socket = null;
@@ -421,6 +416,7 @@ var SfuClient = class {
 		return new Promise((resolve, reject) => {
 			this.#socket = io(this.#url, { transports: ["websocket"] });
 			this.#socket.on("connect", () => {
+				console.log("[sfu] socket connected");
 				this.#socket.emit("join-room", {
 					roomId,
 					pin,
@@ -433,11 +429,13 @@ var SfuClient = class {
 					}
 					this.#rtpCapabilities = response.rtpCapabilities;
 					await this.#device.load({ routerRtpCapabilities: response.rtpCapabilities });
+					console.log("[sfu] device loaded, existing producers:", response.existingProducers?.length || 0);
 					this.#emit("connected");
 					resolve(response);
 				});
 			});
 			this.#socket.on("disconnect", (reason) => {
+				console.log("[sfu] socket disconnected:", reason);
 				this.#emit("disconnected", reason);
 			});
 			this.#socket.on("peer-joined", (data) => {
@@ -447,6 +445,7 @@ var SfuClient = class {
 				this.#emit("peer-left", data);
 			});
 			this.#socket.on("connect_error", (err) => {
+				console.error("[sfu] socket error:", err);
 				reject(err);
 			});
 		});
@@ -456,12 +455,24 @@ var SfuClient = class {
 		if (!this.#device.loaded) throw new Error("Device not loaded");
 		const transportParams = await this.#createTransport("prod");
 		this.#sendTransport = this.#device.createSendTransport(transportParams);
-		this.#sendTransport.on("connect", async ({ dtlsParameters }, callback) => {
-			this.#socket.emit("connect-transport", {
-				transportId: this.#sendTransport.id,
-				dtlsParameters
-			});
-			callback();
+		this.#sendTransport.on("connect", async ({ dtlsParameters }, callback, errback) => {
+			console.log("[sfu] send transport connect event");
+			try {
+				this.#socket.emit("connect-transport", {
+					transportId: this.#sendTransport.id,
+					dtlsParameters
+				}, (res) => {
+					if (res?.error) {
+						console.error("[sfu] send transport connect error:", res.error);
+						errback(new Error(res.error));
+					} else {
+						console.log("[sfu] send transport connected OK");
+						callback();
+					}
+				});
+			} catch (err) {
+				errback(err);
+			}
 		});
 		this.#sendTransport.on("produce", async ({ kind, rtpParameters, appData }, callback) => {
 			callback({ id: (await new Promise((resolve) => {
@@ -494,6 +505,7 @@ var SfuClient = class {
 		if (!this.#device.loaded) throw new Error("Device not loaded");
 		this.#stream = new MediaStream();
 		this.#socket.on("new-consumer", async (data) => {
+			console.log("[sfu] new-consumer received:", data.kind, data.consumerId);
 			if (this.#recvTransport) {
 				const consumer = await this.#handleNewConsumer(data);
 				if (consumer && this.#stream) {
@@ -504,15 +516,36 @@ var SfuClient = class {
 		});
 		const transportParams = await this.#createTransport("cons");
 		this.#recvTransport = this.#device.createRecvTransport(transportParams);
-		this.#recvTransport.on("connect", async ({ dtlsParameters }, callback) => {
-			this.#socket.emit("connect-transport", {
-				transportId: this.#recvTransport.id,
-				dtlsParameters
-			});
-			callback();
+		this.#recvTransport.on("connect", async ({ dtlsParameters }, callback, errback) => {
+			console.log("[sfu] recv transport connect event");
+			try {
+				this.#socket.emit("connect-transport", {
+					transportId: this.#recvTransport.id,
+					dtlsParameters
+				}, (res) => {
+					if (res?.error) {
+						console.error("[sfu] recv transport connect error:", res.error);
+						errback(new Error(res.error));
+					} else {
+						console.log("[sfu] recv transport connected OK");
+						callback();
+					}
+				});
+			} catch (err) {
+				errback(err);
+			}
 		});
+		const pc = this.#recvTransport._handler?._pc;
+		if (pc) {
+			pc.oniceconnectionstatechange = () => {
+				console.log("[sfu] ICE state:", pc.iceConnectionState);
+			};
+			pc.onconnectionstatechange = () => {
+				console.log("[sfu] PC connection state:", pc.connectionState);
+			};
+		}
 		if (this.#pendingConsumers.length > 0) {
-			console.log(`[sfu-client] Processing ${this.#pendingConsumers.length} pending consumers`);
+			console.log(`[sfu] Processing ${this.#pendingConsumers.length} pending consumers`);
 			for (const data of this.#pendingConsumers) {
 				const consumer = await this.#handleNewConsumer(data);
 				if (consumer && this.#stream) {
@@ -526,6 +559,7 @@ var SfuClient = class {
 	}
 	async #handleNewConsumer(data) {
 		if (!this.#recvTransport) return null;
+		console.log("[sfu] Creating consumer for", data.kind, "id:", data.consumerId);
 		const consumer = await this.#recvTransport.consume({
 			id: data.consumerId,
 			producerId: data.producerId,
@@ -533,12 +567,27 @@ var SfuClient = class {
 			rtpParameters: data.rtpParameters
 		});
 		this.#consumers.set(consumer.id, consumer);
-		this.#socket.emit("resume-consumer", { consumerId: consumer.id });
+		console.log("[sfu] Consumer created:", consumer.id, "kind:", consumer.kind, "paused:", consumer.paused, "track state:", consumer.track.readyState, "track enabled:", consumer.track.enabled);
+		await new Promise((resolve) => {
+			this.#socket.emit("resume-consumer", { consumerId: consumer.id }, (res) => {
+				console.log("[sfu] Resume result for", consumer.kind, ":", res?.ok ? "OK" : "FAILED");
+				resolve();
+			});
+		});
+		console.log("[sfu] Consumer after resume - paused:", consumer.paused);
 		return consumer;
 	}
 	async #createTransport(direction) {
-		return new Promise((resolve) => {
-			this.#socket.emit("create-transport", { direction }, resolve);
+		return new Promise((resolve, reject) => {
+			this.#socket.emit("create-transport", { direction }, (res) => {
+				if (res?.error) {
+					console.error("[sfu] create-transport error:", res.error);
+					reject(new Error(res.error));
+				} else {
+					console.log("[sfu] Transport created, direction:", direction, "iceCandidates:", res.iceCandidates?.length || 0);
+					resolve(res);
+				}
+			});
 		});
 	}
 	stopProducing() {
@@ -548,10 +597,6 @@ var SfuClient = class {
 			this.#producer = null;
 		}
 	}
-	/**
-	* Get RTC stats from the receive transport's internal PeerConnection.
-	* Returns null if no receive transport is active.
-	*/
 	async getStats() {
 		if (!this.#recvTransport) return null;
 		try {
