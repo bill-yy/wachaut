@@ -28,6 +28,7 @@ export class SfuClient {
   #consumers: Map<string, mediasoupClient.Consumer> = new Map();
   #url: string;
   #listeners: Map<string, Function[]> = new Map();
+  #rtpCapabilities: any = null;
 
   constructor(url: string) {
     this.#url = url;
@@ -70,6 +71,7 @@ export class SfuClient {
             }
 
             // Load device with router's RTP capabilities
+            this.#rtpCapabilities = response.rtpCapabilities;
             await this.#device.load({
               routerRtpCapabilities: response.rtpCapabilities,
             });
@@ -99,6 +101,9 @@ export class SfuClient {
   }
 
   async produce(screenStream: MediaStream): Promise<void> {
+    if (!this.#device.loaded && this.#rtpCapabilities) {
+      await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
+    }
     if (!this.#device.loaded) throw new Error('Device not loaded');
 
     // Create send transport
@@ -153,6 +158,9 @@ export class SfuClient {
   }
 
   async consume(): Promise<MediaStream> {
+    if (!this.#device.loaded && this.#rtpCapabilities) {
+      await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
+    }
     if (!this.#device.loaded) throw new Error('Device not loaded');
 
     // Create receive transport
