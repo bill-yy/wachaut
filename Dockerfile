@@ -7,14 +7,16 @@
 # ── Base ─────────────────────────────────────────────────────────────
 FROM node:22-slim AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN apt-get update && apt-get install -y python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/python && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # ── Build ───────────────────────────────────────────────────────────
 FROM base AS builder
 COPY . .
 ENV VITE_WS_URL=wss://api-wachaut.billytech.es
-RUN pnpm install --frozen-lockfile --filter @wachaut/web --filter @wachaut/server
+# Install with --ignore-scripts to skip mediasoup postinstall (it's not needed for web/server)
+RUN pnpm install --frozen-lockfile --filter @wachaut/web --filter @wachaut/server --config.ignore-scripts=true
+# Only run esbuild postinstall (needed for vite build)
+RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js 2>/dev/null || true
 RUN pnpm --filter @wachaut/web build
 RUN pnpm --filter @wachaut/server build
 
