@@ -518,6 +518,7 @@
   // ─── Screen Sharing ─────────────────────────────────────────────────
   async function startSharing() {
     try {
+      console.log('[host] startSharing: requesting display media...');
       const preset = presets[qualityPreset];
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -528,6 +529,7 @@
         },
         audio: includeAudio
       });
+      console.log('[host] Got display media, video tracks:', stream.getVideoTracks().length, 'audio tracks:', stream.getAudioTracks().length);
       localStream = stream;
       isSharing = true;
 
@@ -545,7 +547,9 @@
       }
       // Produce stream to SFU for media routing
       if (sfuClient) {
+        console.log('[host] Producing to SFU...');
         await sfuClient.produce(stream);
+        console.log('[host] Produce complete');
         await tick();
       }
 
@@ -553,6 +557,7 @@
         stopSharing();
       };
     } catch (e) {
+      console.error('[host] startSharing error:', e?.message || e, e?.stack || '');
       error = 'No se pudo iniciar la compartición de pantalla';
       setTimeout(() => { error = ''; }, 5000);
     }
