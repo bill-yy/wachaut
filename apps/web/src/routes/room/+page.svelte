@@ -525,10 +525,10 @@
 
     try {
       console.log('[host] startSharing: requesting display media...');
-      // Simple constraints — avoid "Timeout starting video source" from complex params
+      // Absolute minimal constraints
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30 } },
-        audio: includeAudio
+        video: true,
+        audio: true
       });
       console.log('[host] Got display media, video tracks:', stream.getVideoTracks().length, 'audio tracks:', stream.getAudioTracks().length);
       localStream = stream;
