@@ -266,14 +266,25 @@ io.on('connection', (socket) => {
       initialAvailableOutgoingBitrate: 1_000_000,
     });
 
+    // Store transport on peer
+    const peer = socketToPeer.get(socket.id);
+
     transport.on('dtlsstatechange', (state) => {
+      console.log(`[sfu] Transport ${transport.id} DTLS state: ${state} (${peer?.displayName || 'unknown'})`);
+      if (state === 'failed') {
+        console.error(`[sfu] DTLS FAILED for ${peer?.displayName} — UDP ports unreachable!`);
+      }
       if (state === 'closed') {
         transport.close();
       }
     });
 
-    // Store transport on peer
-    const peer = socketToPeer.get(socket.id);
+    transport.on('icestatechange', (iceState) => {
+      console.log(`[sfu] Transport ${transport.id} ICE state: ${iceState} (${peer?.displayName || 'unknown'})`);
+    });
+
+    console.log(`[sfu] Transport ${transport.id} for ${peer?.displayName} (${direction}), iceCandidates:`, JSON.stringify(transport.iceCandidates));
+
     if (peer) {
       if (direction === 'prod') peer.sendTransport = transport;
       if (direction === 'cons') peer.recvTransport = transport;
