@@ -517,16 +517,17 @@
 
   // ─── Screen Sharing ─────────────────────────────────────────────────
   async function startSharing() {
+    // Clean up any previous stream first
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+
     try {
       console.log('[host] startSharing: requesting display media...');
-      const preset = presets[qualityPreset];
+      // Simple constraints — avoid "Timeout starting video source" from complex params
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: 'always',
-          width: { ideal: preset.resolution.width },
-          height: { ideal: preset.resolution.height },
-          frameRate: { ideal: preset.fps }
-        },
+        video: { frameRate: { ideal: 30 } },
         audio: includeAudio
       });
       console.log('[host] Got display media, video tracks:', stream.getVideoTracks().length, 'audio tracks:', stream.getAudioTracks().length);
@@ -557,8 +558,13 @@
         stopSharing();
       };
     } catch (e) {
-      console.error('[host] startSharing error:', e?.message || e, e?.stack || '');
-      error = 'No se pudo iniciar la compartición de pantalla';
+      console.error('[host] startSharing error:', e?.name, e?.message || e);
+      isSharing = false;
+      if (e?.name === 'NotAllowedError') {
+        error = 'Permiso denegado para compartir pantalla.';
+      } else {
+        error = 'No se pudo iniciar la compartición de pantalla';
+      }
       setTimeout(() => { error = ''; }, 5000);
     }
   }
@@ -573,12 +579,9 @@
     isSharing = false;
     isMuted = false;
 
-    peers = new Map();
-
+    // Stop producing but DON'T disconnect the SFU entirely
     if (sfuClient) {
       sfuClient.stopProducing();
-      sfuClient.disconnect();
-      sfuClient = null;
     }
 
     if (socket && connected) {

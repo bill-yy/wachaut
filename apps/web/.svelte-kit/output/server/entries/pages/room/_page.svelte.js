@@ -668,12 +668,7 @@ function _page($$renderer, $$props) {
 			}
 			isSharing = false;
 			isMuted$1 = false;
-			peers = /* @__PURE__ */ new Map();
-			if (sfuClient) {
-				sfuClient.stopProducing();
-				sfuClient.disconnect();
-				sfuClient = null;
-			}
+			if (sfuClient) sfuClient.stopProducing();
 			if (socket && connected) socket.emit("host:stop-sharing", { roomId });
 		}
 		async function checkConnectionQuality() {}
