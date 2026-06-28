@@ -484,21 +484,43 @@ var SfuClient = class {
 				}, resolve);
 			})).id });
 		});
+		this.#monitorIce(this.#sendTransport, "send");
 		const videoTrack = screenStream.getVideoTracks()[0];
-		if (videoTrack) this.#producer = await this.#sendTransport.produce({
-			track: videoTrack,
-			appData: { mediaTag: "screen-video" },
-			encodings: [{
-				maxBitrate: 5e6,
-				scaleXResolutionDownBy: 1
-			}],
-			codecOptions: { videoGoogleStartBitrate: 1e6 }
-		});
+		if (videoTrack) {
+			this.#producer = await this.#sendTransport.produce({
+				track: videoTrack,
+				appData: { mediaTag: "screen-video" }
+			});
+			console.log("[sfu] Video producer created:", this.#producer.id);
+		}
 		const audioTrack = screenStream.getAudioTracks()[0];
-		if (audioTrack) await this.#sendTransport.produce({
-			track: audioTrack,
-			appData: { mediaTag: "screen-audio" }
-		});
+		if (audioTrack) {
+			const audioProducer = await this.#sendTransport.produce({
+				track: audioTrack,
+				appData: { mediaTag: "screen-audio" }
+			});
+			console.log("[sfu] Audio producer created:", audioProducer.id);
+		}
+	}
+	#monitorIce(transport, label) {
+		try {
+			const handler = transport._handler;
+			const pc = handler?._pc;
+			if (pc) {
+				console.log(`[sfu] ${label} ICE initial state:`, pc.iceConnectionState);
+				pc.addEventListener("iceconnectionstatechange", () => {
+					console.log(`[sfu] ${label} ICE state:`, pc.iceConnectionState);
+				});
+				pc.addEventListener("icegatheringstatechange", () => {
+					console.log(`[sfu] ${label} ICE gathering:`, pc.iceGatheringState);
+				});
+				pc.addEventListener("connectionstatechange", () => {
+					console.log(`[sfu] ${label} PC state:`, pc.connectionState);
+				});
+			} else console.log(`[sfu] ${label} PC not found, checking handler...`, !!handler);
+		} catch (e) {
+			console.error(`[sfu] ${label} ICE monitor error:`, e);
+		}
 	}
 	async consume() {
 		if (!this.#device.loaded && this.#rtpCapabilities) await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
@@ -535,15 +557,7 @@ var SfuClient = class {
 				errback(err);
 			}
 		});
-		const pc = this.#recvTransport._handler?._pc;
-		if (pc) {
-			pc.oniceconnectionstatechange = () => {
-				console.log("[sfu] ICE state:", pc.iceConnectionState);
-			};
-			pc.onconnectionstatechange = () => {
-				console.log("[sfu] PC connection state:", pc.connectionState);
-			};
-		}
+		this.#monitorIce(this.#recvTransport, "recv");
 		if (this.#pendingConsumers.length > 0) {
 			console.log(`[sfu] Processing ${this.#pendingConsumers.length} pending consumers`);
 			for (const data of this.#pendingConsumers) {

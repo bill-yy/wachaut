@@ -136,24 +136,48 @@ export class SfuClient {
       callback({ id: response.id });
     });
 
+    // Monitor ICE on send transport
+    this.#monitorIce(this.#sendTransport, 'send');
+
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
       this.#producer = await this.#sendTransport.produce({
         track: videoTrack,
         appData: { mediaTag: 'screen-video' },
-        encodings: [
-          { maxBitrate: 5_000_000, scaleXResolutionDownBy: 1 },
-        ],
-        codecOptions: { videoGoogleStartBitrate: 1_000_000 },
       });
+      console.log('[sfu] Video producer created:', this.#producer.id);
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
     if (audioTrack) {
-      await this.#sendTransport.produce({
+      const audioProducer = await this.#sendTransport.produce({
         track: audioTrack,
         appData: { mediaTag: 'screen-audio' },
       });
+      console.log('[sfu] Audio producer created:', audioProducer.id);
+    }
+  }
+
+  #monitorIce(transport: any, label: string) {
+    try {
+      const handler = transport._handler;
+      const pc = handler?._pc;
+      if (pc) {
+        console.log(`[sfu] ${label} ICE initial state:`, pc.iceConnectionState);
+        pc.addEventListener('iceconnectionstatechange', () => {
+          console.log(`[sfu] ${label} ICE state:`, pc.iceConnectionState);
+        });
+        pc.addEventListener('icegatheringstatechange', () => {
+          console.log(`[sfu] ${label} ICE gathering:`, pc.iceGatheringState);
+        });
+        pc.addEventListener('connectionstatechange', () => {
+          console.log(`[sfu] ${label} PC state:`, pc.connectionState);
+        });
+      } else {
+        console.log(`[sfu] ${label} PC not found, checking handler...`, !!handler);
+      }
+    } catch (e) {
+      console.error(`[sfu] ${label} ICE monitor error:`, e);
     }
   }
 
@@ -203,16 +227,8 @@ export class SfuClient {
       }
     });
 
-    // Monitor ICE state on the underlying PeerConnection
-    const pc = (this.#recvTransport as any)._handler?._pc;
-    if (pc) {
-      pc.oniceconnectionstatechange = () => {
-        console.log('[sfu] ICE state:', pc.iceConnectionState);
-      };
-      pc.onconnectionstatechange = () => {
-        console.log('[sfu] PC connection state:', pc.connectionState);
-      };
-    }
+    // Monitor ICE on recv transport
+    this.#monitorIce(this.#recvTransport, 'recv');
 
     // Process any consumers that arrived before the transport was ready
     if (this.#pendingConsumers.length > 0) {
