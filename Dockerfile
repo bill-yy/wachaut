@@ -32,7 +32,7 @@ FROM node:22-slim AS web
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tini && \
     rm -rf /var/lib/apt/lists/*
-RUN npm install -g serve
+RUN npm install -g sirv-cli
 COPY --from=builder /app/apps/web/build ./web/build
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser
@@ -40,7 +40,7 @@ USER appuser
 EXPOSE 3000
 ENV NODE_ENV=production
 ENTRYPOINT ["tini", "--"]
-CMD ["serve", "web/build", "-l", "3000", "-s"]
+CMD ["sirv", "web/build", "--single", "--port", "3000", "--host", "0.0.0.0", "--quiet"]
 
 # ── Server (Node API + Socket.IO) ───────────────────────────────────
 FROM node:22-slim AS server
