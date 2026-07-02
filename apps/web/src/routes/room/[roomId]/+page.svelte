@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
+  import { clickOutside } from '$lib/actions';
   import {
       Monitor,
       Lock,
@@ -714,9 +715,6 @@
     chatOpen = !chatOpen;
   }
 
-  // Show shortcuts overlay when entering live mode
-  // NOTE: moved to host:signal handler to avoid effect_update_depth_exceeded
-  // (writing chatOpen inside an $effect that reads status causes infinite loop)
   onDestroy(() => {
     if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
     stopStatsPolling();
@@ -902,7 +900,7 @@
               <AlertTriangle class="w-7 h-7 text-red-500" />
             </div>
             <h2 class="text-lg font-semibold text-slate-800 mb-2">Error</h2>
-            <p class="text-sm text-slate-500 mb-6">{errorMessage}</p>
+            <p class="text-sm text-slate-500 mb-6" role="alert">{errorMessage}</p>
             <button
               onclick={retry}
               class="px-6 py-3 bg-slate-800 text-white font-medium
@@ -1017,6 +1015,7 @@
               onclick={toggleMute}
               class="text-white hover:text-white/80 transition-colors p-1"
               title={isMuted ? 'Activar sonido' : 'Silenciar'}
+              aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}
             >
               {#if isMuted || volume === 0}
                 <VolumeX class="w-5 h-5" />
@@ -1048,6 +1047,7 @@
               onclick={shareLink}
               class="text-white/70 hover:text-white transition-colors p-1"
               title="Compartir enlace"
+              aria-label="Compartir enlace"
             >
               <Share2 class="w-4 h-4" />
             </button>
@@ -1057,6 +1057,7 @@
               onclick={toggleFullscreen}
               class="text-white/70 hover:text-white transition-colors p-1"
               title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
             >
               {#if isFullscreen}
                 <Minimize class="w-5 h-5" />
@@ -1132,6 +1133,8 @@
         <div
           bind:this={chatContainer}
           class="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0"
+          aria-live="polite"
+          aria-label="Mensajes de chat"
         >
           {#if chatMessages.length === 0}
             <div class="flex flex-col items-center justify-center h-full text-center">
@@ -1166,7 +1169,7 @@
         </div>
 
         <!-- Reactions Row -->
-        <div class="px-4 py-2 border-t border-slate-800 shrink-0 relative">
+        <div class="px-4 py-2 border-t border-slate-800 shrink-0 relative" use:clickOutside={() => (showEmotePicker = false)}>
           <!-- Favorites row -->
           <div class="flex items-center justify-center gap-1.5">
             {#each favoriteEmojis as emoji}
@@ -1231,9 +1234,11 @@
             <input
               type="text"
               placeholder="Escribe un mensaje..."
+              maxlength="500"
               value={chatInput}
               oninput={(e) => (chatInput = e.target.value)}
               onkeydown={handleChatKeydown}
+              aria-label="Mensaje de chat"
               class="flex-1 bg-slate-800 text-white text-sm px-3 py-2.5
                      rounded-lg border border-slate-700
                      focus:outline-none focus:border-slate-500
@@ -1261,6 +1266,7 @@
                rounded-full shadow-xl flex items-center justify-center z-40
                hover:bg-slate-700 active:scale-95 transition-all"
         title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+        aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
       >
         <MessageCircle class="w-6 h-6" />
         {#if !chatOpen && chatMessages.length > 0}

@@ -29,6 +29,7 @@
   } from 'lucide-svelte';
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
+  import { clickOutside } from '$lib/actions';
   import {
     playViewerJoin,
     playViewerLeave,
@@ -101,8 +102,12 @@
   }
 
   // ─── Lifecycle Cleanup ──────────────────────────────────────────────
+  // Tracked timer handles (cleared on teardown to avoid leaks)
+  let copyFeedbackTimeout = null;
   function cleanup() {
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
+    if (autoAdaptNotificationTimeout) clearTimeout(autoAdaptNotificationTimeout);
+    if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
     stopSharing();
     if (sfuClient) {
       sfuClient.disconnect();
@@ -677,8 +682,8 @@
   async function copyToClipboard(text, type) {
     try {
       await navigator.clipboard.writeText(text);
-      if (type === 'pin') { copiedPin = true; setTimeout(() => { copiedPin = false; }, 2000); }
-      if (type === 'url') { copiedUrl = true; setTimeout(() => { copiedUrl = false; }, 2000); }
+      if (type === 'pin') { copiedPin = true; copyFeedbackTimeout = setTimeout(() => { copiedPin = false; }, 2000); }
+      if (type === 'url') { copiedUrl = true; copyFeedbackTimeout = setTimeout(() => { copiedUrl = false; }, 2000); }
     } catch {
       error = 'No se pudo copiar al portapapeles';
       setTimeout(() => { error = ''; }, 3000);
@@ -689,7 +694,6 @@
   function leaveRoom() {
     stopSharing();
     if (socket) {
-      socket.emit('host:leave-room', { roomId });
       socket.disconnect();
     }
     goto('/');
@@ -742,7 +746,10 @@
 
 <!-- Error Banner -->
 {#if error}
-  <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-red-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]">
+  <div
+    class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-red-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]"
+    role="alert"
+  >
     <AlertTriangle class="w-4 h-4" />
     <span class="text-sm font-medium">{error}</span>
   </div>
@@ -750,7 +757,11 @@
 
 <!-- Auto Quality Adaptation Notification -->
 {#if autoAdaptNotification}
-  <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-blue-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]">
+  <div
+    class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-blue-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]"
+    role="status"
+    aria-live="polite"
+  >
     <Settings class="w-4 h-4" />
     <span class="text-sm font-medium">{autoAdaptNotification}</span>
   </div>
@@ -795,13 +806,21 @@
 
 <!-- Leave Confirmation Modal -->
 {#if showLeaveModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    onclick={(e) => { if (e.target === e.currentTarget) showLeaveModal = false; }}
+  >
+    <div
+      class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="leave-modal-title"
+    >
       <div class="flex items-center gap-3 mb-4">
         <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
           <AlertTriangle class="w-5 h-5 text-red-600" />
         </div>
-        <h3 class="text-lg font-semibold text-slate-800">¿Salir de la sala?</h3>
+        <h3 id="leave-modal-title" class="text-lg font-semibold text-slate-800">¿Salir de la sala?</h3>
       </div>
       <p class="text-slate-500 text-sm mb-6">
         Se cerrará la conexión con todos los espectadores y la sala será eliminada permanentemente.
@@ -826,10 +845,18 @@
 
 <!-- Viewers Panel Modal -->
 {#if showViewersPanel}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    onclick={(e) => { if (e.target === e.currentTarget) showViewersPanel = false; }}
+  >
+    <div
+      class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="viewers-panel-title"
+    >
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+        <h3 id="viewers-panel-title" class="text-lg font-semibold text-slate-800 flex items-center gap-2">
           <Users class="w-5 h-5 text-slate-600" />
           Espectadores ({viewerCount})
         </h3>
@@ -879,6 +906,7 @@
         onclick={() => { showLeaveModal = true; }}
         class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
         title="Volver"
+        aria-label="Volver"
       >
         <ArrowLeft class="w-5 h-5 text-slate-600" />
       </button>
@@ -903,6 +931,7 @@
         onclick={() => { showViewersPanel = true; requestViewersList(); }}
         class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full hover:bg-slate-200 active:scale-95 transition-all"
         title="Ver espectadores"
+        aria-label="Ver espectadores"
       >
         <Users class="w-4 h-4 text-slate-500" />
         <span class="text-slate-700 text-sm font-medium">{viewerCount}</span>
@@ -1195,7 +1224,7 @@
         {/if}
 
         {#if isSharing}
-          <div class="relative pt-2">
+          <div class="relative pt-2" use:clickOutside={() => (showEmotePicker = false)}>
             <!-- Favorites row -->
             <div class="flex items-center justify-center gap-2">
               {#each favoriteEmojis as emoji}
@@ -1276,6 +1305,8 @@
         <div
           bind:this={chatContainer}
           class="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0"
+          aria-live="polite"
+          aria-label="Mensajes de chat"
         >
           {#if chatMessages.length === 0}
             <div class="flex flex-col items-center justify-center h-full text-center py-8">
@@ -1320,6 +1351,7 @@
               onkeydown={handleChatKeydown}
               placeholder="Escribe un mensaje o /comando..."
               maxlength="500"
+              aria-label="Mensaje de chat"
               class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-all"
             />
             <button

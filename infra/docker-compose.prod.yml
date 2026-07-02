@@ -1,11 +1,14 @@
-version: '3.8'
+# Production compose — run from the infra/ directory (build context is ../..).
+# Matches the root docker-compose.yml model: a single combined image (web+server)
+# exposed twice via Traefik so /socket.io hits the Node API and everything else
+# hits the static site.
 
 services:
   web:
     build:
       context: ../..
       dockerfile: Dockerfile
-      target: web
+      target: combined
     restart: always
     environment:
       - NODE_ENV=production
@@ -23,35 +26,18 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      target: server
+      target: combined
     restart: always
     environment:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
-      - TURN_SECRET=${TURN_SECRET}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wachaut-server.rule=Host(`wachaut.billytech.es`) && PathPrefix(`/socket.io`)"
       - "traefik.http.routers.wachaut-server.entrypoints=websecure"
       - "traefik.http.routers.wachaut-server.tls.certresolver=letsencrypt"
       - "traefik.http.services.wachaut-server.loadbalancer.server.port=3001"
-    networks:
-      - dokploy-network
-
-  coturn:
-    image: coturn/coturn:latest
-    restart: always
-    environment:
-      - TURN_SECRET=${TURN_SECRET}
-    command: >
-      sh -c 'turnserver -n --log-file=stdout --min-port=10000 --max-port=11000
-      --realm=wachaut.billytech.es --use-auth-secret
-      --static-auth-secret="$TURN_SECRET" --fingerprint --no-multicast-peers'
-    ports:
-      - "3478:3478/tcp"
-      - "3478:3478/udp"
-      - "10000-11000:10000-11000/udp"
     networks:
       - dokploy-network
 

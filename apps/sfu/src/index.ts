@@ -55,7 +55,7 @@ const socketToRoom = new Map<string, string>();
 const socketToPeer = new Map<string, Peer>();
 
 // ─── Mediasoup Setup ───────────────────────────────────────────────────
-const mediaCodecs: mediasoup.types.RtpCodecCapability[] = [
+const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
   {
     kind: 'video',
     mimeType: 'video/VP8',
