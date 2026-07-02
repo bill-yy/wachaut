@@ -1,16 +1,41 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import { Server } from 'socket.io';
 import crypto from 'node:crypto';
+import {
+  pinHash,
+  pinEquals,
+  sanitizeChatText,
+  sanitizeUsername,
+  VALID_EMOJIS,
+  MAX_CHAT_LENGTH as SECURITY_MAX_CHAT,
+  MAX_USERNAME_LENGTH as SECURITY_MAX_USERNAME,
+} from './security.js';
+
+// Single source of truth for allowed origins (env-configurable).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billytech.es')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const fastify = Fastify({
-  logger: true
+  logger: true,
+  // Trust the proxy (Traefik) so req.ip and socket.handshake.address reflect
+  // the real client IP from X-Forwarded-For, not the proxy's IP.
+  trustProxy: true,
 });
 
 // Enable CORS
 await fastify.register(cors, {
-  origin: ['https://wachaut.billytech.es', 'https://api-wachaut.billytech.es'],
-  credentials: true
+  origin: ALLOWED_ORIGINS,
+  credentials: true,
+});
+
+// Security headers (HSTS, CSP, X-Frame-Options, etc.)
+// contentSecurityPolicy must be false for Socket.IO to work; the rest still applies.
+await fastify.register(helmet, {
+  contentSecurityPolicy: false,
 });
 
 // Room storage (in-memory with TTL)
@@ -41,6 +66,7 @@ interface ChatMessage {
 
 const rooms = new Map<string, Room>();
 const viewerToRoom = new Map<string, string>(); // socketId -> roomId
+const hostToRoom = new Map<string, string>();   // hostSocketId -> roomId (O(1) lookup)
 
 // Per-room join attempt rate limiting
 const joinAttempts = new Map<string, { count: number; resetAt: number }>(); // `${ip}:${roomId}` -> rate info
@@ -52,21 +78,30 @@ const eventCounts = new Map<string, { count: number; resetAt: number }>(); // so
 const MAX_CONNECTIONS_PER_IP = 5;
 const MAX_EVENTS_PER_MINUTE = 120;
 const MAX_ROOMS_SIMULTANEOUS = 200;
-const MAX_CHAT_LENGTH = 500;
+const MAX_CHAT_LENGTH = SECURITY_MAX_CHAT;
 const MAX_REACTIONS_PER_MINUTE = 30;
-const MAX_USERNAME_LENGTH = 24;
+const MAX_USERNAME_LENGTH = SECURITY_MAX_USERNAME;
+const MAX_VIEWERS_PER_ROOM = 5;
+const MAX_PIN_ATTEMPTS = 5;        // per IP, per 5-min window
+const PIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
 
-function getRateKey(socketId: string): string {
-  return socketId;
+// ── Security helpers (imported from security.ts) ────────────────────
+
+/** Resolve the real client IP behind Traefik (X-Forwarded-For). */
+function realIp(socket: { handshake: { address: string; headers: Record<string, unknown> } }): string {
+  const xff = socket.handshake.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.length > 0) {
+    return xff.split(',')[0].trim();
+  }
+  return socket.handshake.address;
 }
 
 function checkRateLimit(socketId: string, maxEvents: number = MAX_EVENTS_PER_MINUTE): boolean {
-  const key = getRateKey(socketId);
   const now = Date.now();
-  const entry = eventCounts.get(key);
+  const entry = eventCounts.get(socketId);
 
   if (!entry || now > entry.resetAt) {
-    eventCounts.set(key, { count: 1, resetAt: now + 60000 });
+    eventCounts.set(socketId, { count: 1, resetAt: now + 60000 });
     return true;
   }
 
@@ -75,16 +110,6 @@ function checkRateLimit(socketId: string, maxEvents: number = MAX_EVENTS_PER_MIN
     return false;
   }
   return true;
-}
-
-function sanitizeUsername(input: unknown): string {
-  if (typeof input !== 'string') return '';
-
-  return input
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, MAX_USERNAME_LENGTH);
 }
 
 function usernameKey(username: string): string {
@@ -153,63 +178,76 @@ for (const [roomId, room] of rooms) {
 // Socket.IO setup
 const io = new Server(fastify.server, {
   cors: {
-    origin: ['https://wachaut.billytech.es', 'https://api-wachaut.billytech.es'],
-    credentials: true
+    origin: ALLOWED_ORIGINS,
+    credentials: true,
   },
   pingInterval: 25000,
-  pingTimeout: 20000
+  pingTimeout: 20000,
 });
 
 io.use((socket, next) => {
-  // Rate limit connections per IP
-  const ip = socket.handshake.address;
+  // Rate limit connections per real client IP (behind Traefik).
+  const ip = realIp(socket);
   const count = connectionCounts.get(ip) || 0;
   if (count >= MAX_CONNECTIONS_PER_IP) {
     return next(new Error('Demasiadas conexiones. Intenta de nuevo en un momento.'));
   }
   connectionCounts.set(ip, count + 1);
+
+  // Ensure the count is decremented even if the socket disconnects before
+  // reaching the 'connection' handler (e.g. handshake error).
+  socket.once('disconnect', () => {
+    const c = connectionCounts.get(ip) || 0;
+    if (c <= 1) connectionCounts.delete(ip);
+    else connectionCounts.set(ip, c - 1);
+  });
+
   next();
 });
 
 io.on('connection', (socket) => {
-  const ip = socket.handshake.address;
+  const ip = realIp(socket);
   fastify.log.info(`Client connected: ${socket.id} from ${ip}`);
 
   socket.on('disconnect', () => {
-    // Decrement connection count
-    const count = connectionCounts.get(ip) || 0;
-    if (count <= 1) connectionCounts.delete(ip);
-    else connectionCounts.set(ip, count - 1);
+    // Connection-count decrement is handled by the once('disconnect') in io.use.
 
     // Cleanup rate limit
-    eventCounts.delete(getRateKey(socket.id));
+    eventCounts.delete(socket.id);
 
     fastify.log.info(`Client disconnected: ${socket.id}`);
 
-    // Check if host
-    for (const [roomId, room] of rooms) {
-      if (room.hostId === socket.id) {
-        socket.to(roomId).emit('host:disconnected');
+    // O(1) host lookup via reverse map.
+    const hostRoomId = hostToRoom.get(socket.id);
+    if (hostRoomId) {
+      const room = rooms.get(hostRoomId);
+      if (room) {
+        socket.to(hostRoomId).emit('host:disconnected');
         setTimeout(() => {
-          const currentRoom = rooms.get(roomId);
+          const currentRoom = rooms.get(hostRoomId);
           if (currentRoom && currentRoom.hostId === socket.id) {
-            io.to(roomId).emit('room:closed');
-            rooms.delete(roomId);
+            io.to(hostRoomId).emit('room:closed');
+            rooms.delete(hostRoomId);
+            hostToRoom.delete(socket.id);
             for (const [viewerId] of currentRoom.viewers) {
               viewerToRoom.delete(viewerId);
             }
           }
-        }, 60000);
-        break;
+        }, 30000); // aligned with SFU grace period (30s)
       }
-      // Check if viewer
-      if (room.viewers.has(socket.id)) {
+      return;
+    }
+
+    // O(1) viewer lookup via reverse map.
+    const viewerRoomId = viewerToRoom.get(socket.id);
+    if (viewerRoomId) {
+      const room = rooms.get(viewerRoomId);
+      if (room) {
         const viewer = room.viewers.get(socket.id);
         if (viewer) {
           viewer.connected = false;
-          socket.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
+          io.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
         }
-        break;
       }
     }
   });
@@ -237,7 +275,7 @@ io.on('connection', (socket) => {
     const roomId = crypto.randomUUID();
     const room: Room = {
       id: roomId,
-      pin,
+      pin: pinHash(pin),  // store hashed, never plaintext
       hostId: socket.id,
       viewers: new Map(),
       createdAt: new Date(),
@@ -247,6 +285,7 @@ io.on('connection', (socket) => {
     };
     
     rooms.set(roomId, room);
+    hostToRoom.set(socket.id, roomId);
     socket.join(roomId);
     socket.emit('room:created', { roomId });
     fastify.log.info(`Room created: ${roomId}`);
@@ -265,6 +304,7 @@ io.on('connection', (socket) => {
     if (room && room.hostId === socket.id) {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
+      hostToRoom.delete(socket.id);
       for (const [viewerId] of room.viewers) {
         viewerToRoom.delete(viewerId);
       }
@@ -323,16 +363,17 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Per-room join attempt rate limiting
-    const joinKey = `${socket.handshake.address}:${roomId}`;
+    // Per-IP PIN-attempt rate limiting (uses real client IP behind proxy).
+    const clientIp = realIp(socket);
+    const joinKey = `${clientIp}:${roomId}`;
     const joinAttempt = joinAttempts.get(joinKey);
     const now = Date.now();
-    if (joinAttempt && now < joinAttempt.resetAt && joinAttempt.count >= 5) {
+    if (joinAttempt && now < joinAttempt.resetAt && joinAttempt.count >= MAX_PIN_ATTEMPTS) {
       socket.emit('room:error', { message: 'Demasiados intentos. Espera un momento.' });
       return;
     }
     if (!joinAttempt || now > joinAttempt.resetAt) {
-      joinAttempts.set(joinKey, { count: 1, resetAt: now + 300000 }); // 5 min window
+      joinAttempts.set(joinKey, { count: 1, resetAt: now + PIN_ATTEMPT_WINDOW_MS });
     } else {
       joinAttempt.count++;
     }
@@ -344,22 +385,23 @@ io.on('connection', (socket) => {
     }
 
     const room = rooms.get(roomId);
-    
+
     if (!room) {
       socket.emit('room:error', { message: 'No se ha encontrado la sala. Comprueba el enlace.' });
       return;
     }
-    
-    if (room.pin !== pin) {
+
+    // Constant-time PIN comparison against the stored hash.
+    if (!pinEquals(room.pin, pin)) {
       socket.emit('room:auth-failed', { message: 'PIN incorrecto. Comprueba que lo hayas escrito bien.' });
       return;
     }
-    
+
     // PIN correct - reset join attempts
     joinAttempts.delete(joinKey);
     socket.emit('room:auth-success');
-    
-    if (room.viewers.size >= 5) {
+
+    if (room.viewers.size >= MAX_VIEWERS_PER_ROOM) {
       socket.emit('room:error', { message: 'La sala está llena. Espera a que alguien salga.' });
       return;
     }
@@ -391,26 +433,30 @@ io.on('connection', (socket) => {
 
   // ─── CHAT EVENTS ────────────────────────────────────────
 
-  socket.on('chat:message', ({ text }: { text: string }) => {
+  socket.on('chat:message', ({ text }: { text: unknown }) => {
     if (!checkRateLimit(socket.id, MAX_REACTIONS_PER_MINUTE)) return;
+
+    // Validate and sanitize the payload before broadcasting.
+    const cleanText = sanitizeChatText(text);
+    if (!cleanText) return;
 
     const roomId = viewerToRoom.get(socket.id);
     if (!roomId) {
-      // Check if host
-      for (const [rid, room] of rooms) {
-        if (room.hostId === socket.id) {
-          const msg: ChatMessage = {
-            id: crypto.randomUUID(),
-            sender: 'Anfitrión',
-            text: text.slice(0, MAX_CHAT_LENGTH),
-            timestamp: Date.now()
-          };
-          room.chat.push(msg);
-          if (room.chat.length > 100) room.chat.shift();
-          io.to(rid).emit('chat:message', msg);
-          return;
-        }
-      }
+      // Host sending chat — O(1) lookup via reverse map.
+      const hostRoomId = hostToRoom.get(socket.id);
+      if (!hostRoomId) return;
+      const room = rooms.get(hostRoomId);
+      if (!room) return;
+
+      const msg: ChatMessage = {
+        id: crypto.randomUUID(),
+        sender: 'Anfitrión',
+        text: cleanText,
+        timestamp: Date.now()
+      };
+      room.chat.push(msg);
+      if (room.chat.length > 100) room.chat.shift();
+      io.to(hostRoomId).emit('chat:message', msg);
       return;
     }
 
@@ -421,7 +467,7 @@ io.on('connection', (socket) => {
     const msg: ChatMessage = {
       id: crypto.randomUUID(),
       sender: viewer?.name || 'Espectador',
-      text: text.slice(0, MAX_CHAT_LENGTH),
+      text: cleanText,
       timestamp: Date.now()
     };
     room.chat.push(msg);
@@ -431,17 +477,18 @@ io.on('connection', (socket) => {
 
   // ─── REACTIONS EVENTS ───────────────────────────────────
 
-  socket.on('reaction:send', ({ emoji }: { emoji: string }) => {
+  socket.on('reaction:send', ({ emoji }: { emoji: unknown }) => {
     if (!checkRateLimit(socket.id, MAX_REACTIONS_PER_MINUTE)) return;
+
+    // Validate emoji against the allowlist before broadcasting.
+    if (typeof emoji !== 'string' || !VALID_EMOJIS.has(emoji)) return;
 
     const roomId = viewerToRoom.get(socket.id);
     if (!roomId) {
-      // Host can also react
-      for (const [rid] of rooms) {
-        if (rooms.get(rid)?.hostId === socket.id) {
-          io.to(rid).emit('reaction:receive', { emoji, from: 'Anfitrión' });
-          return;
-        }
+      // Host reacting — O(1) lookup via reverse map.
+      const hostRoomId = hostToRoom.get(socket.id);
+      if (hostRoomId) {
+        io.to(hostRoomId).emit('reaction:receive', { emoji, from: 'Anfitrión' });
       }
       return;
     }
@@ -456,12 +503,29 @@ io.on('connection', (socket) => {
 });
 
 // Health check endpoint
-fastify.get('/health', async () => {
+fastify.get('/health', { logLevel: 'error' }, async () => {
   return { 
     status: 'ok', 
     rooms: rooms.size,
     connections: io.engine.clientsCount
   };
+});
+
+// Readiness probe: checks that Socket.IO is accepting connections.
+// Use this for Traefik/Docker load-balancer routing decisions.
+fastify.get('/ready', async () => {
+  const sfuUrl = process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '';
+  let sfuReachable = true;
+  if (sfuUrl) {
+    try {
+      const httpUrl = sfuUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
+      const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(2000) });
+      sfuReachable = res.ok;
+    } catch {
+      sfuReachable = false;
+    }
+  }
+  return { ready: sfuReachable, sfu: sfuReachable ? 'reachable' : 'unreachable' };
 });
 
 // Start server

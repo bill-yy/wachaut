@@ -1,16 +1,13 @@
 name: Build and Deploy
 
-# Only the SFU image is published to GHCR — the web+server combined image is
-# built on the Dokploy host directly from source (pushes to main redeploy
-# automatically), so it does not need to go through this workflow.
+# Quality gates run on every PR and push. The SFU image is published to GHCR on
+# pushes to main — the web+server images are built on the Dokploy host directly.
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'apps/sfu/**'
-      - 'docker/Dockerfile.sfu'
-      - '.github/workflows/build-deploy.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -18,7 +15,37 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
+  # ── Quality gates: typecheck all packages ────────────────────────────
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --config.ignore-scripts=true
+
+      - name: Typecheck web
+        run: pnpm --filter web check
+
+      - name: Typecheck server
+        run: pnpm --filter server typecheck
+
+      - name: Typecheck SFU
+        run: pnpm --filter sfu typecheck
+
+  # ── Build & push SFU image (only on main pushes) ─────────────────────
   build-sfu:
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

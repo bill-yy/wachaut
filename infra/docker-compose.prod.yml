@@ -1,18 +1,23 @@
 # Production compose — run from the infra/ directory (build context is ../..).
-# Matches the root docker-compose.yml model: a single combined image (web+server)
-# exposed twice via Traefik so /socket.io hits the Node API and everything else
-# hits the static site.
+# Uses the split Dockerfile targets: `web` (static) and `server` (Node API).
+# coturn is included for TURN relay (viewers behind symmetric NAT/firewalls).
 
 services:
   web:
     build:
       context: ../..
       dockerfile: Dockerfile
-      target: combined
+      target: web
     restart: always
     environment:
       - NODE_ENV=production
-      - PORT=3000
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wachaut-web.rule=Host(`wachaut.billytech.es`)"
@@ -26,18 +31,48 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      target: combined
+      target: server
     restart: always
     environment:
       - NODE_ENV=production
       - PORT=3001
       - HOST=0.0.0.0
+      - ALLOWED_ORIGINS=https://wachaut.billytech.es
+    mem_limit: 512m
+    cpus: 1
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wachaut-server.rule=Host(`wachaut.billytech.es`) && PathPrefix(`/socket.io`)"
       - "traefik.http.routers.wachaut-server.entrypoints=websecure"
       - "traefik.http.routers.wachaut-server.tls.certresolver=letsencrypt"
       - "traefik.http.services.wachaut-server.loadbalancer.server.port=3001"
+    networks:
+      - dokploy-network
+
+  coturn:
+    image: coturn/coturn:latest
+    restart: always
+    command: >
+      sh -c 'turnserver -n --log-file=stdout --min-port=10000 --max-port=11000
+      --realm=wachaut.billytech.es --use-auth-secret
+      --static-auth-secret="$${TURN_SECRET}" --fingerprint --no-multicast-peers'
+    environment:
+      - TURN_SECRET=${TURN_SECRET}
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "10000-11000:10000-11000/udp"
     networks:
       - dokploy-network
 

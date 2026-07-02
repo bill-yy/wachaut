@@ -1,35 +1,8 @@
-<script>
-  import { tick, onDestroy } from 'svelte';
+<script lang="ts">
+  import { onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import {
-    Monitor,
-    Copy,
-    Check,
-    Share2,
-    StopCircle,
-    Users,
-    Volume2,
-    VolumeX,
-    Maximize,
-    Minimize,
-    ArrowLeft,
-    AlertTriangle,
-    Eye,
-    Link2,
-    MessageCircle,
-    Send,
-    Settings,
-    Circle,
-    Square,
-    Terminal,
-    Shield,
-    SmilePlus,
-    Bell,
-    BellOff
-  } from 'lucide-svelte';
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
-  import { clickOutside } from '$lib/actions';
   import {
     playViewerJoin,
     playViewerLeave,
@@ -38,8 +11,27 @@
     setMuted as setNotifMuted
   } from '$lib/notificationSounds';
 
+  // Components
+  import HostHeader from '$lib/components/HostHeader.svelte';
+  import VideoStage from '$lib/components/VideoStage.svelte';
+  import RoomSidebar from '$lib/components/RoomSidebar.svelte';
+  import ChatPanel from '$lib/components/ChatPanel.svelte';
+  import ReactionLayer from '$lib/components/ReactionLayer.svelte';
+  import ViewersPanel from '$lib/components/ViewersPanel.svelte';
+  import Modal from '$lib/components/Modal.svelte';
+  import Spinner from '$lib/components/Spinner.svelte';
+
+  // Shared utils
+  import { ALL_EMOTES, loadFavorites, saveFavorites, trackFavorite } from '$lib/utils/emotes';
+  import { SENDER_HOST, systemMessage, type ChatMessage } from '$lib/utils/chat';
+  import { copyText } from '$lib/utils/clipboard';
+  import { toast } from '$lib/stores/toast.svelte';
+  import type { Viewer, FloatingReaction, ConfettiParticle } from '$lib/types/room';
+  import type { QualityPreset } from '$lib/components/QualitySettings.svelte';
+  import { AlertTriangle, Eye, Settings as SettingsIcon, Monitor, ArrowLeft } from 'lucide-svelte';
+
   // ─── State ───────────────────────────────────────────────────────────
-  let socket = $state(null);
+  let socket: any = $state(null);
   let connected = $state(false);
   let isSharing = $state(false);
   let isMuted = $state(false);
@@ -49,35 +41,97 @@
   let showLeaveModal = $state(false);
   let loading = $state(true);
   let copiedPin = $state(false);
+  let canScreenShare = $state(true);
   let copiedUrl = $state(false);
 
-  let videoPreview = $state(null);
+  let videoPreview: HTMLVideoElement | null = $state(null);
+  let videoContainer: HTMLDivElement | null = $state(null);
 
   // WebRTC
-  let peers = new Map();
-  let localStream = $state(null);
-  let sfuClient = $state(null);
+  let localStream: MediaStream | null = $state(null);
+  let sfuClient: any = $state(null);
 
   // Chat
-  let chatMessages = $state([]);
+  let chatMessages = $state<ChatMessage[]>([]);
   let chatInput = $state('');
-  let chatContainer = $state(null);
   let showChat = $state(false);
 
   // Reactions
-  let activeReactions = new Map();
-  let reactionIdCounter = $state(0);
+  let activeReactions = $state<FloatingReaction[]>([]);
+  let reactionIdCounter = 0;
 
   // ─── Connection Health ──────────────────────────────────────────────
-  let connectionHealth = $state('good'); // 'good' | 'degraded' | 'poor'
+  let connectionHealth = $state<'good' | 'degraded' | 'poor'>('good');
+  let healthMonitorInterval: ReturnType<typeof setInterval> | null = null;
+  let lastSentBytes = 0;
+  let lastSentTime = 0;
+  let targetBitrate = 2_500_000;
+  let lastHealthState: 'good' | 'degraded' | 'poor' = 'good';
 
-  function updateConnectionHealth() {
-    if (!isSharing || !sfuClient) {
-      connectionHealth = 'good';
-      return;
-    }
-    // SFU manages connections server-side; health is always good when SFU is connected
+  /** Poll outbound-rtp stats from the send transport and derive health. */
+  function startHealthMonitor(bitrate: number) {
+    stopHealthMonitor();
+    targetBitrate = bitrate;
+    lastSentBytes = 0;
+    lastSentTime = 0;
     connectionHealth = 'good';
+    lastHealthState = 'good';
+    healthMonitorInterval = setInterval(checkHealth, 5000);
+  }
+
+  function stopHealthMonitor() {
+    if (healthMonitorInterval) {
+      clearInterval(healthMonitorInterval);
+      healthMonitorInterval = null;
+    }
+  }
+
+  async function checkHealth() {
+    if (!sfuClient || !isSharing) return;
+    try {
+      const stats = await sfuClient.getStats();
+      if (!stats) return;
+
+      let outboundBitrate = 0;
+      let packetsLost = 0;
+      let packetsSent = 0;
+
+      for (const report of stats as any[]) {
+        if (report.type === 'outbound-rtp' && report.kind === 'video') {
+          const now = Date.now();
+          const bytesSent = report.bytesSent || 0;
+          if (lastSentTime > 0) {
+            const elapsed = (now - lastSentTime) / 1000;
+            const delta = bytesSent - lastSentBytes;
+            outboundBitrate = (delta * 8) / elapsed;
+          }
+          lastSentBytes = bytesSent;
+          lastSentTime = now;
+        }
+        if (report.type === 'remote-inbound-rtp') {
+          packetsLost = report.packetsLost || 0;
+          packetsSent = report.packetsSent || 1;
+        }
+      }
+
+      const lossRate = packetsSent > 0 ? packetsLost / packetsSent : 0;
+      const bitrateRatio = targetBitrate > 0 ? outboundBitrate / targetBitrate : 1;
+
+      let newState: 'good' | 'degraded' | 'poor';
+      if (lossRate > 0.05 || bitrateRatio < 0.25) newState = 'poor';
+      else if (lossRate > 0.02 || bitrateRatio < 0.50) newState = 'degraded';
+      else newState = 'good';
+
+      connectionHealth = newState;
+
+      // Auto-adapt: notify on health degradation (only if toggle is on and state changed).
+      if (autoAdaptQuality && newState !== lastHealthState && newState !== 'good') {
+        const label = newState === 'poor' ? 'inestable' : 'degradada';
+        const advice = qualityPreset !== 'low' ? ' Considera bajar la calidad.' : '';
+        showAutoAdaptNotification(`Conexión ${label}.${advice}`);
+      }
+      lastHealthState = newState;
+    } catch {}
   }
 
   // ─── Page Visibility ────────────────────────────────────────────────
@@ -85,29 +139,20 @@
 
   function handleVisibilityChange() {
     tabHidden = document.hidden;
-    if (tabHidden) {
-      // Pause quality monitor polling when tab is hidden
-      if (qualityMonitorInterval) {
-        clearInterval(qualityMonitorInterval);
-        qualityMonitorInterval = null;
-      }
-    } else if (isSharing && autoAdaptQuality) {
-      // Resume quality monitor polling when tab is visible again
-      startQualityMonitor();
-    }
-  }
-
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', handleVisibilityChange);
   }
 
   // ─── Lifecycle Cleanup ──────────────────────────────────────────────
-  // Tracked timer handles (cleared on teardown to avoid leaks)
-  let copyFeedbackTimeout = null;
+  let copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+  let loadingTimeout: ReturnType<typeof setTimeout> | null = null;
+  let cleanedUp = false;
   function cleanup() {
+    if (cleanedUp) return;
+    cleanedUp = true;
     if (celebrationTimeout) clearTimeout(celebrationTimeout);
     if (autoAdaptNotificationTimeout) clearTimeout(autoAdaptNotificationTimeout);
     if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
+    if (loadingTimeout) clearTimeout(loadingTimeout);
+    stopHealthMonitor();
     stopSharing();
     if (sfuClient) {
       sfuClient.disconnect();
@@ -119,6 +164,7 @@
     }
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }
     if (typeof window !== 'undefined') {
       window.removeEventListener('beforeunload', cleanup);
@@ -127,44 +173,22 @@
 
   onDestroy(cleanup);
 
+  function handleFullscreenChange() {
+    isFullscreen = !!document.fullscreenElement;
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+  }
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', cleanup);
   }
 
   // ─── Emote Picker ──────────────────────────────────────────────────
-  const EMOTE_CATEGORIES = [
-    { label: 'Reacciones', emojis: ['👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡'] },
-    { label: 'Gestos', emojis: ['👋', '✌️', '💪', '🙏'] },
-    { label: 'Objetos', emojis: ['⭐', '💯', '🎯', '💡', '🎵'] },
-    { label: 'Comida', emojis: ['☕', '🍕', '🎂'] }
-  ];
-  const ALL_HOST_EMOTES = EMOTE_CATEGORIES.flatMap(c => c.emojis);
   let showEmotePicker = $state(false);
   const HOST_FAVORITES_KEY = 'wachaut.host.favorites';
-  let favoriteEmojis = $state(loadHostFavorites());
-
-  function loadHostFavorites() {
-    try {
-      const stored = JSON.parse(localStorage.getItem(HOST_FAVORITES_KEY));
-      if (Array.isArray(stored) && stored.length >= 5) return stored.slice(0, 5);
-    } catch { /* ignore */ }
-    return ['👍', '❤️', '🔥', '👏', '😂'];
-  }
-  function saveHostFavorites(emojis) {
-    try {
-      localStorage.setItem(HOST_FAVORITES_KEY, JSON.stringify(emojis.slice(0, 5)));
-    } catch { /* ignore */ }
-  }
-  function trackHostFavorite(emoji) {
-    const current = [...favoriteEmojis];
-    const idx = current.indexOf(emoji);
-    if (idx !== -1) {
-      current.splice(idx, 1);
-    }
-    current.unshift(emoji);
-    favoriteEmojis = current.slice(0, 5);
-    saveHostFavorites(favoriteEmojis);
-  }
+  let favoriteEmojis = $state<string[]>(loadFavorites(HOST_FAVORITES_KEY));
 
   // ─── Notifications ─────────────────────────────────────────────────
   let notificationsMuted = $state(isNotifMuted());
@@ -174,25 +198,25 @@
   }
 
   // First viewer celebration
-  let celebrationTimeout = null;
+  let celebrationTimeout: ReturnType<typeof setTimeout> | null = null;
   let showFirstViewerCelebration = $state(false);
-  let confettiParticles = $state([]);
+  let confettiParticles = $state<ConfettiParticle[]>([]);
 
   // Recording
   let isRecording = $state(false);
-  let mediaRecorder = $state(null);
-  let recordedChunks = $state([]);
+  let mediaRecorder: MediaRecorder | null = $state(null);
+  let recordedChunks: Blob[] = [];
   let recordingDuration = $state(0);
-  let recordingInterval = $state(null);
+  let recordingInterval: ReturnType<typeof setInterval> | null = null;
 
   // Quality Settings
   let qualityPreset = $state('normal');
   let showSettings = $state(false);
-  const presets = {
+  const presets = $state<Record<string, QualityPreset>>({
     low: { label: 'Liviano', resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_000_000, desc: 'Ideal para conexiones lentas' },
     normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 2_500_000, desc: 'Uso general' },
     high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
-  };
+  });
 
   // Audio toggle for screen share
   let includeAudio = $state(true);
@@ -200,21 +224,14 @@
   // Auto quality adaptation
   let autoAdaptQuality = $state(true);
   let autoAdaptNotification = $state('');
-  let autoAdaptNotificationTimeout = $state(null);
-  let qualityMonitorInterval = $state(null);
-  let poorQualityDuration = $state(0);
-  let goodQualityDuration = $state(0);
-  const QUALITY_ORDER = ['low', 'normal', 'high'];
-  const POOR_THRESHOLD_SECONDS = 10;
-  const GOOD_THRESHOLD_SECONDS = 30;
-
+  let autoAdaptNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
   // Viewer list for kick
-  let viewersList = $state([]);
+  let viewersList = $state<Viewer[]>([]);
   let showViewersPanel = $state(false);
 
   // Room info
   let roomId = $state(crypto.randomUUID());
-  function generatePin() {
+  function generatePin(): string {
     const arr = new Uint32Array(1);
     crypto.getRandomValues(arr);
     return String(100000 + (arr[0] % 900000));
@@ -224,21 +241,22 @@
 
   // Attach stream to video element when both are available
   $effect(() => {
-    if (videoPreview && localStream) {
-      videoPreview.srcObject = localStream;
+    const stream = localStream;
+    if (videoPreview && stream) {
+      videoPreview.srcObject = stream;
       videoPreview.play().catch(() => {});
     }
   });
 
   // ─── Reactions ───────────────────────────────────────────────────────
-  function addReaction(emoji) {
+  function addReaction(emoji: string) {
     const id = ++reactionIdCounter;
     const idx = reactionIdCounter % 4;
     const scales = [1.6, 2.0, 2.5, 1.8];
     const bottoms = [40, 120, 200, 80];
     const xOffsets = ['0px', '-20px', '15px', '-10px'];
     const rotations = ['-12deg', '8deg', '-5deg', '15deg'];
-    const newReaction = {
+    const newReaction: FloatingReaction = {
       id, emoji,
       x: Math.random() * 70 + 10,
       bottom: bottoms[idx],
@@ -249,44 +267,35 @@
       duration: 2.5 + Math.random() * 1,
       createdAt: Date.now()
     };
-    activeReactions = new Map(activeReactions).set(id, newReaction);
+    activeReactions = [...activeReactions, newReaction];
     setTimeout(() => {
-      activeReactions = new Map(activeReactions);
-      activeReactions.delete(id);
+      activeReactions = activeReactions.filter(r => r.id !== id);
     }, (newReaction.duration + newReaction.delay) * 1000 + 200);
   }
 
-  function handleSendReaction(emoji) {
+  function handleSendReaction(emoji: string) {
     if (!socket || !connected) return;
-    if (ALL_HOST_EMOTES.includes(emoji)) {
-      trackHostFavorite(emoji);
+    if (ALL_EMOTES.includes(emoji)) {
+      favoriteEmojis = trackFavorite(HOST_FAVORITES_KEY, favoriteEmojis, emoji);
     }
     showEmotePicker = false;
-    // Show locally immediately
     addReaction(emoji);
-    // Send to server for others
     socket.emit('reaction:send', { emoji, roomId });
   }
 
   // ─── Recording ──────────────────────────────────────────────────────
-  function formatDuration(s) {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  }
-
   function startRecording() {
     if (!localStream) return;
     recordedChunks = [];
-    const options = { mimeType: 'video/webm;codecs=vp9,opus' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+    const options: MediaRecorderOptions = { mimeType: 'video/webm;codecs=vp9,opus' };
+    if (typeof MediaRecorder !== 'undefined' && !MediaRecorder.isTypeSupported(options.mimeType as string)) {
       options.mimeType = 'video/webm;codecs=vp8,opus';
     }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+    if (typeof MediaRecorder !== 'undefined' && !MediaRecorder.isTypeSupported(options.mimeType as string)) {
       options.mimeType = 'video/webm';
     }
     mediaRecorder = new MediaRecorder(localStream, options);
-    mediaRecorder.ondataavailable = (e) => {
+    mediaRecorder.ondataavailable = (e: BlobEvent) => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     };
     mediaRecorder.onstop = () => {
@@ -310,12 +319,12 @@
       mediaRecorder.stop();
     }
     isRecording = false;
-    clearInterval(recordingInterval);
+    if (recordingInterval) clearInterval(recordingInterval);
     recordingInterval = null;
   }
 
   // ─── Chat Commands ───────────────────────────────────────────────────
-  function processChatCommand(text) {
+  function processChatCommand(text: string): boolean {
     const parts = text.trim().split(/\s+/);
     const command = parts[0].toLowerCase();
     const args = parts.slice(1);
@@ -358,13 +367,8 @@
     }
   }
 
-  function addSystemMessage(text) {
-    chatMessages = [...chatMessages, {
-      id: `system-${Date.now()}-${Math.random()}`,
-      sender: 'Sistema',
-      text,
-      timestamp: new Date()
-    }];
+  function addSystemMessage(text: string) {
+    chatMessages = [...chatMessages, systemMessage(text)];
   }
 
   function sendChatMessage() {
@@ -379,33 +383,27 @@
       }
     }
 
-    socket.emit('chat:message', { roomId, text, sender: 'Anfitrión' });
+    socket.emit('chat:message', { roomId, text, sender: SENDER_HOST });
     chatInput = '';
   }
-
-  function handleChatKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  }
-
-  // Auto-scroll chat
-  $effect(() => {
-    const _ = chatMessages.length;
-    if (chatContainer) {
-      tick().then(() => {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-      });
-    }
-  });
 
   // ─── Socket.IO ───────────────────────────────────────────────────────
   function initSocket() {
     const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
     socket = io(wsUrl, { transports: ['websocket'] });
 
-    socket.on('connect_error', (err) => {
+    // Safety net: if the server never confirms room creation, surface an error
+    // instead of hanging on the loading overlay forever.
+    loadingTimeout = setTimeout(() => {
+      if (loading) {
+        loading = false;
+        error = 'No se pudo crear la sala. Inténtalo de nuevo.';
+        setTimeout(() => { error = ''; }, 5000);
+      }
+    }, 10000);
+
+    socket.on('connect_error', () => {
+      if (loadingTimeout) clearTimeout(loadingTimeout);
       error = 'No se pudo conectar al servidor. Verifica tu conexión.';
       loading = false;
       setTimeout(() => { error = ''; }, 5000);
@@ -414,79 +412,56 @@
     socket.on('connect', () => {
       connected = true;
       socket.emit('host:create-room', { roomId, pin });
-      // Wait for server to confirm with the actual roomId
-      socket.once('room:created', (data) => {
+      socket.once('room:created', (data: any) => {
+        if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
         if (data?.roomId) {
           roomId = data.roomId;
-          // Connect to SFU with the server-assigned roomId
           const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
           sfuClient = new SfuClient(sfuUrl);
-          sfuClient.on('error', (msg) => {
-            console.error('[sfu]', msg);
-          });
-          sfuClient.on('peer-joined', (d) => {
-            console.log('[sfu] peer-joined:', d);
-          });
-          sfuClient.on('peer-left', (d) => {
-            console.log('[sfu] peer-left:', d);
-          });
-          sfuClient.joinRoom(roomId, pin, 'Anfitrión', 'host')
-            .then(() => { console.log('[sfu] joined room'); })
-            .catch((err) => { console.error('[sfu] join failed:', err); });
+          sfuClient.on('error', (msg: string) => console.error('[sfu]', msg));
+          sfuClient.on('peer-joined', (d: any) => console.log('[sfu] peer-joined:', d));
+          sfuClient.on('peer-left', (d: any) => console.log('[sfu] peer-left:', d));
+          sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
+            .then(() => console.log('[sfu] joined room'))
+            .catch((err: unknown) => console.error('[sfu] join failed:', err));
         }
         setTimeout(() => { loading = false; }, 800);
       });
     });
 
-    socket.on('disconnect', () => {
-      connected = false;
-    });
+    socket.on('disconnect', () => { connected = false; });
 
-    socket.on('error', (err) => {
-      error = typeof err === 'string' ? err : err.message || 'Error de conexión';
+    socket.on('error', (err: any) => {
+      error = typeof err === 'string' ? err : err?.message || 'Error de conexión';
       setTimeout(() => { error = ''; }, 5000);
     });
 
     // Viewers
-    socket.on('viewer:joined', (data) => {
+    socket.on('viewer:joined', (data: any) => {
       const wasEmpty = viewerCount === 0;
       viewerCount = viewerCount + 1;
-      if (data.username) {
-        addSystemMessage(`${data.username} se unio a la sala.`);
-      }
+      if (data.username) addSystemMessage(`${data.username} se unio a la sala.`);
       try { playViewerJoin(); } catch {}
-      if (data.viewerId) {
-        createPeerConnection(data.viewerId);
-      }
-      if (wasEmpty) {
-        triggerFirstViewerCelebration();
-      }
+      if (wasEmpty) triggerFirstViewerCelebration();
     });
 
-    socket.on('viewer:left', (data) => {
+    socket.on('viewer:left', (data: any) => {
       viewerCount = Math.max(0, viewerCount - 1);
-      if (data.username) {
-        addSystemMessage(`${data.username} salio de la sala.`);
-      }
+      if (data.username) addSystemMessage(`${data.username} salio de la sala.`);
       try { playViewerLeave(); } catch {}
-      if (data.viewerId) {
-        peers.delete(data.viewerId);
-      }
     });
-
-
 
     // Chat
-    socket.on('chat:history', (data) => {
+    socket.on('chat:history', (data: any) => {
       if (data?.messages) {
-        chatMessages = data.messages.map(m => ({
+        chatMessages = data.messages.map((m: any) => ({
           ...m,
           timestamp: new Date(m.timestamp || Date.now())
         }));
       }
     });
 
-    socket.on('chat:message', (msg) => {
+    socket.on('chat:message', (msg: any) => {
       chatMessages = [...chatMessages, {
         ...msg,
         timestamp: new Date(msg.timestamp || Date.now())
@@ -495,103 +470,72 @@
     });
 
     // Reactions from viewers
-    socket.on('reaction:receive', (data) => {
-      addReaction(data.emoji);
-    });
+    socket.on('reaction:receive', (data: any) => addReaction(data.emoji));
 
     // Viewers list
-    socket.on('host:viewers-list', (data) => {
-      if (data?.viewers) {
-        viewersList = data.viewers;
-      }
+    socket.on('host:viewers-list', (data: any) => {
+      if (data?.viewers) viewersList = data.viewers;
     });
 
-    socket.on('host:kick-failed', (data) => {
+    socket.on('host:kick-failed', (data: any) => {
       addSystemMessage(data?.message || 'No se pudo expulsar al espectador.');
     });
   }
 
-
-
-  function createPeerConnection(viewerId) {
-    // SFU handles all media routing — no per-viewer PeerConnections needed.
-    // Just track the viewer ID for viewer management.
-    if (peers.has(viewerId)) return;
-    peers.set(viewerId, null);
-  }
-
   // ─── Screen Sharing ─────────────────────────────────────────────────
   async function startSharing() {
-    // Clean up any previous stream first
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
     }
-
     try {
-      console.log('[host] startSharing: requesting display media...');
-      // Absolute minimal constraints
+      // Apply the selected quality preset to the capture constraints.
+      const preset = presets[qualityPreset];
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
+        video: {
+          width: { ideal: preset.resolution.width },
+          height: { ideal: preset.resolution.height },
+          frameRate: { ideal: preset.fps },
+        },
+        audio: includeAudio,
       });
-      console.log('[host] Got display media, video tracks:', stream.getVideoTracks().length, 'audio tracks:', stream.getAudioTracks().length);
       localStream = stream;
       isSharing = true;
+      connectionHealth = 'good';
 
-      // Reset quality adaptation state
-      poorQualityDuration = 0;
-      goodQualityDuration = 0;
-      if (autoAdaptQuality) {
-        startQualityMonitor();
-      }
-
-      await tick();
-      if (videoPreview) {
-        videoPreview.srcObject = stream;
-        videoPreview.play().catch(() => {});
-      }
-      // Produce stream to SFU for media routing
       if (sfuClient) {
-        console.log('[host] Producing to SFU...');
-        await sfuClient.produce(stream);
-        console.log('[host] Produce complete');
-        await tick();
+        await sfuClient.produce(stream, { maxBitrate: preset.bitrate });
       }
 
-      stream.getVideoTracks()[0].onended = () => {
-        stopSharing();
-      };
-    } catch (e) {
-      console.error('[host] startSharing error:', e?.name, e?.message || e);
-      isSharing = false;
-      if (e?.name === 'NotAllowedError') {
-        error = 'Permiso denegado para compartir pantalla.';
-      } else {
-        error = 'No se pudo iniciar la compartición de pantalla';
+      startHealthMonitor(preset.bitrate);
+      stream.getVideoTracks()[0].onended = () => stopSharing();
+    } catch (e: any) {
+      // Clean up any stream we may have started to avoid a dangling capture indicator.
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
       }
-      setTimeout(() => { error = ''; }, 5000);
+      isSharing = false;
+      isMuted = false;
+      if (e?.name === 'NotAllowedError') {
+        toast.error('Permiso denegado para compartir pantalla.');
+      } else {
+        toast.error('No se pudo iniciar la compartición de pantalla.');
+      }
     }
   }
 
   function stopSharing() {
     if (isRecording) stopRecording();
-    stopQualityMonitor();
+    stopHealthMonitor();
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
     }
     isSharing = false;
     isMuted = false;
-
-    // Stop producing but DON'T disconnect the SFU entirely
-    if (sfuClient) {
-      sfuClient.stopProducing();
-    }
-
-    if (socket && connected) {
-      socket.emit('host:stop-sharing', { roomId });
-    }
+    if (sfuClient) sfuClient.stopProducing();
+    if (socket && connected) socket.emit('host:stop-sharing', { roomId });
   }
 
   function toggleMute() {
@@ -605,106 +549,81 @@
       socket.emit(newMuted ? 'host:mute' : 'host:unmute', { roomId });
     }
   }
+
   // ─── Quality Adaptation ────────────────────────────────────────────
-  function showAutoAdaptNotification(text) {
+  function showAutoAdaptNotification(text: string) {
     autoAdaptNotification = text;
     if (autoAdaptNotificationTimeout) clearTimeout(autoAdaptNotificationTimeout);
     autoAdaptNotificationTimeout = setTimeout(() => { autoAdaptNotification = ''; }, 4000);
   }
 
-  async function applyQualityPreset(newPreset) {
-    qualityPreset = newPreset;
-    const preset = presets[newPreset];
-    // SFU handles bitrate adaptation server-side
-    showAutoAdaptNotification(`Calidad ajustada automaticamente a ${preset.label}`);
-  }
-
-  function downgradeQuality() {
-    const idx = QUALITY_ORDER.indexOf(qualityPreset);
-    if (idx > 0) {
-      applyQualityPreset(QUALITY_ORDER[idx - 1]);
+  // React to manual preset changes — notify that it applies next session.
+  $effect(() => {
+    const preset = qualityPreset;
+    if (isSharing) {
+      showAutoAdaptNotification(`Calidad cambiada a ${presets[preset].label}. Aplicará al reiniciar la compartición.`);
     }
-  }
-
-  function upgradeQuality() {
-    const idx = QUALITY_ORDER.indexOf(qualityPreset);
-    if (idx < QUALITY_ORDER.length - 1) {
-      applyQualityPreset(QUALITY_ORDER[idx + 1]);
-    }
-  }
-
-  async function checkConnectionQuality() {
-    // SFU handles quality monitoring server-side
-    // No per-peer stats available without direct PeerConnections
-    return;
-  }
-
-  function startQualityMonitor() {
-    if (qualityMonitorInterval) return;
-    qualityMonitorInterval = setInterval(checkConnectionQuality, 1000);
-  }
-
-  function stopQualityMonitor() {
-    if (qualityMonitorInterval) {
-      clearInterval(qualityMonitorInterval);
-      qualityMonitorInterval = null;
-    }
-    poorQualityDuration = 0;
-    goodQualityDuration = 0;
-  }
-
+  });
 
   function toggleFullscreen() {
-    const el = document.querySelector('#video-container');
-    if (!el) return;
+    if (!videoContainer) return;
     if (document.fullscreenElement) {
       document.exitFullscreen();
       isFullscreen = false;
     } else {
-      el.requestFullscreen();
+      videoContainer.requestFullscreen();
       isFullscreen = true;
     }
   }
 
   function requestViewersList() {
-    if (socket && connected) {
-      socket.emit('host:request-viewers', { roomId });
-    }
+    if (socket && connected) socket.emit('host:request-viewers', { roomId });
   }
 
-  function kickViewer(viewerId) {
+  function kickViewer(viewerId: string) {
     if (!socket || !connected) return;
     socket.emit('host:kick', { roomId, viewerId });
     addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
   }
 
   // ─── Clipboard ──────────────────────────────────────────────────────
-  async function copyToClipboard(text, type) {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (type === 'pin') { copiedPin = true; copyFeedbackTimeout = setTimeout(() => { copiedPin = false; }, 2000); }
-      if (type === 'url') { copiedUrl = true; copyFeedbackTimeout = setTimeout(() => { copiedUrl = false; }, 2000); }
-    } catch {
-      error = 'No se pudo copiar al portapapeles';
-      setTimeout(() => { error = ''; }, 3000);
+  async function copyPin() {
+    const ok = await copyText(pin);
+    if (ok) {
+      copiedPin = true;
+      if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
+      copyFeedbackTimeout = setTimeout(() => { copiedPin = false; }, 2000);
+      toast.success('PIN copiado');
+    } else {
+      toast.error('No se pudo copiar al portapapeles');
+    }
+  }
+
+  async function copyUrl() {
+    const ok = await copyText(roomUrl);
+    if (ok) {
+      copiedUrl = true;
+      if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
+      copyFeedbackTimeout = setTimeout(() => { copiedUrl = false; }, 2000);
+      toast.success('Enlace copiado');
+    } else {
+      toast.error('No se pudo copiar al portapapeles');
     }
   }
 
   // ─── Navigation ─────────────────────────────────────────────────────
   function leaveRoom() {
     stopSharing();
-    if (socket) {
-      socket.disconnect();
-    }
+    if (socket) socket.disconnect();
     goto('/');
   }
 
-  // ─── First Viewer Celebration ────────────────────────────────────
+  // ─── First Viewer Celebration ────────────────────────────────────────
   function triggerFirstViewerCelebration() {
     showFirstViewerCelebration = true;
     const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
     const emojis = ['🎉', '🎊', '✨', '🥳', '👋', '🙌'];
-    const particles = [];
+    const particles: ConfettiParticle[] = [];
     for (let i = 0; i < 40; i++) {
       particles.push({
         id: i,
@@ -726,693 +645,225 @@
     }, 3500);
   }
 
+  // Track how many non-system messages existed when the chat was last open,
+  // so the badge shows truly unread messages rather than the full history.
+  let seenCount = $state(0);
+  let unreadCount = $derived.by(() => {
+    const nonSystem = chatMessages.filter((m) => m.sender !== 'Sistema').length;
+    return showChat ? 0 : Math.max(0, nonSystem - seenCount);
+  });
+
   // ─── Init ───────────────────────────────────────────────────────────
-  initSocket();
+  // Detect if screen sharing is supported (mobile browsers typically can't host).
+  canScreenShare = typeof navigator !== 'undefined'
+    && !!navigator.mediaDevices
+    && typeof navigator.mediaDevices.getDisplayMedia === 'function';
+
+  if (canScreenShare) {
+    initSocket();
+  } else {
+    loading = false;
+  }
 </script>
 
-<!-- Loading Overlay -->
-{#if loading}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/90 backdrop-blur-sm transition-opacity duration-500">
-    <div class="text-center">
-      <div class="relative mb-6">
-        <div class="w-16 h-16 border-4 border-slate-600 border-t-red-500 rounded-full animate-spin mx-auto"></div>
-        <Eye class="w-7 h-7 text-white absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+<!-- Mobile / unsupported gate -->
+{#if !canScreenShare}
+  <div class="flex min-h-screen flex-col items-center justify-center bg-app px-6 text-center">
+    <div class="relative mb-6">
+      <div class="absolute inset-0 rounded-full opacity-40 blur-2xl bg-[var(--danger)]"></div>
+      <div class="relative flex h-20 w-20 items-center justify-center rounded-full bg-[var(--surface)] border border-[var(--border)]">
+        <Monitor class="h-10 w-10 text-[var(--text-subtle)]" />
       </div>
-      <h2 class="text-xl font-semibold text-white mb-2">Preparando sala...</h2>
-      <p class="text-slate-400 text-sm">Creando sala segura para tu transmisión</p>
     </div>
+    <h1 class="mb-3 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
+      Compartir pantalla no disponible
+    </h1>
+    <p class="mb-2 max-w-sm text-sm text-[var(--text-muted)]">
+      Tu navegador o dispositivo no soporta la compartición de pantalla.
+    </p>
+    <p class="mb-8 max-w-sm text-sm text-[var(--text-subtle)]">
+      Abre Wachaut en un ordenador con Chrome, Firefox, Edge o Safari para compartir tu pantalla.
+    </p>
+    <a href="/" class="btn-secondary gap-2">
+      <ArrowLeft class="h-4 w-4" />
+      Volver al inicio
+    </a>
   </div>
-{/if}
-
-<!-- Error Banner -->
-{#if error}
-  <div
-    class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-red-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]"
-    role="alert"
-  >
-    <AlertTriangle class="w-4 h-4" />
-    <span class="text-sm font-medium">{error}</span>
+{:else if loading}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ink-950)]/95 backdrop-blur-sm">
+    <div class="text-center">
+      <div class="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
+        <Spinner size="lg" />
+        <Eye class="absolute h-7 w-7 text-[var(--text-muted)]" />
+      </div>
+      <h2 class="mb-2 text-xl font-semibold text-[var(--text)]">Preparando sala…</h2>
+      <p class="text-sm text-[var(--text-muted)]">Creando sala segura para tu transmisión</p>
+    </div>
   </div>
 {/if}
 
 <!-- Auto Quality Adaptation Notification -->
 {#if autoAdaptNotification}
   <div
-    class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-blue-500/90 text-white px-4 py-2 rounded-lg shadow-lg animate-[fadeIn_0.3s_ease]"
+    class="fixed left-1/2 top-20 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-2 shadow-lg glass animate-fade-in"
+    style="border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);"
     role="status"
     aria-live="polite"
   >
-    <Settings class="w-4 h-4" />
-    <span class="text-sm font-medium">{autoAdaptNotification}</span>
+    <SettingsIcon class="h-4 w-4 text-[var(--brand)]" />
+    <span class="text-sm font-medium text-[var(--text)]">{autoAdaptNotification}</span>
   </div>
 {/if}
 
-<!-- First Viewer Celebration -->
-{#if showFirstViewerCelebration}
-  <div class="fixed inset-0 z-[60] pointer-events-none animate-[fadeIn_0.3s_ease]">
-    {#each confettiParticles as p (p.id)}
-      <div
-        class="absolute"
-        style="
-          left: {p.x}%;
-          top: -20px;
-          width: {p.size}px;
-          height: {p.size}px;
-          background: {p.type === 'rect' ? p.color : 'transparent'};
-          border-radius: {p.borderRadius};
-          animation: confettiFall {p.duration}s ease-in {p.delay}s forwards;
-          opacity: 0;
-          transform: rotate({p.rotation}deg);
-          font-size: {p.size * 1.5}px;
-          line-height: 1;
-        "
-      >
-        {#if p.type === 'emoji'}{p.emoji}{/if}
-      </div>
-    {/each}
-    <div class="fixed inset-0 flex items-center justify-center">
-      <div class="bg-white/95 backdrop-blur-md rounded-3xl px-8 py-6 shadow-2xl border border-slate-200 text-center animate-[celebrationPop_0.5s_cubic-bezier(0.175,0.885,0.32,1.275)]">
-        <div class="text-5xl mb-3">🎉</div>
-        <h2 class="text-xl font-bold text-slate-800 mb-1">¡Primer espectador!</h2>
-        <p class="text-sm text-slate-500">Alguien está viendo tu pantalla</p>
-        <div class="mt-3 flex items-center justify-center gap-1.5">
-          <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span class="text-xs text-green-600 font-medium">En vivo</span>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
+<!-- Floating reactions + celebration -->
+<ReactionLayer reactions={activeReactions} celebrate={showFirstViewerCelebration} confetti={confettiParticles} />
 
-<!-- Leave Confirmation Modal -->
-{#if showLeaveModal}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    onclick={(e) => { if (e.target === e.currentTarget) showLeaveModal = false; }}
-  >
-    <div
-      class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="leave-modal-title"
+<!-- Viewers panel modal -->
+<ViewersPanel
+  open={showViewersPanel}
+  viewers={viewersList}
+  count={viewerCount}
+  onKick={kickViewer}
+  onClose={() => (showViewersPanel = false)}
+/>
+
+<!-- Leave confirmation modal -->
+<Modal open={showLeaveModal} title="¿Salir de la sala?" label="Confirmar salida" size="sm" onClose={() => (showLeaveModal = false)}>
+  <div class="mb-5 flex items-center gap-3">
+    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--danger)]/12">
+      <AlertTriangle class="h-5 w-5 text-[var(--danger)]" />
+    </span>
+    <p class="text-sm text-[var(--text-muted)]">
+      Se cerrará la conexión con todos los espectadores y la sala será eliminada permanentemente.
+    </p>
+  </div>
+  <div class="flex gap-3">
+    <button
+      onclick={() => (showLeaveModal = false)}
+      class="btn-secondary flex-1"
     >
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-          <AlertTriangle class="w-5 h-5 text-red-600" />
-        </div>
-        <h3 id="leave-modal-title" class="text-lg font-semibold text-slate-800">¿Salir de la sala?</h3>
-      </div>
-      <p class="text-slate-500 text-sm mb-6">
-        Se cerrará la conexión con todos los espectadores y la sala será eliminada permanentemente.
-      </p>
-      <div class="flex gap-3">
-        <button
-          onclick={() => { showLeaveModal = false; }}
-          class="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
-        >
-          Cancelar
-        </button>
-        <button
-          onclick={leaveRoom}
-          class="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 active:scale-95 transition-all"
-        >
-          Salir
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Viewers Panel Modal -->
-{#if showViewersPanel}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    onclick={(e) => { if (e.target === e.currentTarget) showViewersPanel = false; }}
-  >
-    <div
-      class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-[scaleIn_0.2s_ease]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="viewers-panel-title"
+      Cancelar
+    </button>
+    <button
+      onclick={leaveRoom}
+      class="btn-danger flex-1"
     >
-      <div class="flex items-center justify-between mb-4">
-        <h3 id="viewers-panel-title" class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-          <Users class="w-5 h-5 text-slate-600" />
-          Espectadores ({viewerCount})
-        </h3>
-        <button
-          onclick={() => { showViewersPanel = false; }}
-          class="text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          ✕
-        </button>
-      </div>
-      {#if viewersList.length === 0}
-        <p class="text-slate-400 text-sm text-center py-4">No hay espectadores conectados</p>
-      {:else}
-        <div class="space-y-2 max-h-64 overflow-y-auto">
-          {#each viewersList as viewer}
-            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-              <div class="flex items-center gap-2">
-                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                <div class="min-w-0">
-                  <span class="block text-sm text-slate-700 font-semibold truncate">@{viewer.name || viewer.viewerId.slice(0, 8)}</span>
-                  <span class="block text-[10px] text-slate-400 font-mono">{viewer.viewerId.slice(0, 8)}...</span>
-                </div>
-              </div>
-              <button
-                onclick={() => kickViewer(viewer.name || viewer.viewerId)}
-                class="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-medium hover:bg-red-200 active:scale-95 transition-all"
-              >
-                Expulsar
-              </button>
-            </div>
-          {/each}
-        </div>
-      {/if}
-      <div class="mt-4 pt-3 border-t border-slate-100">
-        <p class="text-xs text-slate-400">También puedes usar <span class="font-mono bg-slate-100 px-1 rounded">/kick &lt;username&gt;</span> en el chat</p>
-      </div>
-    </div>
+      Salir
+    </button>
   </div>
-{/if}
+</Modal>
 
 <!-- Main Container -->
-<div class="min-h-screen bg-slate-50 flex flex-col">
-  <!-- Top Bar -->
-  <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
-    <div class="flex items-center gap-3">
-      <button
-        onclick={() => { showLeaveModal = true; }}
-        class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
-        title="Volver"
-        aria-label="Volver"
-      >
-        <ArrowLeft class="w-5 h-5 text-slate-600" />
-      </button>
-      <div class="flex items-center gap-2">
-        <Monitor class="w-6 h-6 text-slate-800" />
-        <span class="font-bold text-slate-800 text-lg tracking-tight">Wachaut</span>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-3">
-      {#if isSharing}
-        <div class="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-full animate-[fadeIn_0.3s_ease]">
-          <div class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-          <span class="text-red-600 text-sm font-semibold">EN VIVO</span>
-        </div>
-        <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-full" title={connectionHealth === 'good' ? 'Conexión estable' : connectionHealth === 'degraded' ? 'Conexión estableciéndose' : 'Conexión inestable'}>
-          <div class="w-2 h-2 rounded-full {connectionHealth === 'good' ? 'bg-green-500' : connectionHealth === 'degraded' ? 'bg-amber-500' : 'bg-red-500'}"></div>
-          <span class="text-xs font-medium {connectionHealth === 'good' ? 'text-green-600' : connectionHealth === 'degraded' ? 'text-amber-600' : 'text-red-600'}">{connectionHealth === 'good' ? 'Estable' : connectionHealth === 'degraded' ? 'Estableciendo' : 'Inestable'}</span>
-        </div>
-      {/if}
-      <button
-        onclick={() => { showViewersPanel = true; requestViewersList(); }}
-        class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full hover:bg-slate-200 active:scale-95 transition-all"
-        title="Ver espectadores"
-        aria-label="Ver espectadores"
-      >
-        <Users class="w-4 h-4 text-slate-500" />
-        <span class="text-slate-700 text-sm font-medium">{viewerCount}</span>
-      </button>
-      <button
-        onclick={toggleNotificationsMuted}
-        class="p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
-        title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-      >
-        {#if notificationsMuted}
-          <BellOff class="w-5 h-5 text-slate-400" />
-        {:else}
-          <Bell class="w-5 h-5 text-slate-600" />
-        {/if}
-      </button>
-      <button
-        onclick={() => { showChat = !showChat; }}
-        class="relative p-2 hover:bg-slate-100 rounded-xl active:scale-95 transition-all"
-        title="Chat"
-      >
-        <MessageCircle class="w-5 h-5 text-slate-600" />
-        {#if chatMessages.length > 0 && !showChat}
-          <div class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-            <span class="text-[10px] text-white font-bold">{chatMessages.length > 9 ? '9+' : chatMessages.length}</span>
-          </div>
-        {/if}
-      </button>
-    </div>
-  </header>
+<div class="flex h-screen flex-col bg-app">
+  <HostHeader
+    sharing={isSharing}
+    health={connectionHealth}
+    viewerCount={viewerCount}
+    notificationsMuted={notificationsMuted}
+    chatOpen={showChat}
+    unreadCount={unreadCount}
+    onBack={() => (showLeaveModal = true)}
+    onToggleNotifications={toggleNotificationsMuted}
+    onToggleChat={() => {
+      showChat = !showChat;
+      if (showChat) seenCount = chatMessages.filter((m) => m.sender !== 'Sistema').length;
+    }}
+    onOpenViewers={() => { showViewersPanel = true; requestViewersList(); }}
+  />
 
   <!-- Main Content -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex flex-1 overflow-hidden">
     <!-- Video Area -->
-    <div class="flex-1 relative" id="video-container">
-      <!-- Video Element (shown when sharing) -->
-      {#if isSharing && localStream}
-        <video
-          autoplay
-          playsinline
-          muted
-          bind:this={videoPreview}
-          class="w-full h-full object-contain bg-slate-900"
-        ></video>
-      {:else}
-        <!-- Placeholder -->
-        <div class="w-full h-full flex flex-col items-center justify-center bg-slate-100">
-          <div class="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center mb-4">
-            <Monitor class="w-10 h-10 text-slate-400" />
-          </div>
-          <h3 class="text-slate-600 font-semibold mb-1">Sin transmisión</h3>
-          <p class="text-slate-400 text-sm">Comparte tu pantalla para comenzar</p>
-        </div>
-      {/if}
-
-      <!-- Floating Controls (when sharing) -->
-      {#if isSharing}
-        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-2xl opacity-0 hover:opacity-100 transition-opacity duration-300">
-          <button
-            onclick={toggleMute}
-            class="p-2.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
-            title={isMuted ? 'Activar audio' : 'Silenciar audio'}
-          >
-            {#if isMuted}
-              <VolumeX class="w-5 h-5 text-red-400" />
-            {:else}
-              <Volume2 class="w-5 h-5 text-white" />
-            {/if}
-          </button>
-          <button
-            onclick={toggleFullscreen}
-            class="p-2.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
-            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-          >
-            {#if isFullscreen}
-              <Minimize class="w-5 h-5 text-white" />
-            {:else}
-              <Maximize class="w-5 h-5 text-white" />
-            {/if}
-          </button>
-          {#if isRecording}
-            <button
-              onclick={stopRecording}
-              class="p-2.5 bg-red-500/80 rounded-xl hover:bg-red-500 active:scale-95 transition-all flex items-center gap-1.5"
-              title="Detener grabación"
-            >
-              <div class="w-2.5 h-2.5 bg-red-400 rounded-full animate-[pulseRecord_1s_ease-in-out_infinite]"></div>
-              <span class="text-red-300 text-xs font-medium">{formatDuration(recordingDuration)}</span>
-            </button>
-          {:else}
-            <button
-              onclick={startRecording}
-              class="p-2.5 rounded-xl hover:bg-white/20 active:scale-95 transition-all"
-              title="Grabar sesión"
-            >
-              <Circle class="w-5 h-5 text-red-400" />
-            </button>
-          {/if}
-          <button
-            onclick={stopSharing}
-            class="p-2.5 bg-red-500/80 rounded-xl hover:bg-red-500 active:scale-95 transition-all"
-            title="Detener compartición"
-          >
-            <StopCircle class="w-5 h-5 text-white" />
-          </button>
-        </div>
-      {/if}
-
-      <!-- Floating Reactions -->
-      {#each [...activeReactions.values()] as reaction (reaction.id)}
-        <div
-          class="absolute text-4xl pointer-events-none select-none z-10"
-          style:left="{reaction.x}%"
-          style:bottom="{reaction.bottom}px"
-          style:font-size="{reaction.fontSize}rem"
-          style:transform="translateX({reaction.xOffset}) rotate({reaction.rotation})"
-          style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
-        >
-          {reaction.emoji}
-        </div>
-      {/each}
+    <div class="relative flex-1">
+      <VideoStage
+        sharing={isSharing}
+        muted={isMuted}
+        fullscreen={isFullscreen}
+        recording={isRecording}
+        recordingDuration={recordingDuration}
+        onVideoMount={(el) => (videoPreview = el)}
+        onContainerMount={(el) => (videoContainer = el)}
+        onToggleMute={toggleMute}
+        onToggleFullscreen={toggleFullscreen}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onStopSharing={stopSharing}
+      />
     </div>
 
-    <!-- Sidebar -->
-    <aside class="w-full lg:w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 overflow-hidden">
-      <!-- Room Info Section -->
-      <div class="p-4 border-b border-slate-100 space-y-3">
-        <h3 class="font-semibold text-slate-800 text-sm uppercase tracking-wider">Información de sala</h3>
+    <!-- Sidebar: desktop static (md+), mobile slides in as drawer when showChat -->
+    <!-- Desktop -->
+    <div class="hidden h-full min-h-0 md:block">
+      <RoomSidebar
+        {pin}
+        roomUrl={roomUrl}
+        {copiedPin}
+        {copiedUrl}
+        sharing={isSharing}
+        presets={presets}
+        bind:qualityPreset
+        {showSettings}
+        bind:includeAudio
+        bind:autoAdapt={autoAdaptQuality}
+        recording={isRecording}
+        recordingDuration={recordingDuration}
+        {favoriteEmojis}
+        {showEmotePicker}
+        onCopyPin={copyPin}
+        onCopyUrl={copyUrl}
+        onToggleSettings={() => (showSettings = !showSettings)}
+        onShare={startSharing}
+        onStop={stopSharing}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onSendReaction={handleSendReaction}
+        onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
+        onCloseEmotePicker={() => (showEmotePicker = false)}
+        onLeave={() => (showLeaveModal = true)}
+      >
+        <ChatPanel messages={chatMessages} bind:value={chatInput} onSend={sendChatMessage} />
+      </RoomSidebar>
+    </div>
 
-        <!-- PIN Display -->
-        <div class="bg-slate-50 rounded-xl p-3">
-          <div class="flex items-center justify-between mb-1">
-            <span class="text-xs text-slate-500 font-medium">PIN de acceso</span>
-            <button
-              onclick={() => copyToClipboard(pin, 'pin')}
-              class="p-1 hover:bg-slate-200 rounded-lg active:scale-95 transition-all"
-              title="Copiar PIN"
-            >
-              {#if copiedPin}
-                <Check class="w-3.5 h-3.5 text-green-500" />
-              {:else}
-                <Copy class="w-3.5 h-3.5 text-slate-400" />
-              {/if}
-            </button>
-          </div>
-          <p class="text-2xl font-mono font-bold text-slate-800 tracking-[0.2em]">{pin}</p>
-        </div>
-
-        <!-- Room URL -->
-        <div class="bg-slate-50 rounded-xl p-3">
-          <div class="flex items-center justify-between mb-1">
-            <span class="text-xs text-slate-500 font-medium">Enlace de sala</span>
-            <button
-              onclick={() => copyToClipboard(roomUrl, 'url')}
-              class="p-1 hover:bg-slate-200 rounded-lg active:scale-95 transition-all"
-              title="Copiar enlace"
-            >
-              {#if copiedUrl}
-                <Check class="w-3.5 h-3.5 text-green-500" />
-              {:else}
-                <Link2 class="w-3.5 h-3.5 text-slate-400" />
-              {/if}
-            </button>
-          </div>
-          <p class="text-xs text-slate-600 truncate font-mono">{roomUrl}</p>
-        </div>
-      </div>
-
-      <!-- Actions Section -->
-      <div class="p-4 border-b border-slate-100 space-y-2">
-        {#if !isSharing}
-          <!-- Quality Settings Toggle -->
-          <button
-            onclick={() => { showSettings = !showSettings; }}
-            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
-          >
-            <Settings class="w-4 h-4" />
-            Configurar calidad
-            <span class="text-xs text-slate-400 ml-auto">{presets[qualityPreset].label}</span>
-          </button>
-
-          <!-- Quality Settings Panel -->
-          {#if showSettings}
-            <div class="space-y-2 p-3 bg-slate-50 rounded-xl">
-              <!-- Audio Toggle -->
-              <div class="flex items-center justify-between p-2">
-                <div class="flex items-center gap-2">
-                  {#if includeAudio}
-                    <Volume2 class="w-4 h-4 text-slate-600" />
-                  {:else}
-                    <VolumeX class="w-4 h-4 text-slate-400" />
-                  {/if}
-                  <span class="text-sm text-slate-700 font-medium">Incluir audio</span>
-                </div>
-                <button
-                  onclick={() => { includeAudio = !includeAudio; }}
-                  class="relative w-10 h-6 rounded-full transition-colors duration-200 {includeAudio ? 'bg-slate-800' : 'bg-slate-300'}"
-                >
-                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 {includeAudio ? 'translate-x-4' : 'translate-x-0'}"></div>
-                </button>
-              </div>
-
-              <!-- Auto Quality Adapt Toggle -->
-              <div class="flex items-center justify-between p-2">
-                <div class="flex items-center gap-2">
-                  <Settings class="w-4 h-4 text-slate-600" />
-                  <span class="text-sm text-slate-700 font-medium">Adaptacion automatica</span>
-                </div>
-                <button
-                  onclick={() => {
-                    autoAdaptQuality = !autoAdaptQuality;
-                    if (autoAdaptQuality && isSharing) {
-                      poorQualityDuration = 0;
-                      goodQualityDuration = 0;
-                      startQualityMonitor();
-                    } else if (!autoAdaptQuality) {
-                      stopQualityMonitor();
-                    }
-                  }}
-                  class="relative w-10 h-6 rounded-full transition-colors duration-200 {autoAdaptQuality ? 'bg-slate-800' : 'bg-slate-300'}"
-                >
-                  <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 {autoAdaptQuality ? 'translate-x-4' : 'translate-x-0'}"></div>
-                </button>
-              </div>
-
-              <!-- Quality Presets -->
-              {#each Object.entries(presets) as [key, preset]}
-                <button
-                  onclick={() => { qualityPreset = key; showSettings = false; }}
-                  class="w-full text-left p-3 rounded-xl border-2 transition-all {qualityPreset === key
-                    ? 'border-slate-800 bg-white shadow-sm'
-                    : 'border-slate-200 bg-white hover:border-slate-300'}"
-                >
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="font-semibold text-slate-800 text-sm">{preset.label}</span>
-                    {#if qualityPreset === key}
-                      <div class="w-2 h-2 bg-slate-800 rounded-full"></div>
-                    {/if}
-                  </div>
-                  <p class="text-xs text-slate-500 mb-1.5">{preset.desc}</p>
-                  <div class="flex items-center gap-3 text-[10px] text-slate-400">
-                    <span>{preset.resolution.width}x{preset.resolution.height}</span>
-                    <span>•</span>
-                    <span>{preset.fps} FPS</span>
-                    <span>•</span>
-                    <span>{(preset.bitrate / 1_000_000).toFixed(1)} Mbps</span>
-                  </div>
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          <button
-            onclick={startSharing}
-            class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-white rounded-xl font-medium text-sm hover:bg-slate-700 active:scale-95 transition-all"
-          >
-            <Share2 class="w-4 h-4" />
-            Compartir pantalla
-          </button>
-        {:else}
-          <button
-            onclick={stopSharing}
-            class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 active:scale-95 transition-all"
-          >
-            <StopCircle class="w-4 h-4" />
-            Detener transmisión
-          </button>
-        {/if}
-
-        <!-- Recording Button (visible when sharing) -->
-        {#if isSharing}
-          {#if isRecording}
-            <button
-              onclick={stopRecording}
-              class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white rounded-xl font-medium text-sm hover:bg-red-600 active:scale-95 transition-all"
-            >
-              <Square class="w-4 h-4" />
-              <div class="w-2 h-2 bg-white rounded-full animate-[pulseRecord_1s_ease-in-out_infinite]"></div>
-              Detener grabación
-              <span class="text-red-200 text-xs">{formatDuration(recordingDuration)}</span>
-            </button>
-          {:else}
-            <button
-              onclick={startRecording}
-              class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
-            >
-              <Circle class="w-4 h-4 text-red-500" />
-              Grabar sesión
-            </button>
-          {/if}
-        {/if}
-
-        {#if isSharing}
-          <div class="relative pt-2" use:clickOutside={() => (showEmotePicker = false)}>
-            <!-- Favorites row -->
-            <div class="flex items-center justify-center gap-2">
-              {#each favoriteEmojis as emoji}
-                <button
-                  onclick={() => handleSendReaction(emoji)}
-                  class="w-10 h-10 flex items-center justify-center text-xl bg-slate-100 rounded-xl hover:bg-slate-200 active:scale-90 transition-all"
-                  title="Enviar reacción"
-                >
-                  {emoji}
-                </button>
-              {/each}
-              <button
-                onclick={() => (showEmotePicker = !showEmotePicker)}
-                class="w-10 h-10 flex items-center justify-center rounded-xl
-                       hover:bg-slate-200 active:scale-90 transition-all
-                       {showEmotePicker ? 'bg-slate-200 text-slate-800' : 'bg-slate-100 text-slate-500'}"
-                title="Más emojis"
-              >
-                <SmilePlus class="w-5 h-5" />
-              </button>
-            </div>
-
-            <!-- Expandable emote grid -->
-            {#if showEmotePicker}
-              <div class="absolute bottom-full left-0 right-0 mb-2 mx-1
-                          bg-white border border-slate-200 rounded-xl shadow-2xl
-                          p-3 z-10 max-h-64 overflow-y-auto">
-                {#each EMOTE_CATEGORIES as category}
-                  <div class="mb-2 last:mb-0">
-                    <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
-                      {category.label}
-                    </p>
-                    <div class="grid grid-cols-5 gap-1">
-                      {#each category.emojis as emoji}
-                        <button
-                          onclick={() => handleSendReaction(emoji)}
-                          class="w-10 h-10 flex items-center justify-center text-xl
-                                 bg-slate-50 rounded-xl
-                                 hover:bg-slate-100 active:scale-90
-                                 transition-all duration-150"
-                          title="Enviar {emoji}"
-                        >
-                          {emoji}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <button
-          onclick={() => { showLeaveModal = true; }}
-          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl font-medium text-sm hover:bg-slate-200 active:scale-95 transition-all"
+    <!-- Mobile sidebar drawer -->
+    {#if showChat}
+      <button
+        class="fixed inset-0 z-40 bg-black/50 md:hidden"
+        onclick={() => (showChat = false)}
+        aria-label="Cerrar panel"
+        tabindex="-1"
+      ></button>
+      <div class="fixed inset-y-0 right-0 z-50 w-80 max-w-[85vw] md:hidden">
+        <RoomSidebar
+          {pin}
+          roomUrl={roomUrl}
+          {copiedPin}
+          {copiedUrl}
+          sharing={isSharing}
+          presets={presets}
+          bind:qualityPreset
+          {showSettings}
+          bind:includeAudio
+          bind:autoAdapt={autoAdaptQuality}
+          recording={isRecording}
+          recordingDuration={recordingDuration}
+          {favoriteEmojis}
+          {showEmotePicker}
+          onCopyPin={copyPin}
+          onCopyUrl={copyUrl}
+          onToggleSettings={() => (showSettings = !showSettings)}
+          onShare={() => { startSharing(); showChat = false; }}
+          onStop={stopSharing}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          onSendReaction={handleSendReaction}
+          onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
+          onCloseEmotePicker={() => (showEmotePicker = false)}
+          onLeave={() => (showLeaveModal = true)}
         >
-          <ArrowLeft class="w-4 h-4" />
-          Cerrar sala
-        </button>
+          <ChatPanel messages={chatMessages} bind:value={chatInput} onSend={sendChatMessage} />
+        </RoomSidebar>
       </div>
-
-      <!-- Chat Panel -->
-      <div class="flex-1 flex flex-col overflow-hidden min-h-0">
-        <div class="px-4 py-3 flex items-center justify-between border-b border-slate-100">
-          <div class="flex items-center gap-2">
-            <MessageCircle class="w-4 h-4 text-slate-500" />
-            <span class="text-sm font-semibold text-slate-700">Chat</span>
-            <span class="text-xs text-slate-400">({chatMessages.length})</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <Terminal class="w-3 h-3 text-slate-400" />
-            <span class="text-[10px] text-slate-400">/help</span>
-          </div>
-        </div>
-
-        <!-- Messages -->
-        <div
-          bind:this={chatContainer}
-          class="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0"
-          aria-live="polite"
-          aria-label="Mensajes de chat"
-        >
-          {#if chatMessages.length === 0}
-            <div class="flex flex-col items-center justify-center h-full text-center py-8">
-              <MessageCircle class="w-8 h-8 text-slate-300 mb-2" />
-              <p class="text-slate-400 text-sm">Aún no hay mensajes</p>
-              <p class="text-slate-300 text-xs mt-1">Los mensajes de los espectadores aparecerán aquí</p>
-            </div>
-          {:else}
-            {#each chatMessages as msg (msg.id || msg.timestamp)}
-              <div class="flex flex-col {msg.sender === 'Anfitrión' ? 'items-end' : msg.sender === 'Sistema' ? 'items-center' : 'items-start'}">
-                <div class="flex items-center gap-1.5 mb-0.5">
-                  {#if msg.sender === 'Sistema'}
-                    <Shield class="w-3 h-3 text-slate-400" />
-                  {/if}
-                  <span class="text-[10px] font-semibold {msg.sender === 'Anfitrión' ? 'text-slate-600' : msg.sender === 'Sistema' ? 'text-slate-400' : 'text-blue-500'}">
-                    {msg.sender}
-                  </span>
-                  <span class="text-[10px] text-slate-300">
-                    {msg.timestamp instanceof Date
-                      ? msg.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-                      : ''}
-                  </span>
-                </div>
-                <div class="max-w-[85%] px-3 py-2 rounded-2xl text-sm {msg.sender === 'Anfitrión'
-                  ? 'bg-slate-800 text-white rounded-br-md'
-                  : msg.sender === 'Sistema'
-                    ? 'bg-slate-100 text-slate-500 text-xs italic rounded-xl'
-                    : 'bg-slate-100 text-slate-700 rounded-bl-md'}">
-                  {msg.text}
-                </div>
-              </div>
-            {/each}
-          {/if}
-        </div>
-
-        <!-- Chat Input -->
-        <div class="p-3 border-t border-slate-100">
-          <div class="flex items-center gap-2">
-            <input
-              type="text"
-              bind:value={chatInput}
-              onkeydown={handleChatKeydown}
-              placeholder="Escribe un mensaje o /comando..."
-              maxlength="500"
-              aria-label="Mensaje de chat"
-              class="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-all"
-            />
-            <button
-              onclick={sendChatMessage}
-              disabled={!chatInput.trim()}
-              class="p-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Enviar mensaje"
-            >
-              <Send class="w-4 h-4" />
-            </button>
-          </div>
-          <div class="flex items-center justify-between mt-1.5">
-            <span class="text-[10px] text-slate-400">{chatInput.length}/500</span>
-            <span class="text-[10px] text-slate-400">/help para comandos</span>
-          </div>
-        </div>
-      </div>
-    </aside>
+    {/if}
   </div>
 </div>
-
-<style>
-  @keyframes floatUp {
-    0% { opacity: 1; transform: translateY(0) translateX(0) scale(0.3) rotate(0deg); }
-    15% { opacity: 1; transform: translateY(-30px) translateX(5px) scale(1.1) rotate(-5deg); }
-    30% { opacity: 1; transform: translateY(-70px) translateX(-8px) scale(1.3) rotate(8deg); }
-    60% { opacity: 0.8; transform: translateY(-150px) translateX(12px) scale(1.1) rotate(-3deg); }
-    100% { opacity: 0; transform: translateY(-280px) translateX(-5px) scale(0.6) rotate(10deg); }
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
-    to { opacity: 1; transform: scale(1); }
-  }
-
-  @keyframes pulseRecord {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(1.3); }
-  }
-
-  @keyframes confettiFall {
-    0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
-    70% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(100vh) rotate(720deg) scale(0.3); }
-  }
-
-  @keyframes celebrationPop {
-    0% { opacity: 0; transform: scale(0.3); }
-    50% { opacity: 1; transform: scale(1.05); }
-    70% { transform: scale(0.95); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-
-  @keyframes celebrationFadeOut {
-    0% { opacity: 1; }
-    70% { opacity: 1; }
-    100% { opacity: 0; }
-  }
-</style>

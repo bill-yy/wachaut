@@ -1,47 +1,42 @@
 <script lang="ts">
-	import { Monitor, ArrowRight, Shield, Zap, Globe, Radio, Wifi, Link2, ChevronRight, Users } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import {
+		ArrowRight,
+		Link2,
+		Radio,
+		ChevronRight,
+		Zap,
+		Globe,
+		Shield,
+		Monitor,
+		Users,
+	} from 'lucide-svelte';
+	import Brand from '$lib/components/Brand.svelte';
+	import Button from '$lib/components/Button.svelte';
+	import Input from '$lib/components/Input.svelte';
+	import Card from '$lib/components/Card.svelte';
+	import Pill from '$lib/components/Pill.svelte';
+	import Modal from '$lib/components/Modal.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
 
 	let isCreating = $state(false);
-let showOnboarding = $state(false);
-let onboardingStep = $state(0);
+	let showOnboarding = $state(false);
+	let onboardingStep = $state(0);
 
-onMount(() => {
-	if (!localStorage.getItem('wachaut-onboarded')) {
-		showOnboarding = true;
+	onMount(() => {
+		if (!localStorage.getItem('wachaut-onboarded')) {
+			// Slight delay so the hero entrance animation finishes first.
+			const t = setTimeout(() => (showOnboarding = true), 600);
+			return () => clearTimeout(t);
+		}
+	});
+
+	function completeOnboarding() {
+		localStorage.setItem('wachaut-onboarded', 'true');
+		showOnboarding = false;
+		onboardingStep = 0;
 	}
-});
-
-function completeOnboarding() {
-	localStorage.setItem('wachaut-onboarded', 'true');
-	showOnboarding = false;
-	onboardingStep = 0;
-}
-
-const onboardingSteps = [
-	{
-		icon: Monitor,
-		title: 'Comparte tu pantalla',
-		description: 'Haz clic en "Compartir mi pantalla" y selecciona qué quieres mostrar.',
-		color: 'bg-blue-50',
-		iconColor: 'text-blue-500'
-	},
-	{
-		icon: Link2,
-		title: 'Comparte el enlace',
-		description: 'Copia el enlace y el PIN, y envíalos a quien quieras que vea tu pantalla.',
-		color: 'bg-amber-50',
-		iconColor: 'text-amber-500'
-	},
-	{
-		icon: Users,
-		title: '¡Listo!',
-		description: 'Tus amigos entran con el PIN y ven tu pantalla en tiempo real.',
-		color: 'bg-emerald-50',
-		iconColor: 'text-emerald-500'
-	}
-];
 
 	async function shareScreen() {
 		isCreating = true;
@@ -56,7 +51,10 @@ const onboardingSteps = [
 
 	function handleJoin() {
 		const url = joinUrl.trim();
-		if (!url) return;
+		if (!url) {
+			toast.error('Pega un enlace para entrar.');
+			return;
+		}
 		try {
 			const urlObj = new URL(url);
 			goto(urlObj.pathname);
@@ -64,200 +62,225 @@ const onboardingSteps = [
 			goto(url.startsWith('/') ? url : `/room/${url}`);
 		}
 	}
+
+	const onboardingSteps = [
+		{
+			icon: Monitor,
+			title: 'Comparte tu pantalla',
+			description: 'Pulsa "Compartir mi pantalla" y elige qué quieres mostrar.',
+		},
+		{
+			icon: Link2,
+			title: 'Comparte el enlace',
+			description: 'Copia el enlace y el PIN y envíaselos a quien quieras que te vea.',
+		},
+		{
+			icon: Users,
+			title: '¡Listo!',
+			description: 'Tus amigos entran con el PIN y ven tu pantalla en tiempo real.',
+		},
+	];
+
+	const features = [
+		{
+			icon: Zap,
+			title: 'Sin registro',
+			body: 'Entra y comparte en segundos. Sin cuentas, sin contraseñas.',
+		},
+		{
+			icon: Globe,
+			title: 'Desde el navegador',
+			body: 'No instalas nada. Funciona en Chrome, Firefox, Edge y Safari.',
+		},
+		{
+			icon: Shield,
+			title: 'Privado y seguro',
+			body: 'Conexión cifrada (DTLS-SRTP). Tus salas se cierran al terminar y no guardamos tu contenido.',
+		},
+	];
+
+	// Current onboarding step icon (derived so it tracks step changes).
+	const StepIcon = $derived(onboardingSteps[onboardingStep].icon);
 </script>
 
 <svelte:head>
 	<title>Wachaut — Comparte tu pantalla al instante</title>
-	<meta name="description" content="Comparte tu pantalla con amigos sin registro. Crea una sala, comparte el enlace y listo." />
+	<meta
+		name="description"
+		content="Comparte tu pantalla con amigos sin registro. Crea una sala, comparte el enlace y listo. Audio incluido. Chrome, Firefox, Edge y Safari."
+	/>
 </svelte:head>
 
-<main class="flex min-h-screen flex-col" style="background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 40%, #e2e8f0 100%);">
+<div class="relative flex min-h-screen flex-col overflow-hidden bg-app">
+	<!-- Ambient background: aurora glows + subtle grid. -->
+	<div class="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
+		<div
+			class="absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full opacity-40 blur-[120px]"
+			style="background: radial-gradient(circle, var(--color-amber-500), transparent 70%);"
+		></div>
+		<div
+			class="absolute top-1/3 -right-40 h-[420px] w-[420px] rounded-full opacity-25 blur-[120px]"
+			style="background: radial-gradient(circle, var(--color-amber-300), transparent 70%);"
+		></div>
+		<div
+			class="absolute inset-0 opacity-[0.18]"
+			style="background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse at center, black, transparent 75%);"
+		></div>
+	</div>
+
 	<!-- Nav -->
-	<nav class="w-full px-4 py-4">
-		<div class="mx-auto flex max-w-5xl items-center justify-between">
-			<div class="flex items-center gap-2.5">
-				<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 shadow-lg shadow-slate-800/20">
-					<Monitor class="h-4 w-4 text-white" />
-				</div>
-				<span class="text-lg font-bold text-slate-800">Wachaut</span>
-			</div>
-			<div class="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 ring-1 ring-green-100">
-				<span class="relative flex h-2 w-2">
-					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
-					<span class="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-				</span>
-				Activo
-			</div>
-		</div>
+	<nav class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
+		<Brand size="md" />
+		<Pill tone="success" pulse><span class="hidden sm:inline">Servicio activo</span><span class="sm:hidden">Activo</span></Pill>
 	</nav>
 
 	<!-- Hero -->
-	<section class="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
-		<div class="mx-auto max-w-xl animate-slide-up">
-			<div class="mb-5 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-1.5 text-xs font-medium text-blue-600 ring-1 ring-blue-100">
-				<Wifi class="h-3.5 w-3.5" />
-				Conexión directa P2P
+	<main class="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-4 py-12 text-center">
+		<div class="stagger flex flex-col items-center">
+			<!-- Announcement pill -->
+			<div style="animation-delay: 0ms">
+				<span
+					class="inline-flex items-center gap-2 rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-4 py-1.5 text-xs font-medium text-[var(--brand)]"
+				>
+					<Radio class="h-3.5 w-3.5" />
+					Conexión en tiempo real · hasta 5 espectadores
+				</span>
 			</div>
 
-			<h1 class="mb-4 text-5xl font-extrabold tracking-tight text-slate-800 sm:text-6xl">
+			<!-- Headline -->
+			<h1
+				class="mt-6 max-w-3xl text-5xl font-extrabold leading-[1.05] tracking-tight text-[var(--text)] sm:text-7xl"
+				style="font-family: var(--font-display); animation-delay: 60ms"
+			>
 				Comparte tu pantalla
+				<span class="text-gradient block sm:inline">al instante.</span>
 			</h1>
-			<p class="mb-2 text-lg text-slate-500">
-				Sin registro, sin complicaciones.
-			</p>
-			<p class="mb-10 text-sm text-slate-400">
-				Hasta 5 espectadores · Audio incluido · Funciona en cualquier navegador
+
+			<p class="mt-5 max-w-xl text-lg text-[var(--text-muted)]" style="animation-delay: 120ms">
+				Sin registro, sin descargas, sin complicaciones. Un enlace y tu pantalla, en el aire.
 			</p>
 
-			<!-- CTA buttons -->
-			<div class="flex flex-col gap-3 sm:flex-row sm:justify-center">
-				<button onclick={shareScreen} disabled={isCreating} class="btn-primary gap-2 px-8 py-4 text-base">
-					{#if isCreating}
-						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
-						Compartiendo...
-					{:else}
+			<p class="mt-1 text-sm text-[var(--text-subtle)]" style="animation-delay: 160ms">
+				Audio incluido · Chrome, Firefox, Edge y Safari
+			</p>
+
+			<!-- CTAs -->
+			<div class="mt-9 flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center" style="animation-delay: 200ms">
+				<Button onclick={shareScreen} loading={isCreating} size="lg" class="w-full sm:w-auto">
+					{#if !isCreating}
 						<Radio class="h-5 w-5" />
-						Compartir mi pantalla
-						<ChevronRight class="h-4 w-4 opacity-60" />
 					{/if}
-				</button>
-				<a href="#join" class="btn-secondary gap-2 px-8 py-4 text-base">
+					{isCreating ? 'Preparando…' : 'Compartir mi pantalla'}
+					{#if !isCreating}
+						<ChevronRight class="h-4 w-4 opacity-70" />
+					{/if}
+				</Button>
+				<a
+					href="#join"
+					class="btn-secondary inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base sm:w-auto"
+				>
 					<Link2 class="h-5 w-5" />
 					Tengo un enlace
 				</a>
 			</div>
-            <p class="mt-3 text-xs text-slate-400">Funciona en Chrome, Firefox, Edge y Safari</p>
 
 			<!-- Join card -->
-			<div id="join" class="mt-10">
-				<div class="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<div class="mb-3 flex items-center gap-3">
-						<div class="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
-							<Link2 class="h-4 w-4 text-slate-500" />
-						</div>
-						<div class="text-left">
-							<p class="text-sm font-semibold text-slate-700">¿Tienes un enlace?</p>
-							<p class="text-xs text-slate-400">Pega el enlace que te ha compartido el anfitrión</p>
+			<div id="join" class="mt-12 w-full max-w-md scroll-mt-24" style="animation-delay: 240ms">
+				<Card glass class="text-left">
+					<div class="mb-4 flex items-center gap-3">
+						<span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand)]/15 text-[var(--brand)]">
+							<Link2 class="h-4 w-4" />
+						</span>
+						<div>
+							<p class="text-sm font-semibold text-[var(--text)]">¿Tienes un enlace?</p>
+							<p class="text-xs text-[var(--text-subtle)]">Pega el enlace que te compartió el anfitrión</p>
 						</div>
 					</div>
 					<div class="flex gap-2">
-						<input
-							type="text"
-							placeholder="https://wachaut.billytech.es/room/..."
-							class="input-field flex-1 text-sm"
-							bind:value={joinUrl}
-							onkeydown={(e) => { if (e.key === 'Enter') handleJoin(); }}
-						/>
-						<button class="btn-primary px-5" title="Entrar en la sala" onclick={handleJoin}>
+						<div class="flex-1">
+							<Input
+								type="text"
+								placeholder="https://wachaut.billytech.es/room/…"
+								bind:value={joinUrl}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') handleJoin();
+								}}
+							/>
+						</div>
+						<Button onclick={handleJoin} aria-label="Entrar en la sala" class="px-5">
 							<ArrowRight class="h-5 w-5" />
-						</button>
+						</Button>
 					</div>
-				</div>
+				</Card>
 			</div>
 		</div>
-	</section>
+	</main>
 
 	<!-- Features -->
-	<section class="border-t border-slate-200/60 px-4 py-16 backdrop-blur-sm" style="background: rgba(255,255,255,0.3);">
-		<div class="mx-auto max-w-4xl">
-			<div class="grid gap-6 sm:grid-cols-3">
-				<div class="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-					<div class="mb-4 flex justify-center">
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50">
-							<Zap class="h-5 w-5 text-amber-500" />
-						</div>
-					</div>
-					<h3 class="mb-2 text-sm font-bold text-slate-800">Sin registro</h3>
-					<p class="text-sm leading-relaxed text-slate-500">Entra y comparte en segundos. Sin cuentas, sin contraseñas.</p>
-				</div>
-				<div class="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-					<div class="mb-4 flex justify-center">
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
-							<Globe class="h-5 w-5 text-blue-500" />
-						</div>
-					</div>
-					<h3 class="mb-2 text-sm font-bold text-slate-800">Desde el navegador</h3>
-					<p class="text-sm leading-relaxed text-slate-500">No necesitas instalar nada. Funciona en Chrome, Firefox, Edge y Safari.</p>
-				</div>
-				<div class="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition-shadow hover:shadow-md">
-					<div class="mb-4 flex justify-center">
-						<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50">
-							<Shield class="h-5 w-5 text-emerald-500" />
-						</div>
-					</div>
-					<h3 class="mb-2 text-sm font-bold text-slate-800">Privado y seguro</h3>
-					<p class="text-sm leading-relaxed text-slate-500">Conexión directa entre vosotros. Sin servidores de por medio.</p>
-				</div>
-			</div>
+	<section class="mx-auto w-full max-w-5xl px-4 py-16">
+		<div class="grid gap-5 sm:grid-cols-3">
+			{#each features as f, i}
+				{@const FeatureIcon = f.icon}
+				<Card interactive glass class="stagger" style={`animation-delay: ${i * 80}ms`}>
+					<span class="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand)]/12 text-[var(--brand)]">
+						<FeatureIcon class="h-5 w-5" />
+					</span>
+					<h3 class="mb-2 text-base font-bold text-[var(--text)]">{f.title}</h3>
+					<p class="text-sm leading-relaxed text-[var(--text-muted)]">{f.body}</p>
+				</Card>
+			{/each}
 		</div>
 	</section>
 
 	<!-- Footer -->
-	<footer class="border-t border-slate-200/60 px-4 py-8 text-center" style="background: rgba(255,255,255,0.2);">
-		<p class="text-xs text-slate-400">Wachaut — Comparte tu pantalla con amigos</p>
-	</footer>
-
-	{#if showOnboarding}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-			onclick={(e) => { if (e.target === e.currentTarget) completeOnboarding(); }}
-			role="dialog"
-			aria-modal="true"
-			aria-label="Onboarding"
-		>
-			<div class="mx-4 w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
-				<!-- Step indicator dots -->
-				<div class="mb-8 flex justify-center gap-2">
-					{#each onboardingSteps as _, i}
-						<div
-							class="h-2 rounded-full transition-all duration-300 {i === onboardingStep ? 'w-8 bg-slate-800' : 'w-2 bg-slate-200'}"
-						></div>
-					{/each}
-				</div>
-
-				<!-- Content with transition -->
-				<div class="text-center">
-					<div class="mb-6 flex justify-center">
-						<div class="flex h-20 w-20 items-center justify-center rounded-2xl {onboardingSteps[onboardingStep].color} transition-colors duration-300">
-							<svelte:component this={onboardingSteps[onboardingStep].icon} class="h-10 w-10 {onboardingSteps[onboardingStep].iconColor}" />
-						</div>
-					</div>
-
-					<h2 class="mb-3 text-2xl font-bold text-slate-800">
-						{onboardingSteps[onboardingStep].title}
-					</h2>
-					<p class="mb-8 text-sm leading-relaxed text-slate-500">
-						{onboardingSteps[onboardingStep].description}
-					</p>
-
-					<!-- Action buttons -->
-					<div class="flex flex-col gap-3">
-						{#if onboardingStep < onboardingSteps.length - 1}
-							<button
-								onclick={() => onboardingStep++}
-								class="btn-primary w-full gap-2 px-6 py-3"
-							>
-								Siguiente
-								<ChevronRight class="h-4 w-4" />
-							</button>
-						{:else}
-							<button
-								onclick={completeOnboarding}
-								class="btn-primary w-full gap-2 px-6 py-3"
-							>
-								Entendido
-							</button>
-						{/if}
-
-						<button
-							onclick={completeOnboarding}
-							class="text-sm text-slate-400 transition-colors hover:text-slate-600"
-						>
-							Saltar
-						</button>
-					</div>
-				</div>
-			</div>
+	<footer class="border-t border-[var(--border)] px-4 py-8 text-center">
+		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 sm:flex-row sm:justify-between">
+			<Brand size="sm" />
+			<p class="text-xs text-[var(--text-subtle)]">Comparte tu pantalla con amigos · {new Date().getFullYear()}</p>
 		</div>
-	{/if}
-</main>
+	</footer>
+</div>
+
+<!-- Onboarding -->
+<Modal open={showOnboarding} label="Bienvenida a Wachaut" size="sm" onClose={completeOnboarding}>
+	<div class="text-center">
+		<!-- Step dots -->
+			<div class="mb-6 flex justify-center gap-2">
+				{#each onboardingSteps as _, i}
+					<button
+						class="h-2 rounded-full transition-all duration-300 {i === onboardingStep
+							? 'w-8 gradient-brand'
+							: 'w-2 bg-[var(--border)]'}"
+						aria-label={`Paso ${i + 1} de ${onboardingSteps.length}${i === onboardingStep ? ' (actual)' : ''}`}
+						aria-current={i === onboardingStep ? 'step' : undefined}
+						onclick={() => (onboardingStep = i)}
+					></button>
+				{/each}
+			</div>
+
+		<div class="mb-5 flex justify-center">
+			<span class="flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--brand)]/12 text-[var(--brand)] transition-all duration-300">
+				<StepIcon class="h-10 w-10" />
+			</span>
+		</div>
+
+		<h2 class="mb-3 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
+			{onboardingSteps[onboardingStep].title}
+		</h2>
+		<p class="mb-8 text-sm leading-relaxed text-[var(--text-muted)]">
+			{onboardingSteps[onboardingStep].description}
+		</p>
+
+		<div class="flex flex-col gap-3">
+			{#if onboardingStep < onboardingSteps.length - 1}
+				<Button onclick={() => onboardingStep++} class="w-full">
+					Siguiente
+					<ChevronRight class="h-4 w-4" />
+				</Button>
+			{:else}
+				<Button onclick={completeOnboarding} class="w-full">Entendido</Button>
+			{/if}
+			<Button variant="ghost" onclick={completeOnboarding} class="w-full">Saltar</Button>
+		</div>
+	</div>
+</Modal>
