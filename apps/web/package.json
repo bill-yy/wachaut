@@ -36,7 +36,6 @@
   },
   "dependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
-    "@wachaut/shared-types": "workspace:*",
     "mediasoup-client": "^3.21.0",
     "socket.io-client": "^4.8.0",
     "svelte": "5.56.4",

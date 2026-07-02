@@ -34,7 +34,7 @@ COPY --from=builder /app/apps/web/build ./web/build
 # Server (node dist)
 COPY --from=builder /app/apps/server/dist ./server/dist
 COPY --from=builder /app/apps/server/package.json ./server/package.json
-RUN cd server && sed -i '/@wachaut\/shared-types/d' package.json 2>/dev/null && npm install --omit=dev --legacy-peer-deps 2>/dev/null || true
+RUN cd server && npm install --omit=dev
 
 # Install serve globally for static files
 RUN npm install -g serve
@@ -49,8 +49,10 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
+# Healthcheck targets the API server (/health on :3001) rather than the static
+# web server, so a crashed Node process actually fails the check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3000/ || exit 1
+  CMD curl -f http://localhost:3001/health || exit 1
 
 # Web (port 3000) + Server (port 3001) simultaneously
 ENTRYPOINT ["tini", "--"]

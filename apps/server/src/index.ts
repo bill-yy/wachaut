@@ -126,6 +126,8 @@ const twoHours = 2 * 60 * 60 * 1000;
 
 for (const [roomId, room] of rooms) {
   if (now.getTime() - room.createdAt.getTime() > twoHours) {
+    // Notify occupants so they don't become silent orphans
+    io.to(roomId).emit('room:closed');
     rooms.delete(roomId);
     for (const [viewerId] of room.viewers) {
       viewerToRoom.delete(viewerId);
@@ -225,6 +227,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Limit one active room per host to prevent resource abuse
+    const existingRoom = Array.from(rooms.values()).find((r) => r.hostId === socket.id);
+    if (existingRoom) {
+      socket.emit('room:error', { message: 'Ya tienes una sala activa. Ciérrala antes de crear otra.' });
+      return;
+    }
+
     const roomId = crypto.randomUUID();
     const room: Room = {
       id: roomId,
@@ -241,15 +250,6 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.emit('room:created', { roomId });
     fastify.log.info(`Room created: ${roomId}`);
-  });
-
-  socket.on('host:signal', ({ viewerId, signal }: { viewerId: string; signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
-    if (!checkRateLimit(socket.id)) return;
-    if (!viewerId || typeof viewerId !== 'string' || viewerId.length > 100) return;
-    if (!signal || typeof signal !== 'object') return;
-    const sig = signal as any;
-    if (sig.type && !['offer', 'answer'].includes(sig.type)) return;
-    socket.to(viewerId).emit('host:signal', { signal });
   });
 
   socket.on('host:stop-sharing', ({ roomId }: { roomId: string }) => {
@@ -300,40 +300,6 @@ io.on('connection', (socket) => {
     viewerToRoom.delete(viewer.socketId);
     io.to(viewer.socketId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrion' });
     socket.emit('viewer:left', { viewerId: viewer.socketId, username: viewer.name });
-  });
-
-  socket.on('host:broadcast', ({ roomId, text }: { roomId: string; text: string }) => {
-    if (!checkRateLimit(socket.id)) return;
-    const room = rooms.get(roomId);
-    if (!room || room.hostId !== socket.id) return;
-
-    const msg: ChatMessage = {
-      id: `broadcast-${socket.id}-${Date.now()}`,
-      sender: 'Anfitrión (Broadcast)',
-      text: text.slice(0, MAX_CHAT_LENGTH),
-      timestamp: Date.now()
-    };
-    room.chat.push(msg);
-    if (room.chat.length > 100) room.chat.shift();
-    io.to(roomId).emit('chat:message', msg);
-  });
-
-  socket.on('host:focus', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
-    if (!checkRateLimit(socket.id)) return;
-    const room = rooms.get(roomId);
-    if (!room || room.hostId !== socket.id) return;
-    const viewer = findViewer(room, viewerId);
-    if (!viewer) return;
-
-    io.to(roomId).emit('viewer:focus', { viewerId: viewer.socketId, username: viewer.name });
-  });
-
-  socket.on('host:unfocus', ({ roomId }: { roomId: string }) => {
-    if (!checkRateLimit(socket.id)) return;
-    const room = rooms.get(roomId);
-    if (!room || room.hostId !== socket.id) return;
-
-    io.to(roomId).emit('viewer:unfocus');
   });
 
   socket.on('host:request-viewers', ({ roomId }: { roomId: string }) => {
@@ -423,20 +389,6 @@ io.on('connection', (socket) => {
     fastify.log.info(`Viewer ${socket.id} (${reservedUsername}) joined room ${roomId}`);
   });
 
-  socket.on('viewer:signal', ({ signal }: { signal: RTCSessionDescriptionInit | RTCIceCandidateInit }) => {
-    if (!checkRateLimit(socket.id)) return;
-    if (!signal || typeof signal !== 'object') return;
-    const sig = signal as any;
-    if (sig.type && !['offer', 'answer'].includes(sig.type)) return;
-    const roomId = viewerToRoom.get(socket.id);
-    if (!roomId) return;
-    
-    const room = rooms.get(roomId);
-    if (!room) return;
-    
-    socket.to(room.hostId).emit('viewer:signal', { viewerId: socket.id, signal });
-  });
-
   // ─── CHAT EVENTS ────────────────────────────────────────
 
   socket.on('chat:message', ({ text }: { text: string }) => {
@@ -448,7 +400,7 @@ io.on('connection', (socket) => {
       for (const [rid, room] of rooms) {
         if (room.hostId === socket.id) {
           const msg: ChatMessage = {
-            id: `${socket.id}-${Date.now()}`,
+            id: crypto.randomUUID(),
             sender: 'Anfitrión',
             text: text.slice(0, MAX_CHAT_LENGTH),
             timestamp: Date.now()
@@ -467,7 +419,7 @@ io.on('connection', (socket) => {
 
     const viewer = room.viewers.get(socket.id);
     const msg: ChatMessage = {
-      id: `${socket.id}-${Date.now()}`,
+      id: crypto.randomUUID(),
       sender: viewer?.name || 'Espectador',
       text: text.slice(0, MAX_CHAT_LENGTH),
       timestamp: Date.now()
@@ -503,37 +455,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// TURN credentials endpoint
-fastify.get('/turn-credentials', async (request, reply) => {
-  const secret = process.env.TURN_SECRET;
-  if (!secret) {
-    reply.status(503);
-    return { error: 'TURN not configured' };
-  }
-
-  const ttl = 3600; // 1 hour
-  const identifier = (request.query as { id?: string })?.id || crypto.randomUUID();
-  const expiry = Math.floor(Date.now() / 1000) + ttl;
-  const username = `${expiry}:${identifier}`;
-  const password = crypto
-    .createHmac('sha1', secret)
-    .update(username)
-    .digest('base64');
-
-  return {
-    ttl,
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: 'turn:wachaut.billytech.es:3478',
-        username,
-        credential: password
-      }
-    ]
-  };
-});
-
 // Health check endpoint
 fastify.get('/health', async () => {
   return { 
@@ -554,3 +475,24 @@ try {
   fastify.log.error(err);
   process.exit(1);
 }
+
+// Graceful shutdown — drain connections on SIGTERM/SIGINT (e.g. Docker stop, deploy)
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  fastify.log.info(`${signal} received, shutting down...`);
+
+  // Give connected clients a chance to see the room close
+  for (const [roomId] of rooms) {
+    io.to(roomId).emit('room:closed');
+  }
+
+  io.close();
+  await fastify.close();
+  fastify.log.info('Shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
