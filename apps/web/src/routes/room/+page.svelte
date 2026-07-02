@@ -10,6 +10,8 @@
     isMuted as isNotifMuted,
     setMuted as setNotifMuted
   } from '$lib/notificationSounds';
+  import { subscribeToPush, unsubscribePush } from '$lib/utils/push.js';
+  import { toast } from '$lib/stores/toast.svelte';
 
   // Components
   import HostHeader from '$lib/components/HostHeader.svelte';
@@ -25,7 +27,6 @@
   import { ALL_EMOTES, loadFavorites, saveFavorites, trackFavorite } from '$lib/utils/emotes';
   import { SENDER_HOST, systemMessage, type ChatMessage } from '$lib/utils/chat';
   import { copyText } from '$lib/utils/clipboard';
-  import { toast } from '$lib/stores/toast.svelte';
   import type { Viewer, FloatingReaction, ConfettiParticle } from '$lib/types/room';
   import type { QualityPreset } from '$lib/components/QualitySettings.svelte';
   import { AlertTriangle, Eye, Settings as SettingsIcon, Monitor, ArrowLeft } from 'lucide-svelte';
@@ -192,9 +193,36 @@
 
   // ─── Notifications ─────────────────────────────────────────────────
   let notificationsMuted = $state(isNotifMuted());
+  let pushEnabled = $state(false);
+
   function toggleNotificationsMuted() {
     notificationsMuted = !notificationsMuted;
     setNotifMuted(notificationsMuted);
+  }
+
+  async function enablePush() {
+    if (!socket || !roomId) return;
+    const wsUrl = import.meta.env.VITE_WS_URL || 'wss://wachaut.billytech.es';
+    const serverUrl = wsUrl.replace(/^wss/, 'https').replace(/^ws/, 'http');
+    const subscription = await subscribeToPush(roomId, serverUrl);
+    if (subscription) {
+      socket.emit('push:subscribe', { roomId, subscription });
+      pushEnabled = true;
+      toast.success('Notificaciones activadas');
+    } else {
+      toast.error('No se pudieron activar las notificaciones');
+    }
+  }
+
+  async function disablePush() {
+    if (socket) socket.emit('push:unsubscribe');
+    await unsubscribePush();
+    pushEnabled = false;
+  }
+
+  function togglePush() {
+    if (pushEnabled) void disablePush();
+    else void enablePush();
   }
 
   // First viewer celebration
@@ -424,6 +452,9 @@
           sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
             .then(() => console.log('[sfu] joined room'))
             .catch((err: unknown) => console.error('[sfu] join failed:', err));
+
+          // Auto-subscribe to push notifications for the host
+          void enablePush();
         }
         setTimeout(() => { loading = false; }, 800);
       });
@@ -807,6 +838,7 @@
         bind:autoAdapt={autoAdaptQuality}
         recording={isRecording}
         recordingDuration={recordingDuration}
+        pushEnabled={pushEnabled}
         {favoriteEmojis}
         {showEmotePicker}
         onCopyPin={copyPin}
@@ -816,6 +848,7 @@
         onStop={stopSharing}
         onStartRecording={startRecording}
         onStopRecording={stopRecording}
+        onTogglePush={togglePush}
         onSendReaction={handleSendReaction}
         onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
         onCloseEmotePicker={() => (showEmotePicker = false)}
@@ -847,6 +880,7 @@
           bind:autoAdapt={autoAdaptQuality}
           recording={isRecording}
           recordingDuration={recordingDuration}
+          pushEnabled={pushEnabled}
           {favoriteEmojis}
           {showEmotePicker}
           onCopyPin={copyPin}
@@ -856,6 +890,7 @@
           onStop={stopSharing}
           onStartRecording={startRecording}
           onStopRecording={stopRecording}
+          onTogglePush={togglePush}
           onSendReaction={handleSendReaction}
           onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
           onCloseEmotePicker={() => (showEmotePicker = false)}

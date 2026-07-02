@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MessageCircle, Activity, Bell, BellOff } from 'lucide-svelte';
+	import { MessageCircle, Activity, Bell, BellOff, Smartphone } from 'lucide-svelte';
 	import ChatPanel from './ChatPanel.svelte';
 	import EmotePicker from './EmotePicker.svelte';
 	import type { ChatMessage } from '$lib/utils/chat';
@@ -9,12 +9,14 @@
 		value: string;
 		open: boolean;
 		notificationsMuted: boolean;
+		pushEnabled: boolean;
 		connectionStats: { resolution: string; fps: string; bitrate: string };
 		connectionQuality: 'buena' | 'regular' | 'desconocida';
 		favoriteEmojis: string[];
 		showEmotePicker: boolean;
 		onSend: () => void;
 		onToggleNotifications: () => void;
+		onTogglePush: () => void;
 		onSendReaction: (emoji: string) => void;
 		onToggleEmotePicker: () => void;
 		onCloseEmotePicker: () => void;
@@ -25,12 +27,14 @@
 		value = $bindable(),
 		open,
 		notificationsMuted,
+		pushEnabled,
 		connectionStats,
 		connectionQuality,
 		favoriteEmojis,
 		showEmotePicker,
 		onSend,
 		onToggleNotifications,
+		onTogglePush,
 		onSendReaction,
 		onToggleEmotePicker,
 		onCloseEmotePicker,
@@ -77,6 +81,14 @@
 				{:else}
 					<Bell class="h-4 w-4" />
 				{/if}
+			</button>
+			<button
+				onclick={onTogglePush}
+				class="rounded-lg p-1.5 transition-colors hover:bg-[var(--surface-2)] {pushEnabled ? 'text-[var(--success)]' : 'text-[var(--text-subtle)]'}"
+				title={pushEnabled ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+				aria-label={pushEnabled ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+			>
+				<Smartphone class="h-4 w-4" />
 			</button>
 		</div>
 	</div>

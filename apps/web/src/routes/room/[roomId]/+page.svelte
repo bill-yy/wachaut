@@ -24,6 +24,7 @@
 	import { copyText } from '$lib/utils/clipboard';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type { FloatingReaction } from '$lib/types/room';
+	import { subscribeToPush, unsubscribePush } from '$lib/utils/push.js';
 
 	const roomId = $derived(page.params.roomId);
 
@@ -90,9 +91,33 @@
 
 	// --- Notifications ---
 	let notificationsMuted = $state(isNotifMuted());
+	let pushEnabled = $state(false);
+
 	function toggleNotificationsMuted() {
 		notificationsMuted = !notificationsMuted;
 		setNotifMuted(notificationsMuted);
+	}
+
+	async function enablePush() {
+		if (!socket || !roomId) return;
+		const wsUrl = import.meta.env.VITE_WS_URL || 'wss://wachaut.billytech.es';
+		const serverUrl = wsUrl.replace(/^wss/, 'https').replace(/^ws/, 'http');
+		const subscription = await subscribeToPush(roomId, serverUrl);
+		if (subscription) {
+			socket.emit('push:subscribe', { roomId, subscription });
+			pushEnabled = true;
+		}
+	}
+
+	async function disablePush() {
+		if (socket) socket.emit('push:unsubscribe');
+		await unsubscribePush();
+		pushEnabled = false;
+	}
+
+	function togglePush() {
+		if (pushEnabled) void disablePush();
+		else void enablePush();
 	}
 
 	// --- Derived ---
@@ -227,6 +252,7 @@
 			saveUsername(assignedUsername);
 			status = 'waiting';
 			connectSfu(assignedUsername);
+			void enablePush();
 		});
 
 		socket.on('chat:history', (data: any) => {
@@ -310,6 +336,7 @@
 		sfuClient?.disconnect();
 		sfuClient = null;
 		cleanupSocket();
+		void disablePush();
 		if (videoEl) videoEl.srcObject = null;
 		status = 'idle';
 		pin = '';
@@ -640,12 +667,14 @@
 				messages={chatMessages}
 				bind:value={chatInput}
 				{notificationsMuted}
+				{pushEnabled}
 				{connectionStats}
 				{connectionQuality}
 				{favoriteEmojis}
 				{showEmotePicker}
 				onSend={sendChatMessage}
 				onToggleNotifications={toggleNotificationsMuted}
+				onTogglePush={togglePush}
 				onSendReaction={sendReaction}
 				onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
 				onCloseEmotePicker={() => (showEmotePicker = false)}

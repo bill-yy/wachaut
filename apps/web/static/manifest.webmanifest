@@ -1,0 +1,48 @@
+{
+  "name": "Wachaut",
+  "short_name": "Wachaut",
+  "description": "Comparte tu pantalla con amigos al instante. Sin registro, sin descargas.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities", "social"],
+  "icons": [
+    { "src": "/brand-marks/pwa/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-96x96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-128x128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-144x144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-152x152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand-marks/pwa/icon-384x384.png", "sizes": "384x384", "type": "image/png" },
+    { "src": "/brand-marks/pwa/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand-marks/pwa/maskable-icon-72x72.png", "sizes": "72x72", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-96x96.png", "sizes": "96x96", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-128x128.png", "sizes": "128x128", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-144x144.png", "sizes": "144x144", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-152x152.png", "sizes": "152x152", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-384x384.png", "sizes": "384x384", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand-marks/pwa/maskable-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    {
+      "src": "/brand-marks/og.svg",
+      "sizes": "1200x630",
+      "type": "image/svg+xml",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Crear sala",
+      "short_name": "Crear sala",
+      "description": "Empieza a compartir tu pantalla",
+      "url": "/room",
+      "icons": [{ "src": "/brand-marks/pwa/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

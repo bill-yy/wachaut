@@ -3,7 +3,7 @@
 	import Button from './Button.svelte';
 	import EmotePicker from './EmotePicker.svelte';
 	import QualitySettings, { type QualityPreset } from './QualitySettings.svelte';
-	import { Copy, Check, Link2, Settings, Share2, StopCircle, Circle, ArrowLeft } from 'lucide-svelte';
+	import { Copy, Check, Link2, Settings, Share2, StopCircle, Circle, ArrowLeft, Smartphone } from 'lucide-svelte';
 
 	interface Props {
 		// Room info
@@ -22,6 +22,8 @@
 		// Recording
 		recording: boolean;
 		recordingDuration: number;
+		// Push
+		pushEnabled: boolean;
 		// Emotes
 		favoriteEmojis: string[];
 		showEmotePicker: boolean;
@@ -33,6 +35,7 @@
 		onStop: () => void;
 		onStartRecording: () => void;
 		onStopRecording: () => void;
+		onTogglePush: () => void;
 		onSendReaction: (emoji: string) => void;
 		onToggleEmotePicker: () => void;
 		onCloseEmotePicker: () => void;
@@ -54,6 +57,7 @@
 		autoAdapt = $bindable(),
 		recording,
 		recordingDuration,
+		pushEnabled,
 		favoriteEmojis,
 		showEmotePicker,
 		onCopyPin,
@@ -63,6 +67,7 @@
 		onStop,
 		onStartRecording,
 		onStopRecording,
+		onTogglePush,
 		onSendReaction,
 		onToggleEmotePicker,
 		onCloseEmotePicker,
@@ -164,6 +169,15 @@
 					Grabar sesión
 				</Button>
 			{/if}
+
+			<!-- Push notifications -->
+			<button
+				onclick={onTogglePush}
+				class="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all active:scale-95 {pushEnabled ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--border)]'}"
+			>
+				<Smartphone class="h-4 w-4" />
+				{pushEnabled ? 'Notificaciones push activas' : 'Activar notificaciones push'}
+			</button>
 
 			<!-- Emotes -->
 			<EmotePicker

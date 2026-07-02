@@ -38,6 +38,16 @@ await fastify.register(helmet, {
   contentSecurityPolicy: false,
 });
 
+import {
+  configureVapid,
+  getVapidPublicKey,
+  notifyRoom,
+  removeSubscriptionBySocketId,
+  upsertSubscription,
+} from './push.js';
+
+configureVapid();
+
 // Room storage (in-memory with TTL)
 interface ViewerInfo {
   socketId: string;
@@ -210,6 +220,8 @@ io.on('connection', (socket) => {
   fastify.log.info(`Client connected: ${socket.id} from ${ip}`);
 
   socket.on('disconnect', () => {
+    removeSubscriptionBySocketId(socket.id);
+
     // Connection-count decrement is handled by the once('disconnect') in io.use.
 
     // Cleanup rate limit
@@ -250,6 +262,23 @@ io.on('connection', (socket) => {
         }
       }
     }
+  });
+
+  // ─── PUSH NOTIFICATIONS ─────────────────────────────────
+
+  socket.on('push:subscribe', ({ roomId, subscription }: { roomId: string; subscription: unknown }) => {
+    if (!roomId || typeof roomId !== 'string' || !subscription || typeof subscription !== 'object') return;
+    const sub = subscription as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+    if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return;
+
+    upsertSubscription(roomId, socket.id, {
+      endpoint: sub.endpoint,
+      keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    });
+  });
+
+  socket.on('push:unsubscribe', () => {
+    removeSubscriptionBySocketId(socket.id);
   });
 
   // ─── HOST EVENTS ────────────────────────────────────────
@@ -419,6 +448,13 @@ io.on('connection', (socket) => {
     
     socket.emit('room:joined', { roomId, username: reservedUsername });
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
+
+    void notifyRoom(roomId, {
+      title: 'Nuevo espectador',
+      body: `${reservedUsername} se ha unido a la sala`,
+      tag: `viewer-joined-${roomId}`,
+      data: { roomId, url: `https://wachaut.billytech.es/room/${roomId}` },
+    }, socket.id);
     
     // Send chat history to the joining viewer (last 100 messages)
     socket.emit('chat:history', { messages: room.chat.slice(-100) });
@@ -457,6 +493,12 @@ io.on('connection', (socket) => {
       room.chat.push(msg);
       if (room.chat.length > 100) room.chat.shift();
       io.to(hostRoomId).emit('chat:message', msg);
+      void notifyRoom(hostRoomId, {
+        title: 'Nuevo mensaje',
+        body: `${msg.sender}: ${msg.text}`,
+        tag: `chat-${hostRoomId}-${msg.id}`,
+        data: { roomId: hostRoomId, url: `https://wachaut.billytech.es/room/${hostRoomId}` },
+      }, socket.id);
       return;
     }
 
@@ -473,6 +515,12 @@ io.on('connection', (socket) => {
     room.chat.push(msg);
     if (room.chat.length > 100) room.chat.shift();
     io.to(roomId).emit('chat:message', msg);
+    void notifyRoom(roomId, {
+      title: 'Nuevo mensaje',
+      body: `${msg.sender}: ${msg.text}`,
+      tag: `chat-${roomId}-${msg.id}`,
+      data: { roomId, url: `https://wachaut.billytech.es/room/${roomId}` },
+    }, socket.id);
   });
 
   // ─── REACTIONS EVENTS ───────────────────────────────────
@@ -509,6 +557,11 @@ fastify.get('/health', { logLevel: 'error' }, async () => {
     rooms: rooms.size,
     connections: io.engine.clientsCount
   };
+});
+
+// VAPID public key for client subscriptions
+fastify.get('/push/vapid-public-key', { logLevel: 'error' }, async () => {
+  return { publicKey: getVapidPublicKey() };
 });
 
 // Readiness probe: checks that Socket.IO is accepting connections.
