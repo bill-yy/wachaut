@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Wachaut">
+  <defs>
+    <linearGradient id="w-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fcd34d"/>
+      <stop offset="0.55" stop-color="#ffb300"/>
+      <stop offset="1" stop-color="#d99400"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#w-g)"/>
+  <rect x="14" y="18" width="36" height="24" rx="5" fill="none" stroke="#1a1200" stroke-width="3.5"/>
+  <path d="M27 47 L37 47" stroke="#1a1200" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M32 42 L32 47" stroke="#1a1200" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="32" cy="30" r="4.5" fill="#1a1200"/>
+  <path d="M24 30 a8 8 0 0 1 16 0" fill="none" stroke="#1a1200" stroke-width="2.6" stroke-linecap="round" opacity="0.75"/>
+</svg>

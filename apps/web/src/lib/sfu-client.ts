@@ -1,26 +1,62 @@
 /**
  * Wachaut SFU Client — wraps mediasoup-client for use in Svelte 5.
+ *
+ * mediasoup-client is loaded lazily (dynamic import) so the ~280KB bundle only
+ * ships to the host/viewer routes, never to the landing page. The Device is
+ * constructed on first use (joinRoom), not in the constructor.
  */
 
-import { io, Socket } from 'socket.io-client';
-import * as mediasoupClient from 'mediasoup-client';
+import { io, type Socket } from 'socket.io-client';
+
+// Lazy-loaded mediasoup-client module (assigned on first use).
+let mediasoupModule: typeof import('mediasoup-client') | null = null;
 
 export class SfuClient {
   #socket: Socket | null = null;
-  #device: mediasoupClient.Device;
-  #sendTransport: mediasoupClient.Transport | null = null;
-  #recvTransport: mediasoupClient.Transport | null = null;
-  #producer: mediasoupClient.Producer | null = null;
-  #consumers: Map<string, mediasoupClient.Consumer> = new Map();
+  #device: any = null;
+  #sendTransport: any = null;
+  #recvTransport: any = null;
+  #producer: any = null;
+  #audioProducer: any = null;
+  #consumers: Map<string, any> = new Map();
   #url: string;
   #listeners: Map<string, Function[]> = new Map();
   #rtpCapabilities: any = null;
   #pendingConsumers: Array<any> = [];
   #stream: MediaStream | null = null;
+  #iceServers: RTCIceServer[] = [];
 
   constructor(url: string) {
     this.#url = url;
-    this.#device = new mediasoupClient.Device();
+    // Device is created lazily in #ensureDevice() to avoid eager bundle load.
+  }
+
+  /** Lazily load mediasoup-client and create the Device on first use. */
+  async #ensureDevice(): Promise<any> {
+    if (this.#device) return this.#device;
+    if (!mediasoupModule) {
+      mediasoupModule = await import('mediasoup-client');
+    }
+    this.#device = new mediasoupModule.Device();
+    return this.#device;
+  }
+
+  /** Fetch TURN/STUN credentials from the SFU (for viewers behind symmetric NAT). */
+  async #fetchIceServers(): Promise<void> {
+    try {
+      // Convert ws(s):// URL to http(s):// for the REST endpoint.
+      const httpUrl = this.#url.replace(/^ws/, 'http').replace(/\?.*$/, '');
+      const res = await fetch(`${httpUrl}/turn-credentials`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          this.#iceServers = data.iceServers;
+          console.log('[sfu] TURN credentials fetched:', data.iceServers.length, 'server(s)');
+        }
+      }
+    } catch (err) {
+      console.warn('[sfu] Could not fetch TURN credentials (relay may not work behind strict NAT):', err);
+    }
   }
 
   on(event: string, fn: Function) {
@@ -50,6 +86,8 @@ export class SfuClient {
 
       this.#socket.on('connect', () => {
         console.log('[sfu] socket connected');
+        // Fetch TURN credentials in the background (non-blocking).
+        this.#fetchIceServers();
         this.#socket!.emit(
           'join-room',
           { roomId, pin, displayName, role },
@@ -60,7 +98,8 @@ export class SfuClient {
             }
 
             this.#rtpCapabilities = response.rtpCapabilities;
-            await this.#device.load({
+            const device = await this.#ensureDevice();
+            await device.load({
               routerRtpCapabilities: response.rtpCapabilities,
             });
 
@@ -91,14 +130,31 @@ export class SfuClient {
     });
   }
 
-  async produce(screenStream: MediaStream): Promise<void> {
-    if (!this.#device.loaded && this.#rtpCapabilities) {
-      await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
+  async produce(screenStream: MediaStream, options?: { maxBitrate?: number }): Promise<void> {
+    // Scale the SVC layer bitrates relative to the preset's max bitrate.
+    // Default (no options) keeps the original 100k / 500k / 2.5M split.
+    const maxBitrate = options?.maxBitrate ?? 2_500_000;
+    const layerBitrates = [
+      Math.round(maxBitrate * 0.04),  // base layer (~4%)
+      Math.round(maxBitrate * 0.20),  // mid layer (~20%)
+      maxBitrate,                      // top layer (100%)
+    ];
+    const startBitrate = Math.round(maxBitrate * 0.0004); // proportional start
+    const device = await this.#ensureDevice();
+    if (!device.loaded && this.#rtpCapabilities) {
+      await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
     }
-    if (!this.#device.loaded) throw new Error('Device not loaded');
+    if (!device.loaded) throw new Error('Device not loaded');
 
     const transportParams = await this.#createTransport('prod');
-    this.#sendTransport = this.#device.createSendTransport(transportParams);
+    this.#sendTransport = device.createSendTransport({
+      id: transportParams.id,
+      iceParameters: transportParams.iceParameters,
+      iceCandidates: transportParams.iceCandidates,
+      dtlsParameters: transportParams.dtlsParameters,
+      iceServers: transportParams.iceServers || this.#iceServers,
+      iceTransportPolicy: 'all',
+    });
 
     this.#sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
       console.log('[sfu] send transport connect event');
@@ -141,20 +197,54 @@ export class SfuClient {
 
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
-      this.#producer = await this.#sendTransport.produce({
-        track: videoTrack,
-        appData: { mediaTag: 'screen-video' },
-      });
-      console.log('[sfu] Video producer created:', this.#producer.id);
+      // Try VP9 SVC (Scalable Video Coding) for adaptive layer selection.
+      // If the codec/browser doesn't support it, fall back to a single encode.
+      const capabilities = device.rtpCapabilities;
+      const canVp9Svc = capabilities?.codecs?.some(
+        (c: any) => c.mimeType.toLowerCase() === 'video/vp9'
+      );
+
+      if (canVp9Svc) {
+        try {
+          this.#producer = await this.#sendTransport.produce({
+            track: videoTrack,
+            appData: { mediaTag: 'screen-video' },
+            codecOptions: {
+              videoGoogleStartBitrate: Math.max(startBitrate, 100),
+            },
+            // VP9 SVC: 3 spatial layers, allows the SFU to pick a lower-res
+            // layer per viewer based on their available bandwidth.
+            encodings: [
+              { maxBitrate: layerBitrates[0], scaleResolutionDownBy: 4, scalabilityMode: 'S3T3_KEY' },
+              { maxBitrate: layerBitrates[1], scaleResolutionDownBy: 2, scalabilityMode: 'S3T3_KEY' },
+              { maxBitrate: layerBitrates[2], scaleResolutionDownBy: 1, scalabilityMode: 'S3T3_KEY' },
+            ],
+          });
+          console.log('[sfu] Video producer created with VP9 SVC:', this.#producer.id);
+        } catch (svcErr) {
+          console.warn('[sfu] VP9 SVC failed, falling back to single encode:', svcErr);
+          this.#producer = await this.#sendTransport.produce({
+            track: videoTrack,
+            appData: { mediaTag: 'screen-video' },
+          });
+          console.log('[sfu] Video producer created (fallback):', this.#producer.id);
+        }
+      } else {
+        this.#producer = await this.#sendTransport.produce({
+          track: videoTrack,
+          appData: { mediaTag: 'screen-video' },
+        });
+        console.log('[sfu] Video producer created (no VP9):', this.#producer.id);
+      }
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
     if (audioTrack) {
-      const audioProducer = await this.#sendTransport.produce({
+      this.#audioProducer = await this.#sendTransport.produce({
         track: audioTrack,
         appData: { mediaTag: 'screen-audio' },
       });
-      console.log('[sfu] Audio producer created:', audioProducer.id);
+      console.log('[sfu] Audio producer created:', this.#audioProducer.id);
     }
   }
 
@@ -182,10 +272,11 @@ export class SfuClient {
   }
 
   async consume(): Promise<MediaStream> {
-    if (!this.#device.loaded && this.#rtpCapabilities) {
-      await this.#device.load({ routerRtpCapabilities: this.#rtpCapabilities });
+    const device = await this.#ensureDevice();
+    if (!device.loaded && this.#rtpCapabilities) {
+      await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
     }
-    if (!this.#device.loaded) throw new Error('Device not loaded');
+    if (!device.loaded) throw new Error('Device not loaded');
 
     this.#stream = new MediaStream();
 
@@ -205,7 +296,14 @@ export class SfuClient {
 
     // Create receive transport
     const transportParams = await this.#createTransport('cons');
-    this.#recvTransport = this.#device.createRecvTransport(transportParams);
+    this.#recvTransport = device.createRecvTransport({
+      id: transportParams.id,
+      iceParameters: transportParams.iceParameters,
+      iceCandidates: transportParams.iceCandidates,
+      dtlsParameters: transportParams.dtlsParameters,
+      iceServers: transportParams.iceServers || this.#iceServers,
+      iceTransportPolicy: 'all',
+    });
 
     this.#recvTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
       console.log('[sfu] recv transport connect event');
@@ -246,7 +344,7 @@ export class SfuClient {
     return this.#stream;
   }
 
-  async #handleNewConsumer(data: any): Promise<mediasoupClient.Consumer | null> {
+  async #handleNewConsumer(data: any): Promise<any> {
     if (!this.#recvTransport) return null;
 
     console.log('[sfu] Creating consumer for', data.kind, 'id:', data.consumerId);
@@ -295,12 +393,19 @@ export class SfuClient {
       this.#socket?.emit('close-producer', { producerId: this.#producer.id });
       this.#producer = null;
     }
+    if (this.#audioProducer) {
+      this.#audioProducer.close();
+      this.#socket?.emit('close-producer', { producerId: this.#audioProducer.id });
+      this.#audioProducer = null;
+    }
   }
 
   async getStats(): Promise<RTCStatsReport | null> {
-    if (!this.#recvTransport) return null;
+    // Try recv transport first (viewer), then send transport (host).
+    const transport = this.#recvTransport || this.#sendTransport;
+    if (!transport) return null;
     try {
-      const handler = (this.#recvTransport as any)._handler;
+      const handler = (transport as any)._handler;
       const pc = handler?._pc;
       if (pc && typeof pc.getStats === 'function') {
         return await pc.getStats();
@@ -312,7 +417,7 @@ export class SfuClient {
   }
 
   get isDeviceLoaded() {
-    return this.#device.loaded;
+    return this.#device?.loaded ?? false;
   }
 
   disconnect() {

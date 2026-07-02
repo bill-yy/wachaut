@@ -1,1289 +1,691 @@
-<script>
-  import { onMount, onDestroy, tick } from 'svelte';
-  import { page } from '$app/stores';
-  import { io } from 'socket.io-client';
-  import { SfuClient } from '$lib/sfu-client';
-  import { clickOutside } from '$lib/actions';
-  import {
-      Monitor,
-      Lock,
-      Wifi,
-      WifiOff,
-      AlertTriangle,
-      Maximize,
-      Minimize,
-      Volume2,
-      Volume1,
-      VolumeX,
-      MessageCircle,
-      Send,
-      Activity,
-      Share2,
-      User,
-      Users,
-      HelpCircle,
-      MessageSquare,
-      Bell,
-      BellOff,
-      SmilePlus
-    } from 'lucide-svelte';
-  import {
-    playViewerJoin,
-    playViewerLeave,
-    playHostMuted,
-    playChatMessage,
-    isMuted as isNotifMuted,
-    setMuted as setNotifMuted
-  } from '$lib/notificationSounds';
-
-  const roomId = $derived($page.params.roomId);
-
-  // --- Connection state ---
-  let status = $state('idle'); // idle, connecting, auth, waiting, live, error, disconnected, reconnecting
-  let errorMessage = $state('');
-  let pin = $state('');
-  let username = $state('');
-  let assignedUsername = $state('');
-  let reconnectAttempt = $state(0);
-  let reconnectTimer = $state(null);
-  let disconnectedSince = $state(0);
-  let visibilityPaused = $state(false);
-  const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
-
-  // --- Socket & SFU ---
-  let socket = $state(null);
-  let sfuClient = $state(null);
-
-  // --- Video ---
-  let videoEl = $state(null);
-  let isMuted = $state(true);
-  let volume = $state(100);
-  let isFullscreen = $state(false);
-  let isHovering = $state(false);
-  let hostMuted = $state(false);
-
-  // --- Chat ---
-  let chatMessages = $state([]);
-  let chatInput = $state('');
-  let chatContainer = $state(null);
-
-  // --- Mobile & Keyboard Shortcuts ---
-  let chatOpen = $state(false);
-  let showShortcuts = $state(false);
-  let chatInputEl = $state(null);
-  let shortcutsTimeout = $state(null);
-
-  // --- Connection Stats ---
-  let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
-  let statsInterval = $state(null);
-  let lastBytesReceived = $state(0);
-  let lastStatsTime = $state(0);
-
-  // --- Reactions ---
-  const ALL_EMOTES = [
-    // Reactions
-    '👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡',
-    // Gestures
-    '👋', '✌️', '💪', '🙏',
-    // Objects
-    '⭐', '💯', '🎯', '💡', '🎵',
-    // Food
-    '☕', '🍕', '🎂'
-  ];
-  const EMOTE_CATEGORIES = [
-    { label: 'Reacciones', emojis: ['👍', '👎', '❤️', '🔥', '👏', '😂', '🎉', '😮', '😢', '😡'] },
-    { label: 'Gestos', emojis: ['👋', '✌️', '💪', '🙏'] },
-    { label: 'Objetos', emojis: ['⭐', '💯', '🎯', '💡', '🎵'] },
-    { label: 'Comida', emojis: ['☕', '🍕', '🎂'] }
-  ];
-  let showEmotePicker = $state(false);
-  let favoriteEmojis = $state(loadFavorites());
-  let animatingReaction = $state(null);
-  let floatingReactions = $state([]);
-  let reactionCounter = 0;
-
-  // --- Notifications ---
-  let notificationsMuted = $state(isNotifMuted());
-  function toggleNotificationsMuted() {
-    notificationsMuted = !notificationsMuted;
-    setNotifMuted(notificationsMuted);
-  }
-
-  const FAVORITES_KEY = 'wachaut.viewer.favorites';
-  function loadFavorites() {
-    try {
-      const stored = JSON.parse(localStorage.getItem(FAVORITES_KEY));
-      if (Array.isArray(stored) && stored.length >= 5) return stored.slice(0, 5);
-    } catch { /* ignore */ }
-    return ['👍', '❤️', '🔥', '👏', '😂'];
-  }
-  function saveFavorites(emojis) {
-    try {
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(emojis.slice(0, 5)));
-    } catch { /* ignore */ }
-  }
-  function trackFavorite(emoji) {
-    const current = [...favoriteEmojis];
-    const idx = current.indexOf(emoji);
-    if (idx !== -1) {
-      current.splice(idx, 1);
-    }
-    current.unshift(emoji);
-    favoriteEmojis = current.slice(0, 5);
-    saveFavorites(favoriteEmojis);
-  }
-
-  // --- Derived ---
-  function getStatusLabel(s) {
-    if (s === 'idle') return 'Desconectado';
-    if (s === 'connecting') return 'Conectando...';
-    if (s === 'auth') return 'Autenticando...';
-    if (s === 'waiting') return 'Esperando transmisión';
-    if (s === 'live') return 'En vivo';
-    if (s === 'error') return 'Error';
-    if (s === 'disconnected') return 'Desconectado';
-    if (s === 'reconnecting') return 'Reconectando...';
-    return '';
-  }
-
-  let isConnected = $derived(
-    status === 'waiting' || status === 'live'
-  );
-
-  let statusColor = $derived.by(() => {
-    if (status === 'live') return 'bg-red-500';
-    if (isConnected) return 'bg-green-500';
-    return 'bg-slate-500';
-  });
-
-  let connectionQuality = $derived.by(() => {
-    const res = connectionStats.resolution || '';
-    if (res.includes('1920')) return 'buena';
-    if (res.includes('1280')) return 'regular';
-    return 'desconocida';
-  });
-
-  // --- Effects ---
-
-  // Auto-scroll chat when new messages arrive
-  $effect(() => {
-    if (chatMessages.length > 0 && chatContainer) {
-      tick().then(() => {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-      });
-    }
-  });
-
-  // --- Functions ---
-
-  async function connect() {
-    // Cleanup any existing socket/sfu before reconnecting
-    cleanupSocket();
-    sfuClient?.disconnect();
-    sfuClient = null;
-
-    const cleanedUsername = sanitizeUsername(username);
-    username = cleanedUsername;
-
-    if (cleanedUsername.length < 2) {
-      errorMessage = 'Ingresa un username de al menos 2 caracteres';
-      status = 'error';
-      return;
-    }
-
-    if (!pin || pin.length < 4) {
-      errorMessage = 'Ingresa un PIN válido';
-      status = 'error';
-      return;
-    }
-
-    status = 'connecting';
-
-    const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
-    socket = io(wsUrl, {
-      transports: ['websocket']
-    });
-
-    socket.on('connect', () => {
-      socket.emit('viewer:join', { roomId, pin, username: cleanedUsername });
-      status = 'auth';
-    });
-
-    socket.on('room:auth-success', () => {
-      status = 'waiting';
-      // SFU connection happens in room:joined handler (after username assignment)
-    });
-
-    socket.on('room:auth-failed', (data) => {
-      errorMessage = data?.message || 'PIN incorrecto';
-      status = 'error';
-      cleanupSocket();
-    });
-
-    socket.on('room:error', (data) => {
-      errorMessage = data?.message || 'Error en la sala';
-      status = 'error';
-      cleanupSocket();
-    });
-
-    socket.on('room:joined', (data) => {
-      assignedUsername = data?.username || cleanedUsername;
-      username = assignedUsername;
-      saveUsername(assignedUsername);
-      status = 'waiting';
-      connectSfu(assignedUsername);
-    });
-
-  // Chat events
-    socket.on('chat:history', (data) => {
-      if (data?.messages) {
-        chatMessages = data.messages.map((msg) => ({
-          id: msg.id || Date.now() + Math.random(),
-          sender: msg.sender || 'Anónimo',
-          text: msg.text,
-          timestamp: msg.timestamp || new Date().toISOString()
-        }));
-      }
-    });
-
-    socket.on('chat:message', (msg) => {
-      chatMessages = [
-        ...chatMessages,
-        {
-          id: msg.id || Date.now(),
-          sender: msg.sender || 'Anónimo',
-          text: msg.text,
-          timestamp: msg.timestamp || new Date().toISOString()
-        }
-      ];
-      try { playChatMessage(); } catch {}
-    });
-
-    // Reactions
-    socket.on('reaction:receive', (data) => {
-      addFloatingReaction(data.emoji);
-    });
-
-    socket.on('host:stopped-sharing', () => {
-      sfuClient?.disconnect();
-      sfuClient = null;
-      stopStatsPolling();
-      if (videoEl) {
-        videoEl.srcObject = null;
-      }
-      status = 'waiting';
-    });
-
-    socket.on('host:muted', () => {
-      hostMuted = true;
-      try { playHostMuted(); } catch {}
-    });
-
-    socket.on('host:unmuted', () => {
-      hostMuted = false;
-    });
-
-    socket.on('viewer:kicked', (data) => {
-      errorMessage = data?.reason || 'Has sido expulsado de la sala';
-      status = 'error';
-      cleanupSocket();
-    });
-
-    socket.on('host:disconnected', () => {
-      errorMessage = 'El anfitrión se desconectó';
-      status = 'error';
-      sfuClient?.disconnect();
-      sfuClient = null;
-      stopStatsPolling();
-    });
-
-    socket.on('room:closed', () => {
-      errorMessage = 'La sala se cerró';
-      status = 'error';
-      sfuClient?.disconnect();
-      sfuClient = null;
-      stopStatsPolling();
-    });
-
-    socket.on('disconnect', () => {
-      if (status !== 'error') {
-        status = 'disconnected';
-        scheduleReconnect();
-      }
-    });
-  }
-
-  function disconnect() {
-    stopStatsPolling();
-    cleanupReconnect();
-    sfuClient?.disconnect();
-    sfuClient = null;
-    cleanupSocket();
-    if (videoEl) {
-      videoEl.srcObject = null;
-    }
-    status = 'idle';
-    pin = '';
-    assignedUsername = '';
-    // Don't clear chatMessages on disconnect so they persist if reconnecting
-    errorMessage = '';
-    connectionStats = { resolution: '', fps: '', bitrate: '' };
-  }
-
-  function cleanupSocket() {
-    if (socket) {
-      socket.removeAllListeners();
-      socket.disconnect();
-      socket = null;
-    }
-  }
-
-  function scheduleReconnect() {
-    if (reconnectAttempt >= 3) {
-      status = 'error';
-      errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
-      reconnectAttempt = 0;
-      return;
-    }
-    const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 8000);
-    reconnectAttempt++;
-    console.log(`[viewer] Reconnect attempt ${reconnectAttempt} in ${delay}ms`);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(() => {
-      connect().catch(() => {});
-    }, delay);
-  }
-
-  function cleanupReconnect() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    reconnectAttempt = 0;
-  }
-
-  function handlePinInput(e) {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
-    pin = val;
-  }
-
-  function handlePinKeydown(e) {
-    if (e.key === 'Enter' && pin.length >= 4 && username.trim().length >= 2) {
-      connect();
-    }
-  }
-
-  function sanitizeUsername(value) {
-    return value
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-zA-Z0-9_-]/g, '')
-      .slice(0, 24);
-  }
-
-  function handleUsernameInput(e) {
-    username = sanitizeUsername(e.target.value);
-  }
-
-  function saveUsername(value) {
-    try {
-      localStorage.setItem(USERNAME_STORAGE_KEY, value);
-    } catch {
-      // Ignore private browsing/storage failures.
-    }
-  }
-
-  function toggleMute() {
-    if (videoEl) {
-      if (videoEl.muted && volume === 0) {
-        volume = 50;
-        videoEl.volume = 0.5;
-      }
-      videoEl.muted = !videoEl.muted;
-      isMuted = videoEl.muted;
-    }
-  }
-
-  function handleVolumeInput(e) {
-    volume = Number(e.target.value);
-    if (videoEl) {
-      videoEl.volume = volume / 100;
-      videoEl.muted = volume === 0;
-      isMuted = videoEl.muted;
-    }
-  }
-
-  function toggleFullscreen() {
-    if (!videoEl) return;
-
-    if (!document.fullscreenElement) {
-      videoEl.parentElement.requestFullscreen().then(() => {
-        isFullscreen = true;
-      }).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => {
-        isFullscreen = false;
-      }).catch(() => {});
-    }
-  }
-
-  function sendChatMessage() {
-    const text = chatInput.trim();
-    if (!text || !socket) return;
-
-    // Chat commands
-    if (text.startsWith('/')) {
-      const parts = text.split(/\s+/);
-      const command = parts[0].toLowerCase();
-      switch (command) {
-        case '/help':
-          addSystemMessage('Comandos: /help, /stats, /clear');
-          chatInput = '';
-          return;
-        case '/stats':
-          addSystemMessage(`Estado: ${getStatusLabel(status)} | Resolución: ${connectionStats.resolution || 'N/A'} | FPS: ${connectionStats.fps || 'N/A'} | Bitrate: ${connectionStats.bitrate || 'N/A'}`);
-          chatInput = '';
-          return;
-        case '/clear':
-          chatMessages = [];
-          addSystemMessage('Chat limpiado.');
-          chatInput = '';
-          return;
-      }
-    }
-
-    socket.emit('chat:message', { text });
-    chatInput = '';
-  }
-
-  function addSystemMessage(text) {
-    chatMessages = [...chatMessages, {
-      id: `system-${Date.now()}`,
-      sender: 'Sistema',
-      text,
-      timestamp: new Date().toISOString()
-    }];
-  }
-
-  function handleChatKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  }
-
-  function sendReaction(emoji) {
-    if (!socket) return;
-    if (!ALL_EMOTES.includes(emoji)) return;
-    trackFavorite(emoji);
-    showEmotePicker = false;
-    // Show locally immediately
-    addFloatingReaction(emoji);
-    // Send to server for others
-    socket.emit('reaction:send', { emoji });
-    animatingReaction = emoji;
-    setTimeout(() => {
-      if (animatingReaction === emoji) {
-        animatingReaction = null;
-      }
-    }, 600);
-  }
-
-  function addFloatingReaction(emoji) {
-    if (!ALL_EMOTES.includes(emoji)) return;
-    const id = ++reactionCounter;
-    // Each emoji gets a unique set of styles to look random
-    const idx = reactionCounter % 4;
-    const scales = [1.4, 1.8, 2.2, 1.6];
-    const bottoms = [40, 120, 200, 80];
-    const xOffsets = ['0px', '-20px', '15px', '-10px'];
-    const rotations = ['-12deg', '8deg', '-5deg', '15deg'];
-    const reaction = {
-      id, emoji,
-      x: Math.random() * 70 + 10,
-      bottom: bottoms[idx],
-      fontSize: scales[idx],
-      xOffset: xOffsets[idx],
-      rotation: rotations[idx],
-      delay: Math.random() * 0.2,
-      duration: 2.5 + Math.random() * 1,
-      createdAt: Date.now()
-    };
-    floatingReactions = [...floatingReactions, reaction];
-    setTimeout(() => {
-      floatingReactions = floatingReactions.filter(r => r.id !== id);
-    }, (reaction.duration + reaction.delay) * 1000 + 200);
-  }
-
-  function retry() {
-    cleanupReconnect();
-    status = 'idle';
-    errorMessage = '';
-    // Don't clear pin so user can reconnect with same PIN
-  }
-
-  async function connectSfu(displayName) {
-    if (sfuClient) return; // Already connected, prevent double call
-    try {
-      const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
-      sfuClient = new SfuClient(sfuUrl);
-
-      sfuClient.on('stream-ready', async (stream) => {
-        // Set status first so Svelte renders the <video> element
-        status = 'live';
-        reconnectAttempt = 0;
-        disconnectedSince = 0;
-
-        // Wait for Svelte to render the video element after status change
-        await tick();
-
-        if (videoEl) {
-          videoEl.srcObject = stream;
-          videoEl.volume = volume / 100;
-          videoEl.muted = isMuted;
-          videoEl.play().catch(() => {});
-          console.log('[viewer] Video attached, tracks:', stream.getTracks().length);
-        } else {
-          console.error('[viewer] videoEl still null after tick!');
-        }
-
-        startStatsPolling();
-        showShortcutsOverlay();
-        if (window.innerWidth < 768) {
-          chatOpen = true;
-        }
-      });
-
-      sfuClient.on('error', (msg) => {
-        console.error('[viewer] SFU error:', msg);
-        errorMessage = msg;
-        setTimeout(() => { errorMessage = ''; }, 5000);
-      });
-
-      sfuClient.on('disconnected', (reason) => {
-        console.log('[viewer] SFU disconnected:', reason);
-        if (status === 'live') {
-          status = 'reconnecting';
-          disconnectedSince = Date.now();
-        }
-      });
-
-      await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
-      console.log('[viewer] Joined SFU room, device loaded:', sfuClient.isDeviceLoaded);
-      // Start consuming the host's stream
-      const stream = await sfuClient.consume();
-      console.log('[viewer] consume() returned, tracks:', stream?.getTracks().length);
-    } catch (err) {
-      console.error('[viewer] Failed to connect to SFU:', err);
-      // Don't crash — show a warning but keep socket connection alive
-      errorMessage = 'No se pudo conectar al SFU. La calidad puede ser reducida.';
-      setTimeout(() => { errorMessage = ''; }, 8000);
-    }
-  }
-
-  async function updateStats() {
-    if (!sfuClient || status !== 'live') return;
-    try {
-      const stats = await sfuClient.getStats();
-      if (!stats) return;
-      stats.forEach(report => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          connectionStats.resolution = `${report.frameWidth || '?'}x${report.frameHeight || '?'}`;
-          connectionStats.fps = `${report.framesPerSecond || '?'}`;
-          const now = Date.now();
-          const bytesReceived = report.bytesReceived || 0;
-          if (lastStatsTime > 0) {
-            const elapsed = (now - lastStatsTime) / 1000;
-            const deltaBytes = bytesReceived - lastBytesReceived;
-            const bps = (deltaBytes * 8) / elapsed;
-            if (bps >= 1000000) {
-              connectionStats.bitrate = `${(bps / 1000000).toFixed(1)} Mbps`;
-            } else if (bps >= 1000) {
-              connectionStats.bitrate = `${(bps / 1000).toFixed(0)} Kbps`;
-            } else {
-              connectionStats.bitrate = `${Math.round(bps)} bps`;
-            }
-          }
-          lastBytesReceived = bytesReceived;
-          lastStatsTime = now;
-        }
-      });
-    } catch (err) {
-      console.error('Error getting stats:', err);
-    }
-  }
-
-  function startStatsPolling() {
-    stopStatsPolling();
-    lastBytesReceived = 0;
-    lastStatsTime = 0;
-    connectionStats = { resolution: '', fps: '', bitrate: '' };
-    statsInterval = setInterval(updateStats, 3000);
-  }
-
-  function stopStatsPolling() {
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
-  }
-
-  async function shareLink() {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Únete a mi pantalla', url: window.location.href });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-      }
-    } catch (err) {
-      console.error('Error sharing:', err);
-    }
-  }
-
-  function formatTime(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-  // --- Keyboard Shortcuts ---
-  function handleKeydown(e) {
-    const tag = document.activeElement?.tagName;
-    const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
-
-    // '/' focuses chat input when not in an input
-    if (e.key === '/' && !isInput && status === 'live') {
-      e.preventDefault();
-      if (chatInputEl) chatInputEl.focus();
-      return;
-    }
-
-    // Enter sends chat message when chat input is focused
-    if (e.key === 'Enter' && !e.shiftKey && isInput && document.activeElement === chatInputEl) {
-      e.preventDefault();
-      sendChatMessage();
-      return;
-    }
-
-    // Don't process single-key shortcuts when typing in inputs
-    if (isInput) return;
-
-    if (status !== 'live') return;
-
-    switch (e.key.toLowerCase()) {
-      case 'm':
-        e.preventDefault();
-        toggleMute();
-        break;
-      case 'f':
-        e.preventDefault();
-        toggleFullscreen();
-        break;
-      case 'escape':
-        if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
-          isFullscreen = false;
-        }
-        break;
-    }
-  }
-
-  function showShortcutsOverlay() {
-    showShortcuts = true;
-    if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
-     shortcutsTimeout = setTimeout(() => {
-      showShortcuts = false;
-    }, 3000);
-  }
-  function handleVisibilityChange() {
-    if (document.hidden) {
-      visibilityPaused = true;
-      stopStatsPolling();
-      console.log('[viewer] Tab hidden, pausing stats polling');
-    } else {
-      visibilityPaused = false;
-      if (status === 'live') {
-        startStatsPolling();
-        console.log('[viewer] Tab visible, resuming stats polling');
-      }
-    }
-  }
-
-
-  function toggleChat() {
-    chatOpen = !chatOpen;
-  }
-
-  onDestroy(() => {
-    if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
-    stopStatsPolling();
-    cleanupReconnect();
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-    disconnect();
-  });
-
-  onMount(() => {
-    try {
-      username = localStorage.getItem(USERNAME_STORAGE_KEY) || '';
-    } catch {
-      username = '';
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-  });
+<script lang="ts">
+	import { onMount, onDestroy, tick } from 'svelte';
+	import { page } from '$app/state';
+	import { io } from 'socket.io-client';
+	import { SfuClient } from '$lib/sfu-client';
+	import {
+		playHostMuted,
+		playChatMessage,
+		isMuted as isNotifMuted,
+		setMuted as setNotifMuted,
+	} from '$lib/notificationSounds';
+
+	// Components
+	import ViewerHeader from '$lib/components/ViewerHeader.svelte';
+	import ViewerAuth from '$lib/components/ViewerAuth.svelte';
+	import ViewerStatus from '$lib/components/ViewerStatus.svelte';
+	import ViewerVideoStage from '$lib/components/ViewerVideoStage.svelte';
+	import ViewerChatPanel from '$lib/components/ViewerChatPanel.svelte';
+	import { MessageCircle } from 'lucide-svelte';
+
+	// Shared utils
+	import { ALL_EMOTES, loadFavorites, trackFavorite } from '$lib/utils/emotes';
+	import { SENDER_SYSTEM, type ChatMessage } from '$lib/utils/chat';
+	import { copyText } from '$lib/utils/clipboard';
+	import { toast } from '$lib/stores/toast.svelte';
+	import type { FloatingReaction } from '$lib/types/room';
+
+	const roomId = $derived(page.params.roomId);
+
+	// --- Connection state ---
+	type Status = 'idle' | 'connecting' | 'auth' | 'waiting' | 'live' | 'error' | 'disconnected' | 'reconnecting';
+	let status = $state<Status>('idle');
+	let errorMessage = $state('');
+	let pin = $state('');
+	let username = $state('');
+	let assignedUsername = $state('');
+	let reconnectAttempt = $state(0);
+	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
+
+	// --- Socket & SFU ---
+	let socket: any = $state(null);
+	let sfuClient: any = $state(null);
+
+	// --- Video ---
+	let videoEl: HTMLVideoElement | null = $state(null);
+	let videoContainer: HTMLDivElement | null = $state(null);
+	let isMuted = $state(true);
+	let volume = $state(100);
+	let isFullscreen = $state(false);
+	let hostMuted = $state(false);
+	// Holds a stream that arrived before the <video> element was mounted.
+	let pendingStream: MediaStream | null = $state(null);
+
+	// Attach the pending stream to the video element once it exists. This closes
+	// the race where `stream-ready` fires before Svelte mounts ViewerVideoStage.
+	$effect(() => {
+		if (videoEl && pendingStream) {
+			videoEl.srcObject = pendingStream;
+			videoEl.volume = volume / 100;
+			videoEl.muted = isMuted;
+			videoEl.play().catch(() => {});
+			pendingStream = null;
+		}
+	});
+
+	// --- Chat ---
+	let chatMessages = $state<ChatMessage[]>([]);
+	let chatInput = $state('');
+
+	// --- Mobile & Keyboard Shortcuts ---
+	let chatOpen = $state(false);
+	let showShortcuts = $state(false);
+	let chatInputEl: HTMLInputElement | null = $state(null);
+	let shortcutsTimeout: ReturnType<typeof setTimeout> | null = null;
+	let errorClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// --- Connection Stats ---
+	let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
+	let statsInterval: ReturnType<typeof setInterval> | null = null;
+	let lastBytesReceived = 0;
+	let lastStatsTime = 0;
+
+	// --- Reactions ---
+	let showEmotePicker = $state(false);
+	const VIEWER_FAVORITES_KEY = 'wachaut.viewer.favorites';
+	let favoriteEmojis = $state<string[]>(loadFavorites(VIEWER_FAVORITES_KEY));
+	let floatingReactions = $state<FloatingReaction[]>([]);
+	let reactionCounter = 0;
+
+	// --- Notifications ---
+	let notificationsMuted = $state(isNotifMuted());
+	function toggleNotificationsMuted() {
+		notificationsMuted = !notificationsMuted;
+		setNotifMuted(notificationsMuted);
+	}
+
+	// --- Derived ---
+	let connectionQuality = $derived.by<'buena' | 'regular' | 'desconocida'>(() => {
+		const res = connectionStats.resolution || '';
+		if (res.includes('1920')) return 'buena';
+		if (res.includes('1280')) return 'regular';
+		return 'desconocida';
+	});
+
+	// --- Chat helpers ---
+	function addSystemMessage(text: string) {
+		chatMessages = [...chatMessages, {
+			id: `system-${Date.now()}`,
+			sender: SENDER_SYSTEM,
+			text,
+			timestamp: new Date(),
+		}];
+	}
+
+	function sendChatMessage() {
+		const text = chatInput.trim();
+		if (!text || !socket) return;
+
+		if (text.startsWith('/')) {
+			const parts = text.split(/\s+/);
+			const command = parts[0].toLowerCase();
+			if (command === '/help') {
+				addSystemMessage('Comandos: /help, /stats, /clear');
+				chatInput = '';
+				return;
+			} else if (command === '/stats') {
+				addSystemMessage(`Estado: ${status} | Resolución: ${connectionStats.resolution || 'N/A'} | FPS: ${connectionStats.fps || 'N/A'} | Bitrate: ${connectionStats.bitrate || 'N/A'}`);
+				chatInput = '';
+				return;
+			} else if (command === '/clear') {
+				chatMessages = [];
+				addSystemMessage('Chat limpiado.');
+				chatInput = '';
+				return;
+			}
+		}
+
+		socket.emit('chat:message', { text });
+		chatInput = '';
+	}
+
+	// --- Reactions ---
+	function addFloatingReaction(emoji: string) {
+		if (!ALL_EMOTES.includes(emoji)) return;
+		const id = ++reactionCounter;
+		const idx = reactionCounter % 4;
+		const scales = [1.4, 1.8, 2.2, 1.6];
+		const bottoms = [40, 120, 200, 80];
+		const xOffsets = ['0px', '-20px', '15px', '-10px'];
+		const rotations = ['-12deg', '8deg', '-5deg', '15deg'];
+		const reaction: FloatingReaction = {
+			id, emoji,
+			x: Math.random() * 70 + 10,
+			bottom: bottoms[idx],
+			fontSize: scales[idx],
+			xOffset: xOffsets[idx],
+			rotation: rotations[idx],
+			delay: Math.random() * 0.2,
+			duration: 2.5 + Math.random() * 1,
+			createdAt: Date.now(),
+		};
+		floatingReactions = [...floatingReactions, reaction];
+		setTimeout(() => {
+			floatingReactions = floatingReactions.filter((r) => r.id !== id);
+		}, (reaction.duration + reaction.delay) * 1000 + 200);
+	}
+
+	function sendReaction(emoji: string) {
+		if (!socket || !ALL_EMOTES.includes(emoji)) return;
+		favoriteEmojis = trackFavorite(VIEWER_FAVORITES_KEY, favoriteEmojis, emoji);
+		showEmotePicker = false;
+		addFloatingReaction(emoji);
+		socket.emit('reaction:send', { emoji });
+	}
+
+	// --- Functions ---
+	async function connect() {
+		cleanupSocket();
+		sfuClient?.disconnect();
+		sfuClient = null;
+
+		const cleanedUsername = sanitizeUsername(username);
+		username = cleanedUsername;
+
+		if (cleanedUsername.length < 2) {
+			errorMessage = 'Ingresa un username de al menos 2 caracteres';
+			status = 'error';
+			return;
+		}
+
+		if (!pin || pin.length < 4) {
+			errorMessage = 'Ingresa un PIN válido';
+			status = 'error';
+			return;
+		}
+
+		status = 'connecting';
+
+		const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
+		socket = io(wsUrl, { transports: ['websocket'] });
+
+		socket.on('connect', () => {
+			socket.emit('viewer:join', { roomId, pin, username: cleanedUsername });
+			status = 'auth';
+		});
+
+		socket.on('room:auth-success', () => {
+			status = 'waiting';
+		});
+
+		socket.on('room:auth-failed', (data: any) => {
+			errorMessage = data?.message || 'PIN incorrecto';
+			status = 'error';
+			cleanupSocket();
+		});
+
+		socket.on('room:error', (data: any) => {
+			errorMessage = data?.message || 'Error en la sala';
+			status = 'error';
+			cleanupSocket();
+		});
+
+		socket.on('room:joined', (data: any) => {
+			assignedUsername = data?.username || cleanedUsername;
+			username = assignedUsername;
+			saveUsername(assignedUsername);
+			status = 'waiting';
+			connectSfu(assignedUsername);
+		});
+
+		socket.on('chat:history', (data: any) => {
+			if (data?.messages) {
+				chatMessages = data.messages.map((msg: any) => ({
+					id: msg.id || Date.now() + Math.random(),
+					sender: msg.sender || 'Anónimo',
+					text: msg.text,
+					timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+				}));
+			}
+		});
+
+		socket.on('chat:message', (msg: any) => {
+			chatMessages = [
+				...chatMessages,
+				{
+					id: msg.id || Date.now(),
+					sender: msg.sender || 'Anónimo',
+					text: msg.text,
+					timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+				},
+			];
+			try { playChatMessage(); } catch {}
+		});
+
+		socket.on('reaction:receive', (data: any) => addFloatingReaction(data.emoji));
+
+		socket.on('host:stopped-sharing', () => {
+			sfuClient?.disconnect();
+			sfuClient = null;
+			stopStatsPolling();
+			if (videoEl) videoEl.srcObject = null;
+			status = 'waiting';
+		});
+
+		socket.on('host:muted', () => {
+			hostMuted = true;
+			try { playHostMuted(); } catch {}
+		});
+
+		socket.on('host:unmuted', () => { hostMuted = false; });
+
+		socket.on('viewer:kicked', (data: any) => {
+			errorMessage = data?.reason || 'Has sido expulsado de la sala';
+			status = 'error';
+			cleanupSocket();
+		});
+
+		socket.on('host:disconnected', () => {
+			errorMessage = 'El anfitrión se desconectó';
+			status = 'error';
+			sfuClient?.disconnect();
+			sfuClient = null;
+			stopStatsPolling();
+		});
+
+		socket.on('room:closed', () => {
+			errorMessage = 'La sala se cerró';
+			status = 'error';
+			sfuClient?.disconnect();
+			sfuClient = null;
+			stopStatsPolling();
+		});
+
+		socket.on('disconnect', () => {
+			if (status !== 'error') {
+				// Tear down the SFU + stats so we don't leak a dangling recv transport.
+				sfuClient?.disconnect();
+				sfuClient = null;
+				stopStatsPolling();
+				status = 'disconnected';
+				scheduleReconnect();
+			}
+		});
+	}
+
+	function disconnect() {
+		stopStatsPolling();
+		cleanupReconnect();
+		sfuClient?.disconnect();
+		sfuClient = null;
+		cleanupSocket();
+		if (videoEl) videoEl.srcObject = null;
+		status = 'idle';
+		pin = '';
+		assignedUsername = '';
+		chatMessages = [];
+		errorMessage = '';
+		connectionStats = { resolution: '', fps: '', bitrate: '' };
+	}
+
+	function cleanupSocket() {
+		if (socket) {
+			socket.removeAllListeners();
+			socket.disconnect();
+			socket = null;
+		}
+	}
+
+	function scheduleReconnect() {
+		if (reconnectAttempt >= 3) {
+			status = 'error';
+			errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
+			reconnectAttempt = 0;
+			return;
+		}
+		const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 8000);
+		reconnectAttempt++;
+		if (reconnectTimer) clearTimeout(reconnectTimer);
+		reconnectTimer = setTimeout(() => {
+			connect().catch(() => {});
+		}, delay);
+	}
+
+	function cleanupReconnect() {
+		if (reconnectTimer) {
+			clearTimeout(reconnectTimer);
+			reconnectTimer = null;
+		}
+		reconnectAttempt = 0;
+	}
+
+	function sanitizeUsername(value: string): string {
+		return value
+			.trim()
+			.replace(/\s+/g, '-')
+			.replace(/[^a-zA-Z0-9_-]/g, '')
+			.slice(0, 24);
+	}
+
+	function saveUsername(value: string) {
+		try { localStorage.setItem(USERNAME_STORAGE_KEY, value); } catch {}
+	}
+
+	function retry() {
+		cleanupReconnect();
+		status = 'idle';
+		errorMessage = '';
+	}
+
+	// --- Video controls ---
+	function toggleMute() {
+		if (!videoEl) return;
+		if (videoEl.muted && volume === 0) {
+			volume = 50;
+			videoEl.volume = 0.5;
+		}
+		videoEl.muted = !videoEl.muted;
+		isMuted = videoEl.muted;
+	}
+
+	function handleVolumeChange(v: number) {
+		volume = v;
+		if (videoEl) {
+			videoEl.volume = v / 100;
+			videoEl.muted = v === 0;
+			isMuted = videoEl.muted;
+		}
+	}
+
+	function toggleFullscreen() {
+		if (!videoContainer) return;
+		if (!document.fullscreenElement) {
+			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {});
+		} else {
+			document.exitFullscreen().then(() => { isFullscreen = false; }).catch(() => {});
+		}
+	}
+
+	function onVideoClick() {
+		if (videoEl) {
+			videoEl.muted = false;
+			isMuted = false;
+		}
+	}
+
+	async function shareLink() {
+		const url = `${window.location.origin}/room/${roomId}`;
+		try {
+			if (navigator.share) {
+				await navigator.share({ title: 'Wachaut — Únete a mi pantalla', url });
+			} else {
+				const ok = await copyText(url);
+				if (ok) toast.success('Enlace copiado');
+			}
+		} catch {
+			/* user cancelled share */
+		}
+	}
+
+	// --- SFU ---
+	async function connectSfu(displayName: string) {
+		if (sfuClient) return;
+		try {
+			const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
+			sfuClient = new SfuClient(sfuUrl);
+
+			sfuClient.on('stream-ready', (stream: MediaStream) => {
+				status = 'live';
+				reconnectAttempt = 0;
+				// Hand off to the $effect above, which attaches once videoEl exists.
+				pendingStream = stream;
+				startStatsPolling();
+				showShortcutsOverlay();
+				if (window.innerWidth < 768) chatOpen = true;
+			});
+
+			sfuClient.on('error', (msg: string) => {
+				errorMessage = msg;
+				if (errorClearTimer) clearTimeout(errorClearTimer);
+				errorClearTimer = setTimeout(() => { errorMessage = ''; }, 5000);
+			});
+
+			sfuClient.on('disconnected', () => {
+				if (status === 'live') status = 'reconnecting';
+			});
+
+			await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
+			await sfuClient.consume();
+		} catch {
+			errorMessage = 'No se pudo conectar al SFU. La calidad puede ser reducida.';
+			if (errorClearTimer) clearTimeout(errorClearTimer);
+			errorClearTimer = setTimeout(() => { errorMessage = ''; }, 8000);
+		}
+	}
+
+	async function updateStats() {
+		if (!sfuClient || status !== 'live') return;
+		try {
+			const stats = await sfuClient.getStats();
+			if (!stats) return;
+			// Build the new values in locals, then reassign once to avoid
+			// triggering 3 separate reactive notifications per poll tick.
+			let resolution = connectionStats.resolution;
+			let fps = connectionStats.fps;
+			let bitrate = connectionStats.bitrate;
+
+			for (const report of stats as any[]) {
+				if (report.type === 'inbound-rtp' && report.kind === 'video') {
+					resolution = `${report.frameWidth || '?'}×${report.frameHeight || '?'}`;
+					fps = `${report.framesPerSecond || '?'}`;
+					const now = Date.now();
+					const bytesReceived = report.bytesReceived || 0;
+					if (lastStatsTime > 0) {
+						const elapsed = (now - lastStatsTime) / 1000;
+						const deltaBytes = bytesReceived - lastBytesReceived;
+						const bps = (deltaBytes * 8) / elapsed;
+						if (bps >= 1000000) bitrate = `${(bps / 1000000).toFixed(1)} Mbps`;
+						else if (bps >= 1000) bitrate = `${(bps / 1000).toFixed(0)} Kbps`;
+						else bitrate = `${Math.round(bps)} bps`;
+					}
+					lastBytesReceived = bytesReceived;
+					lastStatsTime = now;
+					break; // only the first video inbound-rtp report matters
+				}
+			}
+
+			// Only trigger reactivity if something actually changed.
+			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate) {
+				connectionStats = { resolution, fps, bitrate };
+			}
+		} catch {}
+	}
+
+	function startStatsPolling() {
+		stopStatsPolling();
+		lastBytesReceived = 0;
+		lastStatsTime = 0;
+		connectionStats = { resolution: '', fps: '', bitrate: '' };
+		// Poll every 5s (was 3s) — resolution/fps rarely change, reduces getStats overhead.
+		statsInterval = setInterval(updateStats, 5000);
+	}
+
+	function stopStatsPolling() {
+		if (statsInterval) {
+			clearInterval(statsInterval);
+			statsInterval = null;
+		}
+	}
+
+	// --- Keyboard Shortcuts ---
+	function showShortcutsOverlay() {
+		showShortcuts = true;
+		if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
+		shortcutsTimeout = setTimeout(() => { showShortcuts = false; }, 3000);
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		const tag = document.activeElement?.tagName;
+		const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+		if (e.key === '/' && !isInput && status === 'live') {
+			e.preventDefault();
+			chatInputEl?.focus();
+			return;
+		}
+
+		if (isInput) return;
+		if (status !== 'live') return;
+
+		switch (e.key.toLowerCase()) {
+			case 'm': e.preventDefault(); toggleMute(); break;
+			case 'f': e.preventDefault(); toggleFullscreen(); break;
+			case 'escape':
+				if (document.fullscreenElement) {
+					document.exitFullscreen().catch(() => {});
+					isFullscreen = false;
+				}
+				break;
+		}
+	}
+
+	function handleVisibilityChange() {
+		if (document.hidden) {
+			stopStatsPolling();
+		} else if (status === 'live') {
+			startStatsPolling();
+		}
+	}
+
+	function toggleChat() {
+		chatOpen = !chatOpen;
+		if (chatOpen) seenCount = chatMessages.filter((m) => m.sender !== SENDER_SYSTEM).length;
+	}
+
+	// Count only messages that arrived while the chat drawer was closed.
+	let seenCount = $state(0);
+	let unreadCount = $derived.by(() => {
+		const nonSystem = chatMessages.filter((m) => m.sender !== SENDER_SYSTEM).length;
+		return chatOpen ? 0 : Math.max(0, nonSystem - seenCount);
+	});
+
+	function handleFullscreenChange() {
+		isFullscreen = !!document.fullscreenElement;
+	}
+
+	onDestroy(() => {
+		if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
+		if (errorClearTimer) clearTimeout(errorClearTimer);
+		stopStatsPolling();
+		cleanupReconnect();
+		document.removeEventListener('visibilitychange', handleVisibilityChange);
+		document.removeEventListener('fullscreenchange', handleFullscreenChange);
+		disconnect();
+	});
+
+	onMount(() => {
+		try { username = localStorage.getItem(USERNAME_STORAGE_KEY) || ''; } catch { username = ''; }
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		document.addEventListener('fullscreenchange', handleFullscreenChange);
+	});
 </script>
-
-<style>
-  @keyframes floatUp {
-    0% { opacity: 1; transform: translateY(0) translateX(0) scale(0.3) rotate(0deg); }
-    15% { opacity: 1; transform: translateY(-30px) translateX(5px) scale(1.1) rotate(-5deg); }
-    30% { opacity: 1; transform: translateY(-70px) translateX(-8px) scale(1.3) rotate(8deg); }
-    60% { opacity: 0.8; transform: translateY(-150px) translateX(12px) scale(1.1) rotate(-3deg); }
-    100% { opacity: 0; transform: translateY(-280px) translateX(-5px) scale(0.6) rotate(10deg); }
-  }
-
-  /* Custom volume slider */
-  input[type="range"].volume-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255,255,255,0.2);
-    outline: none;
-    cursor: pointer;
-  }
-  input[type="range"].volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: white;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  }
-  input[type="range"].volume-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: white;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  }
-</style>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="min-h-screen bg-slate-950 text-slate-100">
-  <!-- Non-live states: centered cards -->
-  {#if status !== 'live'}
-    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 shadow-sm">
-      <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
-          <Monitor class="h-3.5 w-3.5 text-slate-900" />
-        </div>
-        <span class="text-lg font-bold text-white">Wachaut</span>
-        <div class="flex-1"></div>
-        <button
-          onclick={toggleNotificationsMuted}
-          class="p-2 rounded-lg hover:bg-slate-800 transition-colors"
-          title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-        >
-          {#if notificationsMuted}
-            <BellOff class="w-5 h-5 text-slate-500" />
-          {:else}
-            <Bell class="w-5 h-5 text-slate-300" />
-          {/if}
-        </button>
-      </div>
-    </header>
+<div class="min-h-screen bg-app">
+	{#if status !== 'live'}
+		<!-- Non-live states -->
+		<ViewerHeader notificationsMuted={notificationsMuted} onToggleNotifications={toggleNotificationsMuted} />
 
-    <main class="max-w-5xl mx-auto px-4 py-6">
-      <!-- IDLE: PIN + Username Input -->
-      {#if status === 'idle'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm border border-slate-200">
-            <div class="flex flex-col items-center mb-6">
-              <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                <Lock class="w-7 h-7 text-slate-600" />
-              </div>
-              <h2 class="text-lg font-semibold text-slate-800">Unirse a la sala</h2>
-              <p class="text-sm text-slate-500 mt-1">Ingresa tu nombre y el PIN de acceso</p>
-            </div>
+		<!-- Ambient background -->
+		<div class="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
+			<div
+				class="absolute left-1/2 top-1/4 h-[420px] w-[620px] -translate-x-1/2 rounded-full opacity-30 blur-[120px]"
+				style="background: radial-gradient(circle, var(--color-amber-500), transparent 70%);"
+			></div>
+		</div>
 
-            <label class="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
-            <div class="relative mb-4">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="tu-nombre"
-                value={username}
-                oninput={handleUsernameInput}
-                onkeydown={handlePinKeydown}
-                maxlength="24"
-                autocomplete="username"
-                class="w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pl-10 pr-4
-                       text-sm font-semibold text-slate-800 placeholder:text-slate-300
-                       focus:outline-none focus:ring-2 focus:ring-slate-400
-                       focus:border-transparent transition-all"
-              />
-            </div>
+		<main class="mx-auto max-w-5xl px-4 py-6">
+			{#if status === 'idle'}
+				<div class="flex items-center justify-center" style="min-height: 60vh;">
+					<ViewerAuth bind:username bind:pin onConnect={connect} />
+				</div>
+			{:else}
+				<ViewerStatus
+					status={status as 'connecting' | 'auth' | 'waiting' | 'error' | 'disconnected' | 'reconnecting'}
+					{errorMessage}
+					{reconnectAttempt}
+					onRetry={retry}
+					onReconnect={() => connect()}
+					onCancel={() => { cleanupReconnect(); disconnect(); }}
+					onLeave={disconnect}
+				/>
+			{/if}
+		</main>
+	{:else}
+		<!-- LIVE layout -->
+		<div class="flex h-screen flex-col overflow-hidden md:flex-row">
+			<!-- Video -->
+			<ViewerVideoStage
+				muted={isMuted}
+				{volume}
+				fullscreen={isFullscreen}
+				{hostMuted}
+				assignedUsername={assignedUsername}
+				reactions={floatingReactions}
+				onVideoMount={(el) => (videoEl = el)}
+				onContainerMount={(el) => (videoContainer = el)}
+				onToggleMute={toggleMute}
+				onVolumeChange={handleVolumeChange}
+				onToggleFullscreen={toggleFullscreen}
+				onShare={shareLink}
+				onShowShortcuts={showShortcutsOverlay}
+				onVideoClick={onVideoClick}
+			/>
 
-            <label class="block text-xs font-semibold text-slate-500 mb-1.5">PIN</label>
-            <input
-              type="text"
-              inputmode="numeric"
-              placeholder="••••••"
-              value={pin}
-              oninput={handlePinInput}
-              onkeydown={handlePinKeydown}
-              maxlength="6"
-              class="w-full text-center text-2xl tracking-[0.5em]
-                     font-mono py-3 px-4 border border-slate-300
-                     rounded-xl bg-slate-50 text-slate-800
-                     focus:outline-none focus:ring-2 focus:ring-slate-400
-                     focus:border-transparent transition-all
-                     placeholder:text-slate-300"
-            />
+			<!-- Chat sidebar (desktop: static; mobile: drawer driven by `open`) -->
+			<ViewerChatPanel
+				open={chatOpen}
+				messages={chatMessages}
+				bind:value={chatInput}
+				{notificationsMuted}
+				{connectionStats}
+				{connectionQuality}
+				{favoriteEmojis}
+				{showEmotePicker}
+				onSend={sendChatMessage}
+				onToggleNotifications={toggleNotificationsMuted}
+				onSendReaction={sendReaction}
+				onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
+				onCloseEmotePicker={() => (showEmotePicker = false)}
+			/>
 
-            <button
-              onclick={connect}
-              disabled={pin.length < 4 || username.trim().length < 2}
-              class="w-full mt-4 py-3 bg-slate-800 text-white font-medium
-                     rounded-xl hover:bg-slate-700 disabled:opacity-40
-                     disabled:cursor-not-allowed transition-colors"
-            >
-              Conectar
-            </button>
-          </div>
-        </div>
+			<!-- Mobile chat toggle (FAB) -->
+			<button
+				onclick={toggleChat}
+				class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand"
+				title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+				aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+			>
+				<MessageCircle class="h-6 w-6" />
+				{#if unreadCount > 0}
+					<span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-xs font-bold text-white">
+						{unreadCount > 9 ? '9+' : unreadCount}
+					</span>
+				{/if}
+			</button>
 
-      <!-- CONNECTING / AUTH -->
-      {:else if status === 'connecting' || status === 'auth'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="text-center">
-            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <Wifi class="w-8 h-8 text-slate-400" />
-            </div>
-            <p class="text-slate-600 font-medium">
-              {status === 'connecting' ? 'Conectando...' : 'Autenticando...'}
-            </p>
-            <p class="text-sm text-slate-400 mt-1">Verificando PIN con el anfitrión</p>
-          </div>
-        </div>
+			<!-- Mobile backdrop -->
+			{#if chatOpen}
+				<button
+					class="fixed inset-0 z-40 bg-black/50 md:hidden"
+					onclick={toggleChat}
+					aria-label="Cerrar chat"
+					tabindex="-1"
+				></button>
+			{/if}
 
-      <!-- WAITING -->
-      {:else if status === 'waiting'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="text-center">
-            <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Monitor class="w-10 h-10 text-slate-400" />
-            </div>
-            <h2 class="text-lg font-semibold text-slate-700 mb-2">Esperando al anfitrión</h2>
-            <p class="text-sm text-slate-500 mb-6">El anfitrión comenzará a compartir pronto</p>
-            <button
-              onclick={disconnect}
-              class="px-6 py-2 bg-slate-200 text-slate-600 rounded-lg
-                     hover:bg-slate-300 transition-colors text-sm font-medium"
-            >
-              Salir de la sala
-            </button>
-          </div>
-        </div>
-
-      <!-- ERROR -->
-      {:else if status === 'error'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
-            <div class="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle class="w-7 h-7 text-red-500" />
-            </div>
-            <h2 class="text-lg font-semibold text-slate-800 mb-2">Error</h2>
-            <p class="text-sm text-slate-500 mb-6" role="alert">{errorMessage}</p>
-            <button
-              onclick={retry}
-              class="px-6 py-3 bg-slate-800 text-white font-medium
-                     rounded-xl hover:bg-slate-700 transition-colors"
-            >
-              Intentar de nuevo
-            </button>
-          </div>
-        </div>
-
-      <!-- DISCONNECTED -->
-      {:else if status === 'disconnected'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
-            <div class="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <WifiOff class="w-7 h-7 text-slate-400" />
-            </div>
-            <h2 class="text-lg font-semibold text-slate-800 mb-2">Desconectado</h2>
-            <p class="text-sm text-slate-500 mb-6">Se perdió la conexión con el servidor</p>
-            <button
-              onclick={() => connect()}
-              class="px-6 py-3 bg-slate-800 text-white font-medium
-                     rounded-xl hover:bg-slate-700 transition-colors"
-            >
-              Reconectar
-            </button>
-          </div>
-        </div>
-
-      <!-- RECONNECTING -->
-      {:else if status === 'reconnecting'}
-        <div class="flex items-center justify-center" style="min-height: 60vh;">
-          <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center border border-slate-200">
-            <div class="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <Wifi class="w-7 h-7 text-amber-500" />
-            </div>
-            <h2 class="text-lg font-semibold text-slate-800 mb-2">Reconectando...</h2>
-            <p class="text-sm text-slate-500 mb-2">Intento {reconnectAttempt} de 3</p>
-            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-6">
-              <div
-                class="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                style:width="{Math.min(reconnectAttempt / 3 * 100, 100)}%"
-              ></div>
-            </div>
-            <button
-              onclick={() => { cleanupReconnect(); disconnect(); }}
-              class="px-6 py-3 bg-slate-200 text-slate-600 font-medium
-                     rounded-xl hover:bg-slate-300 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      {/if}
-    </main>
-
-  <!-- LIVE: Twitch/Discord layout -->
-  {:else}
-    <div class="flex flex-col md:flex-row h-[calc(100vh-49px)] overflow-hidden">
-      <!-- Video Area (left, flex-1) -->
-      <div
-        class="w-full h-[50vh] md:h-auto md:w-auto md:flex-1 relative bg-black group shrink-0 md:shrink"
-        onmouseenter={() => (isHovering = true)}
-        onmouseleave={() => (isHovering = false)}
-        role="region"
-        aria-label="Video en vivo"
-      >
-        <!-- Video Element -->
-        <video
-          bind:this={videoEl}
-          autoplay
-          muted
-          playsinline
-          onclick={() => { if (videoEl) { videoEl.muted = false; isMuted = false; } }}
-          class="w-full h-full object-contain cursor-pointer"
-          title="Haz clic para activar audio"
-        ></video>
-
-        <!-- Top-left overlays -->
-        <div class="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
-          <!-- Live Badge -->
-          <div class="flex items-center gap-1.5 bg-red-500/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-semibold">
-            <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
-            EN VIVO
-          </div>
-          <!-- Host Muted Indicator -->
-          {#if hostMuted}
-            <div class="flex items-center gap-1 bg-amber-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs font-medium animate-[floatUp_0.3s_ease]">
-              <VolumeX class="w-3 h-3" />
-              Silenciado
-            </div>
-          {/if}
-          <!-- Username badge -->
-          {#if assignedUsername}
-            <div class="hidden md:flex items-center gap-1 bg-slate-800/80 backdrop-blur-sm text-slate-300 px-2 py-1 rounded-full text-xs font-medium">
-              <User class="w-3 h-3" />
-              {assignedUsername}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Bottom controls (on hover) -->
-        <div
-          class="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-10
-                 bg-gradient-to-t from-black/80 via-black/40 to-transparent
-                 opacity-0 group-hover:opacity-100 transition-opacity duration-300
-                 pointer-events-none"
-        >
-          <div class="flex items-center gap-3 pointer-events-auto">
-            <!-- Mute button -->
-            <button
-              onclick={toggleMute}
-              class="text-white hover:text-white/80 transition-colors p-1"
-              title={isMuted ? 'Activar sonido' : 'Silenciar'}
-              aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}
-            >
-              {#if isMuted || volume === 0}
-                <VolumeX class="w-5 h-5" />
-              {:else if volume < 50}
-                <Volume1 class="w-5 h-5" />
-              {:else}
-                <Volume2 class="w-5 h-5" />
-              {/if}
-            </button>
-
-            <!-- Volume slider -->
-            <div class="hidden md:flex items-center gap-2 flex-1 max-w-[160px]">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                oninput={handleVolumeInput}
-                class="volume-slider flex-1"
-                title="Volumen: {volume}%"
-              />
-              <span class="text-white/60 text-[10px] font-mono w-8 text-right">{volume}%</span>
-            </div>
-
-            <div class="flex-1"></div>
-
-            <!-- Share -->
-            <button
-              onclick={shareLink}
-              class="text-white/70 hover:text-white transition-colors p-1"
-              title="Compartir enlace"
-              aria-label="Compartir enlace"
-            >
-              <Share2 class="w-4 h-4" />
-            </button>
-
-            <!-- Fullscreen -->
-            <button
-              onclick={toggleFullscreen}
-              class="text-white/70 hover:text-white transition-colors p-1"
-              title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-              aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-            >
-              {#if isFullscreen}
-                <Minimize class="w-5 h-5" />
-              {:else}
-                <Maximize class="w-5 h-5" />
-              {/if}
-            </button>
-            <!-- Shortcuts help -->
-            <button
-              onclick={showShortcutsOverlay}
-              class="text-white/50 hover:text-white/80 transition-colors p-1 text-xs font-mono"
-              title="Atajos de teclado"
-            >
-              ?
-            </button>
-          </div>
-        </div>
-
-        <!-- Floating Reactions -->
-        {#each floatingReactions as reaction (reaction.id)}
-          <div
-            class="absolute text-3xl pointer-events-none select-none z-10"
-            style:left="{reaction.x}%"
-            style:bottom="{reaction.bottom}px"
-            style:font-size="{reaction.fontSize}rem"
-            style:transform="translateX({reaction.xOffset}) rotate({reaction.rotation})"
-            style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
-          >
-            {reaction.emoji}
-          </div>
-        {/each}
-      </div>
-
-      <!-- Chat Sidebar (right, fixed width) -->
-      <aside class="w-80 bg-slate-900 border-l border-slate-800 flex flex-col shrink-0
-                     max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50
-                     max-md:w-80 max-md:transition-transform max-md:duration-300
-                     {chatOpen ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}">
-        <!-- Chat Header -->
-        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div class="flex items-center gap-2">
-            <MessageCircle class="w-4 h-4 text-slate-400" />
-            <span class="text-sm font-semibold text-slate-200">Chat</span>
-            <span class="text-xs text-slate-500">({chatMessages.length})</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <!-- Connection stats -->
-            {#if connectionStats.resolution}
-              <div class="flex items-center gap-1 text-[10px] text-slate-500">
-                <Activity class="w-3 h-3" />
-                <span class="w-1.5 h-1.5 rounded-full {connectionQuality === 'buena' ? 'bg-green-500' : connectionQuality === 'regular' ? 'bg-amber-500' : 'bg-slate-500'}"></span>
-                <span>{connectionStats.resolution}</span>
-                {#if connectionStats.bitrate}
-                  <span>· {connectionStats.bitrate}</span>
-                {/if}
-              </div>
-            {/if}
-            <button
-              onclick={toggleNotificationsMuted}
-              class="p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
-              title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-            >
-              {#if notificationsMuted}
-                <BellOff class="w-4 h-4 text-slate-600" />
-              {:else}
-                <Bell class="w-4 h-4 text-slate-400" />
-              {/if}
-            </button>
-          </div>
-        </div>
-
-        <!-- Messages -->
-        <div
-          bind:this={chatContainer}
-          class="flex-1 overflow-y-auto px-4 py-3 space-y-2.5 min-h-0"
-          aria-live="polite"
-          aria-label="Mensajes de chat"
-        >
-          {#if chatMessages.length === 0}
-            <div class="flex flex-col items-center justify-center h-full text-center">
-              <MessageCircle class="w-8 h-8 text-slate-700 mb-2" />
-              <p class="text-slate-500 text-sm">No hay mensajes aún</p>
-              <p class="text-slate-600 text-xs mt-1">Los mensajes aparecerán aquí</p>
-            </div>
-          {/if}
-
-          {#each chatMessages as msg (msg.id)}
-            <div class="flex flex-col {msg.sender === 'Sistema' ? 'items-center' : ''}">
-              {#if msg.sender !== 'Sistema'}
-                <div class="flex items-baseline gap-2">
-                  <span class="text-xs font-semibold
-                    {msg.sender === 'Anfitrión' ? 'text-amber-400' : 'text-slate-300'}">
-                    {msg.sender}
-                  </span>
-                  <span class="text-slate-600 text-[10px]">
-                    {formatTime(msg.timestamp)}
-                  </span>
-                </div>
-              {/if}
-              <p class="{msg.sender === 'Sistema'
-                ? 'text-slate-500 text-xs italic bg-slate-800/50 px-3 py-1 rounded-lg'
-                : msg.sender === 'Anfitrión'
-                  ? 'text-slate-100 text-sm'
-                  : 'text-slate-300 text-sm'} mt-0.5 break-words">
-                {msg.text}
-              </p>
-            </div>
-          {/each}
-        </div>
-
-        <!-- Reactions Row -->
-        <div class="px-4 py-2 border-t border-slate-800 shrink-0 relative" use:clickOutside={() => (showEmotePicker = false)}>
-          <!-- Favorites row -->
-          <div class="flex items-center justify-center gap-1.5">
-            {#each favoriteEmojis as emoji}
-              <button
-                onclick={() => sendReaction(emoji)}
-                class="w-9 h-9 flex items-center justify-center text-lg
-                       bg-slate-800/50 rounded-lg
-                       hover:bg-slate-700/70 active:scale-90
-                       transition-all duration-150
-                       {animatingReaction === emoji ? 'scale-125 bg-slate-700' : ''}"
-                title="Enviar reacción"
-              >
-                {emoji}
-              </button>
-            {/each}
-            <button
-              onclick={() => (showEmotePicker = !showEmotePicker)}
-              class="w-9 h-9 flex items-center justify-center text-lg
-                     bg-slate-800/50 rounded-lg
-                     hover:bg-slate-700/70 active:scale-90
-                     transition-all duration-150
-                     {showEmotePicker ? 'bg-slate-700 text-white' : 'text-slate-400'}"
-              title="Más emojis"
-            >
-              <SmilePlus class="w-5 h-5" />
-            </button>
-          </div>
-
-          <!-- Expandable emote grid -->
-          {#if showEmotePicker}
-            <div class="absolute bottom-full left-0 right-0 mb-2 mx-1
-                        bg-slate-900 border border-slate-700 rounded-xl shadow-2xl
-                        p-3 z-10 max-h-64 overflow-y-auto">
-              {#each EMOTE_CATEGORIES as category}
-                <div class="mb-2 last:mb-0">
-                  <p class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
-                    {category.label}
-                  </p>
-                  <div class="grid grid-cols-5 gap-1">
-                    {#each category.emojis as emoji}
-                      <button
-                        onclick={() => sendReaction(emoji)}
-                        class="w-9 h-9 flex items-center justify-center text-lg
-                               bg-slate-800/50 rounded-lg
-                               hover:bg-slate-700/70 active:scale-90
-                               transition-all duration-150"
-                        title="Enviar {emoji}"
-                      >
-                        {emoji}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Chat Input -->
-        <div class="px-3 py-3 border-t border-slate-800 shrink-0">
-          <div class="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Escribe un mensaje..."
-              maxlength="500"
-              value={chatInput}
-              oninput={(e) => (chatInput = e.target.value)}
-              onkeydown={handleChatKeydown}
-              aria-label="Mensaje de chat"
-              class="flex-1 bg-slate-800 text-white text-sm px-3 py-2.5
-                     rounded-lg border border-slate-700
-                     focus:outline-none focus:border-slate-500
-                     placeholder:text-slate-500 transition-colors"
-            />
-            <button
-              onclick={sendChatMessage}
-              disabled={!chatInput.trim()}
-              class="w-9 h-9 bg-slate-700 text-white rounded-lg
-                     flex items-center justify-center shrink-0
-                     hover:bg-slate-600 disabled:opacity-40
-                     disabled:cursor-not-allowed transition-colors"
-            >
-              <Send class="w-4 h-4" />
-            </button>
-          </div>
-          <p class="text-[10px] text-slate-600 mt-1.5 px-1">/help para comandos</p>
-        </div>
-      </aside>
-
-      <!-- Mobile chat toggle button -->
-      <button
-        onclick={toggleChat}
-        class="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-slate-800 text-white
-               rounded-full shadow-xl flex items-center justify-center z-40
-               hover:bg-slate-700 active:scale-95 transition-all"
-        title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
-        aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
-      >
-        <MessageCircle class="w-6 h-6" />
-        {#if !chatOpen && chatMessages.length > 0}
-          <span class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-            {chatMessages.length > 9 ? '9+' : chatMessages.length}
-          </span>
-        {/if}
-      </button>
-
-      <!-- Mobile backdrop -->
-      {#if chatOpen}
-        <div
-          class="md:hidden fixed inset-0 bg-black/50 z-40"
-          onclick={toggleChat}
-          role="presentation"
-        ></div>
-      {/if}
-    </div>
-  {/if}
+			<!-- Shortcuts overlay -->
+			{#if showShortcuts}
+				<div class="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-in md:bottom-6">
+					<div class="glass flex items-center gap-4 rounded-xl px-4 py-2.5 text-xs text-[var(--text-muted)] shadow-xl">
+						<span><kbd class="font-mono font-semibold text-[var(--text)]">M</kbd> silenciar</span>
+						<span><kbd class="font-mono font-semibold text-[var(--text)]">F</kbd> pantalla completa</span>
+						<span><kbd class="font-mono font-semibold text-[var(--text)]">/</kbd> chat</span>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>

@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────
+   Wachaut design system — dark-only.
+   The app ships a single premium "amber on black" theme.
+   ───────────────────────────────────────────────────────────────────── */
+
 @theme {
+  /* ── Existing neutral palette (kept intact — host/viewer rely on it) ── */
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
@@ -11,104 +17,282 @@
   --color-slate-700: #334155;
   --color-slate-800: #1e293b;
   --color-slate-900: #0f172a;
+
   --color-red-50: #fef2f2;
   --color-red-100: #fee2e2;
   --color-red-500: #ef4444;
   --color-red-600: #dc2626;
+
   --color-green-50: #f0fdf4;
   --color-green-100: #dcfce7;
   --color-green-500: #22c55e;
   --color-green-600: #16a34a;
+
   --color-blue-50: #eff6ff;
   --color-blue-100: #dbeafe;
   --color-blue-500: #3b82f6;
   --color-blue-600: #2563eb;
   --color-blue-700: #1d4ed8;
+
+  /* ── Brand palette: amber / gold (#ffb300 = 500) ── */
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #ffc933;
+  --color-amber-500: #ffb300;
+  --color-amber-600: #d99400;
+  --color-amber-700: #b37600;
+  --color-amber-800: #805400;
+  --color-amber-900: #5c3d00;
+  --color-amber-950: #332100;
+
+  /* Alias kept so legacy indigo/cyan references resolve to amber.
+     (Components written before the rebrand reference these names.) */
+  --color-indigo-50: #fffbeb;
+  --color-indigo-100: #fef3c7;
+  --color-indigo-200: #fde68a;
+  --color-indigo-300: #fcd34d;
+  --color-indigo-400: #ffc933;
+  --color-indigo-500: #ffb300;
+  --color-indigo-600: #d99400;
+  --color-indigo-700: #b37600;
+  --color-indigo-800: #805400;
+  --color-indigo-900: #5c3d00;
+  --color-indigo-950: #332100;
+  --color-cyan-50: #fffbeb;
+  --color-cyan-100: #fef3c7;
+  --color-cyan-200: #fde68a;
+  --color-cyan-300: #fcd34d;
+  --color-cyan-400: #ffc933;
+  --color-cyan-500: #ffb300;
+  --color-cyan-600: #d99400;
+  --color-cyan-700: #b37600;
+
+  /* ── Ink: app's deep near-black background scale (dark-first) ── */
+  --color-ink-950: #000000;
+  --color-ink-900: #050505;
+  --color-ink-850: #0a0a0a;
+  --color-ink-800: #101010;
+  --color-ink-700: #161616;
+  --color-ink-600: #1c1c1c;
+
+  /* ── Typography ── */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Menlo, monospace;
+
+  /* ── Radius scale ── */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  /* ── Motion ── */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+
+  /* ── Brand glow shadows (amber on black) ── */
+  --shadow-glow: 0 0 0 1px rgb(255 179 0 / 0.28), 0 8px 30px -8px rgb(255 179 0 / 0.4);
+  --shadow-glow-strong: 0 0 24px -2px rgb(255 179 0 / 0.55), 0 0 60px -10px rgb(255 179 0 / 0.3);
+}
+
+/*
+  Semantic tokens exposed as Tailwind utilities (bg-app, text-default,
+  border-subtle, bg-brand, etc.).
+*/
+@theme inline {
+  --color-app: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-default: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+  --color-border-subtle: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+/* ── Semantic values: premium black with amber gold (dark-only) ── */
+:root {
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --surface-2: #141414;
+  --text: #fafafa;
+  --text-muted: #d4d4d4;
+  --text-subtle: #8c8c8c;
+  --border: #262626;
+  --brand: #ffb300;
+  --brand-fg: #000000;
+  --accent: #ffc933;
+  --success: #4ade80;
+  --warning: #ffb300;
+  --danger: #f87171;
+  color-scheme: dark;
 }
 
 @layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-slate-50 text-slate-800 antialiased;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    @apply antialiased;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    transition: background-color var(--duration-base) var(--ease-out-soft),
+      color var(--duration-base) var(--ease-out-soft);
+  }
+  /* Consistent focus ring for keyboard users across the new components. */
+  :where(button, a, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  /* Default heading voice uses the display family. */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
   }
 }
 
 @layer utilities {
+  /* ── Buttons (semantic, theme-aware) ── */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-xl bg-slate-800 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-800/20 transition-all hover:bg-slate-700 hover:shadow-xl hover:shadow-slate-800/25 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    background: linear-gradient(135deg, var(--color-indigo-500), var(--color-indigo-600));
+    color: #ffffff;
+    box-shadow: var(--shadow-glow);
   }
+  .btn-primary:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active { transform: translateY(0) scale(0.98); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
+
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    background-color: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
   }
+  .btn-secondary:hover { transform: translateY(-1px); background-color: var(--surface); }
+  .btn-secondary:active { transform: translateY(0) scale(0.98); }
+  .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition-all;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover { background-color: var(--surface-2); color: var(--text); }
+  .btn-ghost:active { transform: scale(0.98); }
+
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-semibold text-red-600 transition-all hover:bg-red-100 hover:border-red-300 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    background-color: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   }
+  .btn-danger:hover { background-color: color-mix(in srgb, var(--danger) 20%, transparent); }
+  .btn-danger:active { transform: scale(0.98); }
+
+  /* ── Inputs / cards / surfaces ── */
   .input-field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-sm text-slate-700 placeholder-slate-400 shadow-sm transition-all focus:border-slate-400 focus:outline-none focus:ring-4 focus:ring-slate-500/10 focus:shadow-md;
+    @apply w-full rounded-xl px-4 py-3.5 text-sm transition-all;
+    background-color: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
   }
-  .input-field:disabled {
-    @apply bg-slate-100 cursor-not-allowed opacity-60;
+  .input-field::placeholder { color: var(--text-subtle); }
+  .input-field:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 18%, transparent);
   }
+  .input-field:disabled { opacity: 0.6; cursor: not-allowed; }
+
   .card {
-    @apply rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md;
+    @apply rounded-2xl p-6 transition-all;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
   }
   .card-static {
-    @apply rounded-2xl border border-slate-200 bg-white p-6 shadow-sm;
+    @apply rounded-2xl p-6;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
   }
+
   .glass {
-    @apply bg-white/80 backdrop-blur-xl border border-white/50;
+    background-color: color-mix(in srgb, var(--surface) 70%, transparent);
+    backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   }
+
+  /* ── Brand gradients & text (amber gold scale) ── */
+  .gradient-brand {
+    background: linear-gradient(135deg, var(--color-amber-300), var(--color-amber-500) 50%, var(--color-amber-600));
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, var(--color-amber-300), var(--color-amber-500));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Legacy gradients retained for existing host/viewer pages. */
   .gradient-hero {
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
   }
   .gradient-dark {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
   }
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600;
-  }
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-  .animate-pulse-slow {
-    animation: pulse-slow 3s ease-in-out infinite;
-  }
-  .animate-slide-up {
-    animation: slide-up 0.5s ease-out forwards;
-  }
-  .animate-fade-in {
-    animation: fade-in 0.4s ease-out forwards;
-  }
-  .animate-scale-in {
-    animation: scale-in 0.3s ease-out forwards;
-  }
+
+  /* ── Glow utilities ── */
+  .glow-brand { box-shadow: var(--shadow-glow); }
+  .glow-brand-strong { box-shadow: var(--shadow-glow-strong); }
+
+  /* ── Animations ── */
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+  .animate-slide-up { animation: slide-up var(--duration-slow) var(--ease-out-soft) forwards; }
+  .animate-fade-in { animation: fade-in var(--duration-base) var(--ease-out-soft) forwards; }
+  .animate-scale-in { animation: scale-in var(--duration-fast) var(--ease-out-soft) forwards; }
+  .animate-shake { animation: shake 0.4s ease-in-out; }
+
+  /* Staggered entrance helper: apply to a container's children via inline delay. */
+  .stagger > * { opacity: 0; animation: slide-up var(--duration-slow) var(--ease-out-soft) forwards; }
 }
 
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
 }
-
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
-
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
-
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-4px); }
@@ -117,22 +301,76 @@
   80% { transform: translateX(2px); }
 }
 
-.animate-shake {
-  animation: shake 0.4s ease-in-out;
+/* ── Reactions / celebration keyframes (shared by host & viewer) ── */
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) translateX(0) scale(0.3) rotate(0deg); }
+  15% { opacity: 1; transform: translateY(-30px) translateX(5px) scale(1.1) rotate(-5deg); }
+  30% { opacity: 1; transform: translateY(-70px) translateX(-8px) scale(1.3) rotate(8deg); }
+  60% { opacity: 0.8; transform: translateY(-150px) translateX(12px) scale(1.1) rotate(-3deg); }
+  100% { opacity: 0; transform: translateY(-280px) translateX(-5px) scale(0.6) rotate(10deg); }
+}
+@keyframes confettiFall {
+  0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(100vh) rotate(720deg) scale(0.3); }
+}
+@keyframes pulseRecord {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.3); }
+}
+@keyframes celebrationPop {
+  0% { opacity: 0; transform: scale(0.3); }
+  50% { opacity: 1; transform: scale(1.05); }
+  70% { transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Respect users who prefer reduced motion: disable non-essential animations. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-subtle); }
+
+/* Self-hosted variable fonts */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('/fonts/bricolage-grotesque-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }

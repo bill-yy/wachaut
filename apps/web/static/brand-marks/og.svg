@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Wachaut — Comparte tu pantalla al instante">
+  <defs>
+    <linearGradient id="w-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#000000"/>
+      <stop offset="0.5" stop-color="#0a0a0a"/>
+      <stop offset="1" stop-color="#000000"/>
+    </linearGradient>
+    <linearGradient id="w-glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fcd34d"/>
+      <stop offset="0.55" stop-color="#ffb300"/>
+      <stop offset="1" stop-color="#d99400"/>
+    </linearGradient>
+    <radialGradient id="w-aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffb300" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffb300" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#w-bg)"/>
+  <circle cx="600" cy="300" r="420" fill="url(#w-aura)"/>
+
+  <!-- mark -->
+  <g transform="translate(150,210) scale(1.6)">
+    <rect x="8" y="11" width="32" height="20" rx="4.5" fill="none" stroke="url(#w-glow)" stroke-width="3"/>
+    <path d="M19 37 L29 37" stroke="url(#w-glow)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M24 31 L24 37" stroke="url(#w-glow)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="24" cy="21" r="4" fill="url(#w-glow)"/>
+    <path d="M17 21 a7 7 0 0 1 14 0" fill="none" stroke="url(#w-glow)" stroke-width="2.4" stroke-linecap="round" opacity="0.7"/>
+  </g>
+
+  <text x="290" y="250" font-family="'Bricolage Grotesque','Segoe UI',sans-serif" font-size="92" font-weight="800" fill="#fafafa" letter-spacing="-2">wachaut</text>
+  <text x="294" y="330" font-family="'Inter','Segoe UI',sans-serif" font-size="34" font-weight="500" fill="#a3a3a3">Comparte tu pantalla al instante.</text>
+  <text x="294" y="378" font-family="'Inter','Segoe UI',sans-serif" font-size="26" font-weight="500" fill="url(#w-glow)">Sin registro · Audio incluido · Cualquier navegador</text>
+</svg>

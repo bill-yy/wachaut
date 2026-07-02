@@ -5,21 +5,32 @@ services:
   sfu:
     image: ghcr.io/bill-yy/wachaut/sfu:latest
     restart: always
+    mem_limit: 2g
+    cpus: 4
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "3002:3002"                        # Socket.IO signaling
-      - "20000-20100:20000-20100/udp"      # WebRTC media
+      - "40000-49999:40000-49999/udp"      # WebRTC media (10k ports → ~10k transports)
     environment:
       - PORT=3002
       - HOST=0.0.0.0
-      - RTC_MIN_PORT=20000
-      - RTC_MAX_PORT=20100
+      - RTC_MIN_PORT=40000
+      - RTC_MAX_PORT=49999
       - RTC_LISTEN_IP=0.0.0.0
-      - RTC_ANNOUNCED_IP=167.86.110.249
+      - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP}
       - NUM_WORKERS=4
       - NODE_ENV=production
+      # TURN server for viewers behind symmetric NAT / strict firewalls
+      - TURN_URL=${TURN_URL:-}
+      - TURN_SECRET=${TURN_SECRET:-}
     networks:
       - dokploy-network
 
 networks:
   dokploy-network:
     external: true
+
