@@ -11,20 +11,18 @@
 	let { notificationsMuted, onToggleNotifications }: Props = $props();
 </script>
 
-<header class="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-sm">
-	<div class="mx-auto flex max-w-5xl items-center gap-2">
-		<Brand size="md" />
-		<div class="flex-1"></div>
-		<IconButton
-			label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-			onclick={onToggleNotifications}
-			variant="ghost"
-		>
-			{#if notificationsMuted}
-				<BellOff class="h-5 w-5" />
-			{:else}
-				<Bell class="h-5 w-5" />
-			{/if}
-		</IconButton>
-	</div>
+<header class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
+	<Brand size="sm" />
+	<IconButton
+		label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+		onclick={onToggleNotifications}
+		variant="ghost"
+		size="sm"
+	>
+		{#if notificationsMuted}
+			<BellOff class="h-4 w-4 text-[var(--text-subtle)]" />
+		{:else}
+			<Bell class="h-4 w-4" />
+		{/if}
+	</IconButton>
 </header>

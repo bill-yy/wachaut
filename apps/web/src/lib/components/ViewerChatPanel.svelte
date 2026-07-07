@@ -48,12 +48,14 @@
 	       max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:transition-transform max-md:duration-300
 	       {open ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}"
 >
-	<!-- Header with stats + notifications -->
-	<div class="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3">
-		<div class="flex items-center gap-2">
-			<MessageCircle class="h-4 w-4 text-[var(--text-subtle)]" />
-			<span class="text-sm font-semibold text-[var(--text)]">Chat</span>
-			<span class="text-xs text-[var(--text-subtle)]">({messages.length})</span>
+	<!-- Unified header: chat label + stats + notifications -->
+	<div class="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
+		<div class="flex items-center gap-1.5">
+			<MessageCircle class="h-3.5 w-3.5 text-[var(--text-subtle)]" />
+			<span class="text-xs font-bold uppercase tracking-wider text-[var(--text-subtle)]">Chat</span>
+			{#if messages.length > 0}
+				<span class="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--surface-2)] px-1 text-[10px] font-medium text-[var(--text-subtle)]">{messages.length}</span>
+			{/if}
 		</div>
 		<div class="flex items-center gap-2">
 			{#if connectionStats.resolution}
@@ -73,16 +75,16 @@
 				aria-label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
 			>
 				{#if notificationsMuted}
-					<BellOff class="h-4 w-4 text-[var(--text-subtle)]" />
+					<BellOff class="h-3.5 w-3.5 text-[var(--text-subtle)]" />
 				{:else}
-					<Bell class="h-4 w-4" />
+					<Bell class="h-3.5 w-3.5" />
 				{/if}
 			</button>
 		</div>
 	</div>
 
-	<!-- Messages + input (reused) -->
-	<ChatPanel {messages} bind:value onSend={onSend} showCounter={false} placeholder="Escribe un mensaje…" />
+	<!-- Messages + input (ChatPanel without its own header to avoid duplication) -->
+	<ChatPanel {messages} bind:value onSend={onSend} showCounter={false} showHeader={false} placeholder="Escribe un mensaje…" />
 
 	<!-- Reactions row -->
 	<div class="relative shrink-0 border-t border-[var(--border)] px-4 py-2">

@@ -139,7 +139,7 @@ export class SfuClient {
       Math.round(maxBitrate * 0.20),  // mid layer (~20%)
       maxBitrate,                      // top layer (100%)
     ];
-    const startBitrate = Math.round(maxBitrate * 0.0004); // proportional start
+    const startBitrate = Math.round(maxBitrate * 0.25); // 25% of max as sane start
     const device = await this.#ensureDevice();
     if (!device.loaded && this.#rtpCapabilities) {
       await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
@@ -176,7 +176,7 @@ export class SfuClient {
       }
     });
 
-    this.#sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any) => {
+    this.#sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
       const response = await new Promise<any>((resolve) => {
         this.#socket!.emit(
           'produce',
@@ -189,6 +189,11 @@ export class SfuClient {
           resolve
         );
       });
+      if (response.error) {
+        console.error('[sfu] Produce error from server:', response.error);
+        errback(new Error(response.error));
+        return;
+      }
       callback({ id: response.id });
     });
 
@@ -357,6 +362,17 @@ export class SfuClient {
     });
 
     this.#consumers.set(consumer.id, consumer);
+
+    // Clean up when the host stops producing or the transport closes.
+    consumer.on('producerclose', () => {
+      this.#consumers.delete(consumer.id);
+      this.#stream?.removeTrack(consumer.track);
+      console.log('[sfu] Consumer closed (producerclose):', consumer.id);
+    });
+    consumer.on('transportclose', () => {
+      this.#consumers.delete(consumer.id);
+      console.log('[sfu] Consumer closed (transportclose):', consumer.id);
+    });
 
     console.log('[sfu] Consumer created:', consumer.id, 'kind:', consumer.kind, 'paused:', consumer.paused, 'track state:', consumer.track.readyState, 'track enabled:', consumer.track.enabled);
 

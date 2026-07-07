@@ -36,7 +36,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billyte
 
 // Hard limits to prevent resource exhaustion / DoS.
 const MAX_ROOMS = parseInt(process.env.MAX_ROOMS || '200');
-const MAX_PEERS_PER_ROOM = parseInt(process.env.MAX_PEERS_PER_ROOM || '6');
+const MAX_PEERS_PER_ROOM = parseInt(process.env.MAX_PEERS_PER_ROOM || '21');
 const MAX_TOTAL_PEERS = parseInt(process.env.MAX_TOTAL_PEERS || '1200');
 // Grace period (ms) before destroying a room when the host disconnects,
 // giving them a chance to reconnect after a transient network blip.
@@ -406,7 +406,11 @@ io.on('connection', (socket) => {
       console.log(`[sfu] Transport ${transport.id} for ${peer?.displayName} (${direction}), iceCandidates:`, JSON.stringify(transport.iceCandidates));
 
       if (peer) {
-        if (direction === 'prod') peer.sendTransport = transport;
+        if (direction === 'prod') {
+          peer.sendTransport = transport;
+          // Cap the host's uplink so the SFU has a congestion-control lever.
+          try { await transport.setMaxIncomingBitrate(5_000_000); } catch { /* ignore */ }
+        }
         if (direction === 'cons') peer.recvTransport = transport;
       }
 
@@ -627,20 +631,15 @@ async function createConsumer(
     paused: true,
   });
 
-  // If the producer has SVC/simulcast layers, start the viewer on the middle
-  // spatial layer for a balance of quality and bandwidth. This can be adapted
-  // per-viewer later based on transport-cc feedback / available bitrate.
-  if (consumer.kind === 'video' && typeof (consumer as any).setCurrentSpatialLayer === 'function') {
+  // If the producer has SVC layers, start the viewer on the middle spatial
+  // layer for a balance of quality and bandwidth. Use the correct mediasoup
+  // API: setPreferredLayers (not setCurrentSpatialLayer which doesn't exist).
+  if (consumer.kind === 'video') {
     try {
-      const layers = (producer as any).rtpParameters?.encodings;
-      const layerCount = Array.isArray(layers) ? layers.length : 0;
-      if (layerCount >= 3) {
-        // Prefer the middle layer (index 1 of 0..2).
-        (consumer as any).setCurrentSpatialLayer(1);
-        console.log(`[sfu] Consumer ${consumer.id} set to spatial layer 1/${layerCount}`);
-      }
+      await consumer.setPreferredLayers({ spatialLayer: 1, temporalLayer: 2 });
+      console.log(`[sfu] Consumer ${consumer.id} preferred layers set: spatial=1, temporal=2`);
     } catch {
-      /* setCurrentSpatialLayer not supported on this consumer — ignore */
+      /* consumer may not support layer preferences (non-SVC producer) — ignore */
     }
   }
 

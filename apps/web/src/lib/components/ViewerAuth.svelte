@@ -38,15 +38,18 @@
 </script>
 
 <div class="w-full max-w-sm">
-	<div class="glass rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
-		<div class="mb-6 flex flex-col items-center text-center">
+	<div class="glass relative overflow-hidden rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
+		<!-- Ambient glow -->
+		<div class="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl gradient-brand"></div>
+
+		<div class="relative mb-6 flex flex-col items-center text-center">
 			<div class="relative mb-4">
-				<div class="absolute inset-0 rounded-full opacity-40 blur-xl gradient-brand"></div>
-				<div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface)] border border-[var(--border)]">
+				<div class="absolute inset-0 rounded-2xl opacity-40 blur-xl gradient-brand"></div>
+				<div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
 					<Lock class="h-7 w-7 text-[var(--brand)]" />
 				</div>
 			</div>
-			<h2 class="text-lg font-bold text-[var(--text)]" style="font-family: var(--font-display);">Unirse a la sala</h2>
+			<h2 class="text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">Unirse a la sala</h2>
 			<p class="mt-1 text-sm text-[var(--text-muted)]">Ingresa tu nombre y el PIN de acceso</p>
 		</div>
 
@@ -79,11 +82,15 @@
 			onkeydown={onKeydown}
 			maxlength="6"
 			autocomplete="one-time-code"
-			class="input-field w-full !py-3 !text-center !text-2xl !tracking-[0.5em] !font-mono placeholder:!tracking-[0.5em]"
+			class="w-full rounded-xl py-3 text-center text-2xl tracking-[0.5em] font-mono transition-all bg-[var(--surface-2)] text-[var(--brand)] border border-[var(--border)] placeholder:text-[var(--text-subtle)] placeholder:tracking-[0.5em] focus:border-[var(--brand)] focus:outline-none focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_18%,transparent)]"
 		/>
 
-		<Button onclick={onConnect} disabled={!canConnect} class="mt-4 w-full">
+		<button
+			onclick={onConnect}
+			disabled={!canConnect}
+			class="gradient-brand mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-all hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:brightness-100"
+		>
 			Conectar
-		</Button>
+		</button>
 	</div>
 </div>

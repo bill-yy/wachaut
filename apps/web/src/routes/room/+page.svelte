@@ -40,9 +40,8 @@
   let error = $state('');
   let showLeaveModal = $state(false);
   let loading = $state(true);
-  let copiedPin = $state(false);
   let canScreenShare = $state(true);
-  let copiedUrl = $state(false);
+  let copiedInvite = $state(false);
 
   let videoPreview: HTMLVideoElement | null = $state(null);
   let videoContainer: HTMLDivElement | null = $state(null);
@@ -218,11 +217,22 @@
     high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
   });
 
+  // Safe label lookup that handles the 'custom' preset (not in the presets map).
+  function presetLabel(key: string): string {
+    return key === 'custom' ? 'Personalizado' : presets[key]?.label ?? '—';
+  }
+
   // Audio toggle for screen share
   let includeAudio = $state(true);
+  // 'detail' = sharp text/UI (default), 'motion' = smooth video/gaming
+  let contentHintMode = $state<'detail' | 'motion'>('detail');
 
   // Auto quality adaptation
   let autoAdaptQuality = $state(true);
+  // Custom quality sliders (used when qualityPreset === 'custom')
+  let customRes = $state(1080);
+  let customFps = $state(30);
+  let customBitrate = $state(2_500_000);
   let autoAdaptNotification = $state('');
   let autoAdaptNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
   // Viewer list for kick
@@ -237,7 +247,9 @@
     return String(100000 + (arr[0] % 900000));
   }
   const pin = generatePin();
-  const roomUrl = $derived(`${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}`);
+  // Embed the PIN in the URL hash so viewers don't need to type it.
+  // The hash (#) is never sent to the server, preserving the PIN's security.
+  const roomUrl = $derived(`${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}#${pin}`);
 
   // Attach stream to video element when both are available
   $effect(() => {
@@ -341,7 +353,7 @@
           sharing: isSharing ? 'Sí' : 'No',
           muted: isMuted ? 'Sí' : 'No',
           sfu: sfuClient ? 'Conectado' : 'Desconectado',
-          quality: presets[qualityPreset].label
+          quality: presetLabel(qualityPreset)
         };
         addSystemMessage(`Estadísticas: Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, SFU=${stats.sfu}, Calidad=${stats.quality}`);
         return true;
@@ -410,26 +422,40 @@
     });
 
     socket.on('connect', () => {
+      const wasConnected = connected;
       connected = true;
+
+      if (wasConnected) {
+        // Reconnection after a drop — reclaim the room and notify the user.
+        toast.success('Conexión restablecida');
+      }
+
       socket.emit('host:create-room', { roomId, pin });
       socket.once('room:created', (data: any) => {
         if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
         if (data?.roomId) {
           roomId = data.roomId;
-          const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
-          sfuClient = new SfuClient(sfuUrl);
-          sfuClient.on('error', (msg: string) => console.error('[sfu]', msg));
-          sfuClient.on('peer-joined', (d: any) => console.log('[sfu] peer-joined:', d));
-          sfuClient.on('peer-left', (d: any) => console.log('[sfu] peer-left:', d));
-          sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
-            .then(() => console.log('[sfu] joined room'))
-            .catch((err: unknown) => console.error('[sfu] join failed:', err));
+          // Only create a new SFU client on first connect (not on reconnect).
+          if (!sfuClient) {
+            const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
+            sfuClient = new SfuClient(sfuUrl);
+            sfuClient.on('error', (msg: string) => console.error('[sfu]', msg));
+            sfuClient.on('peer-joined', (d: any) => console.log('[sfu] peer-joined:', d));
+            sfuClient.on('peer-left', (d: any) => console.log('[sfu] peer-left:', d));
+            sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
+              .then(() => console.log('[sfu] joined room'))
+              .catch((err: unknown) => console.error('[sfu] join failed:', err));
+          }
         }
-        setTimeout(() => { loading = false; }, 800);
+        loading = false; // Room is ready — no artificial delay
       });
     });
 
-    socket.on('disconnect', () => { connected = false; });
+    socket.on('disconnect', () => {
+      connected = false;
+      // Notify the host that they've lost connection (Socket.IO auto-reconnects).
+      if (isSharing) toast.warning('Conexión perdida. Reintentando…');
+    });
 
     socket.on('error', (err: any) => {
       error = typeof err === 'string' ? err : err?.message || 'Error de conexión';
@@ -489,13 +515,26 @@
       localStream = null;
     }
     try {
-      // Apply the selected quality preset to the capture constraints.
-      const preset = presets[qualityPreset];
+      // Build capture constraints from preset or custom settings.
+      let captureWidth: number, captureHeight: number, captureFps: number, captureBitrate: number;
+      if (qualityPreset === 'custom') {
+        captureHeight = customRes;
+        captureWidth = Math.round(customRes * 16 / 9); // assume 16:9
+        captureFps = customFps;
+        captureBitrate = customBitrate;
+      } else {
+        const preset = presets[qualityPreset];
+        captureWidth = preset.resolution.width;
+        captureHeight = preset.resolution.height;
+        captureFps = preset.fps;
+        captureBitrate = preset.bitrate;
+      }
+
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: preset.resolution.width },
-          height: { ideal: preset.resolution.height },
-          frameRate: { ideal: preset.fps },
+          width: { ideal: captureWidth },
+          height: { ideal: captureHeight },
+          frameRate: { ideal: captureFps },
         },
         audio: includeAudio,
       });
@@ -503,11 +542,16 @@
       isSharing = true;
       connectionHealth = 'good';
 
+      // Tell the encoder this is screen content (text/UI/code), not a webcam.
+      // 'detail' prioritizes sharpness over smoothness and disables denoising.
+      const vTrack = stream.getVideoTracks()[0];
+      if (vTrack) vTrack.contentHint = contentHintMode;
+
       if (sfuClient) {
-        await sfuClient.produce(stream, { maxBitrate: preset.bitrate });
+        await sfuClient.produce(stream, { maxBitrate: captureBitrate });
       }
 
-      startHealthMonitor(preset.bitrate);
+      startHealthMonitor(captureBitrate);
       stream.getVideoTracks()[0].onended = () => stopSharing();
     } catch (e: any) {
       // Clean up any stream we may have started to avoid a dangling capture indicator.
@@ -557,12 +601,13 @@
     autoAdaptNotificationTimeout = setTimeout(() => { autoAdaptNotification = ''; }, 4000);
   }
 
-  // React to manual preset changes — notify that it applies next session.
+  // React to manual preset changes — only notify on actual changes while sharing.
+  let lastNotifiedPreset = qualityPreset;
   $effect(() => {
-    const preset = qualityPreset;
-    if (isSharing) {
-      showAutoAdaptNotification(`Calidad cambiada a ${presets[preset].label}. Aplicará al reiniciar la compartición.`);
+    if (qualityPreset !== lastNotifiedPreset && isSharing) {
+      showAutoAdaptNotification(`Calidad cambiada a ${presetLabel(qualityPreset)}. Aplicará al reiniciar la compartición.`);
     }
+    lastNotifiedPreset = qualityPreset;
   });
 
   function toggleFullscreen() {
@@ -573,6 +618,37 @@
     } else {
       videoContainer.requestFullscreen();
       isFullscreen = true;
+    }
+  }
+
+  // ─── Keyboard Shortcuts ─────────────────────────────────────────────
+  function handleHostKeydown(e: KeyboardEvent) {
+    const tag = document.activeElement?.tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+    // Escape always works — close any open modal/picker
+    if (e.key === 'Escape') {
+      if (showEmotePicker) { showEmotePicker = false; return; }
+      if (showSettings) { showSettings = false; return; }
+      if (showViewersPanel) { showViewersPanel = false; return; }
+      if (showLeaveModal) { showLeaveModal = false; return; }
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+        isFullscreen = false;
+      }
+      return;
+    }
+
+    // Don't process single-key shortcuts when typing in inputs
+    if (isInput) return;
+
+    switch (e.key.toLowerCase()) {
+      case 'm':
+        if (isSharing) { e.preventDefault(); toggleMute(); }
+        break;
+      case 'f':
+        if (isSharing) { e.preventDefault(); toggleFullscreen(); }
+        break;
     }
   }
 
@@ -587,25 +663,13 @@
   }
 
   // ─── Clipboard ──────────────────────────────────────────────────────
-  async function copyPin() {
-    const ok = await copyText(pin);
-    if (ok) {
-      copiedPin = true;
-      if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
-      copyFeedbackTimeout = setTimeout(() => { copiedPin = false; }, 2000);
-      toast.success('PIN copiado');
-    } else {
-      toast.error('No se pudo copiar al portapapeles');
-    }
-  }
-
-  async function copyUrl() {
+  async function copyInvite() {
     const ok = await copyText(roomUrl);
     if (ok) {
-      copiedUrl = true;
+      copiedInvite = true;
       if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
-      copyFeedbackTimeout = setTimeout(() => { copiedUrl = false; }, 2000);
-      toast.success('Enlace copiado');
+      copyFeedbackTimeout = setTimeout(() => { copiedInvite = false; }, 2000);
+      toast.success('¡Invitación copiada!');
     } else {
       toast.error('No se pudo copiar al portapapeles');
     }
@@ -666,6 +730,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleHostKeydown} />
+
 <!-- Mobile / unsupported gate -->
 {#if !canScreenShare}
   <div class="flex min-h-screen flex-col items-center justify-center bg-app px-6 text-center">
@@ -700,8 +766,7 @@
       <p class="text-sm text-[var(--text-muted)]">Creando sala segura para tu transmisión</p>
     </div>
   </div>
-{/if}
-
+{:else}
 <!-- Auto Quality Adaptation Notification -->
 {#if autoAdaptNotification}
   <div
@@ -791,28 +856,44 @@
       />
     </div>
 
-    <!-- Sidebar: desktop static (md+), mobile slides in as drawer when showChat -->
-    <!-- Desktop -->
-    <div class="hidden h-full min-h-0 md:block">
+    <!-- Sidebar: single instance, responsive (desktop static / mobile drawer) -->
+    <!-- Mobile backdrop -->
+    {#if showChat}
+      <button
+        class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+        onclick={() => (showChat = false)}
+        aria-label="Cerrar panel"
+        tabindex="-1"
+      ></button>
+    {/if}
+
+    <!-- Sidebar wrapper: static on md+, fixed drawer on mobile -->
+    <div
+      class="h-full min-h-0 md:block {showChat
+        ? 'max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:transition-transform max-md:duration-300'
+        : 'max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:translate-x-full max-md:transition-transform max-md:duration-300'}"
+    >
       <RoomSidebar
         {pin}
         roomUrl={roomUrl}
-        {copiedPin}
-        {copiedUrl}
+        {copiedInvite}
         sharing={isSharing}
         presets={presets}
         bind:qualityPreset
         {showSettings}
         bind:includeAudio
         bind:autoAdapt={autoAdaptQuality}
+        bind:contentHint={contentHintMode}
+        bind:customRes
+        bind:customFps
+        bind:customBitrate
         recording={isRecording}
         recordingDuration={recordingDuration}
         {favoriteEmojis}
         {showEmotePicker}
-        onCopyPin={copyPin}
-        onCopyUrl={copyUrl}
+        onCopyInvite={copyInvite}
         onToggleSettings={() => (showSettings = !showSettings)}
-        onShare={startSharing}
+        onShare={() => { startSharing(); showChat = false; }}
         onStop={stopSharing}
         onStartRecording={startRecording}
         onStopRecording={stopRecording}
@@ -824,46 +905,6 @@
         <ChatPanel messages={chatMessages} bind:value={chatInput} onSend={sendChatMessage} />
       </RoomSidebar>
     </div>
-
-    <!-- Mobile sidebar drawer -->
-    {#if showChat}
-      <button
-        class="fixed inset-0 z-40 bg-black/50 md:hidden"
-        onclick={() => (showChat = false)}
-        aria-label="Cerrar panel"
-        tabindex="-1"
-      ></button>
-      <div class="fixed inset-y-0 right-0 z-50 w-80 max-w-[85vw] md:hidden">
-        <RoomSidebar
-          {pin}
-          roomUrl={roomUrl}
-          {copiedPin}
-          {copiedUrl}
-          sharing={isSharing}
-          presets={presets}
-          bind:qualityPreset
-          {showSettings}
-          bind:includeAudio
-          bind:autoAdapt={autoAdaptQuality}
-          recording={isRecording}
-          recordingDuration={recordingDuration}
-          {favoriteEmojis}
-          {showEmotePicker}
-          onCopyPin={copyPin}
-          onCopyUrl={copyUrl}
-          onToggleSettings={() => (showSettings = !showSettings)}
-          onShare={() => { startSharing(); showChat = false; }}
-          onStop={stopSharing}
-          onStartRecording={startRecording}
-          onStopRecording={stopRecording}
-          onSendReaction={handleSendReaction}
-          onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
-          onCloseEmotePicker={() => (showEmotePicker = false)}
-          onLeave={() => (showLeaveModal = true)}
-        >
-          <ChatPanel messages={chatMessages} bind:value={chatInput} onSend={sendChatMessage} />
-        </RoomSidebar>
-      </div>
-    {/if}
   </div>
 </div>
+{/if}
