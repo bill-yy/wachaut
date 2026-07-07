@@ -3,7 +3,6 @@
 	import { onMount } from 'svelte';
 	import {
 		ArrowRight,
-		Link2,
 		Radio,
 		ChevronRight,
 		Zap,
@@ -11,6 +10,7 @@
 		Shield,
 		Monitor,
 		Users,
+		Share2,
 	} from 'lucide-svelte';
 	import Brand from '$lib/components/Brand.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -18,6 +18,8 @@
 	import Card from '$lib/components/Card.svelte';
 	import Pill from '$lib/components/Pill.svelte';
 	import Modal from '$lib/components/Modal.svelte';
+	import ParticleField from '$lib/components/ParticleField.svelte';
+	import ScreenMockup from '$lib/components/ScreenMockup.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
 
 	let isCreating = $state(false);
@@ -57,8 +59,10 @@
 		}
 		try {
 			const urlObj = new URL(url);
-			goto(urlObj.pathname);
+			// Preserve hash + search so the PIN embedded in # arrives at the viewer page.
+			goto(urlObj.pathname + urlObj.search + urlObj.hash);
 		} catch {
+			// Not a full URL — treat as a path or room ID.
 			goto(url.startsWith('/') ? url : `/room/${url}`);
 		}
 	}
@@ -70,14 +74,14 @@
 			description: 'Pulsa "Compartir mi pantalla" y elige qué quieres mostrar.',
 		},
 		{
-			icon: Link2,
+			icon: Share2,
 			title: 'Comparte el enlace',
-			description: 'Copia el enlace y el PIN y envíaselos a quien quieras que te vea.',
+			description: 'Copia el enlace de invitación y envíaselo a quien quieras que te vea. El PIN va incluido.',
 		},
 		{
 			icon: Users,
 			title: '¡Listo!',
-			description: 'Tus amigos entran con el PIN y ven tu pantalla en tiempo real.',
+			description: 'Tus amigos abren el enlace y ven tu pantalla en tiempo real, sin escribir nada.',
 		},
 	];
 
@@ -111,23 +115,22 @@
 	/>
 </svelte:head>
 
-<div class="relative flex min-h-screen flex-col overflow-hidden bg-app">
-	<!-- Ambient background: aurora glows + subtle grid. -->
-	<div class="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-		<div
-			class="absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full opacity-40 blur-[120px]"
-			style="background: radial-gradient(circle, var(--color-amber-500), transparent 70%);"
-		></div>
-		<div
-			class="absolute top-1/3 -right-40 h-[420px] w-[420px] rounded-full opacity-25 blur-[120px]"
-			style="background: radial-gradient(circle, var(--color-amber-300), transparent 70%);"
-		></div>
-		<div
-			class="absolute inset-0 opacity-[0.18]"
-			style="background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse at center, black, transparent 75%);"
-		></div>
-	</div>
+<div class="pointer-events-none fixed inset-0 z-0" aria-hidden="true">
+	<!-- Animated ambient background: aurora + particle constellation + shooting stars. -->
+	<div class="aurora-bg absolute inset-0"></div>
+	<ParticleField />
+	<div
+		class="absolute inset-0 opacity-[0.12]"
+		style="background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 64px 64px; mask-image: radial-gradient(ellipse at center, black, transparent 70%);"
+	></div>
+	<div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[var(--bg)]"></div>
+	<div
+		class="absolute inset-0 opacity-[0.03]"
+		style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 400 400%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E');"
+	></div>
+</div>
 
+<div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
 	<!-- Nav -->
 	<nav class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
 		<Brand size="md" />
@@ -135,86 +138,93 @@
 	</nav>
 
 	<!-- Hero -->
-	<main class="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-4 py-12 text-center">
-		<div class="stagger flex flex-col items-center">
+	<main class="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-4 py-12 lg:flex-row lg:items-center lg:gap-16 lg:text-left">
+		<div class="stagger flex flex-col items-center lg:items-start lg:flex-1">
 			<!-- Announcement pill -->
 			<div style="animation-delay: 0ms">
 				<span
 					class="inline-flex items-center gap-2 rounded-full border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-4 py-1.5 text-xs font-medium text-[var(--brand)]"
 				>
 					<Radio class="h-3.5 w-3.5" />
-					Conexión en tiempo real · hasta 5 espectadores
+					Conexión en tiempo real · hasta 20 espectadores
 				</span>
 			</div>
 
 			<!-- Headline -->
 			<h1
-				class="mt-6 max-w-3xl text-5xl font-extrabold leading-[1.05] tracking-tight text-[var(--text)] sm:text-7xl"
+				class="mt-6 max-w-3xl text-5xl font-extrabold leading-[1.05] tracking-tight text-[var(--text)] sm:text-6xl lg:text-7xl"
 				style="font-family: var(--font-display); animation-delay: 60ms"
 			>
 				Comparte tu pantalla
-				<span class="text-gradient block sm:inline">al instante.</span>
+				<span class="text-gradient block">al instante.</span>
 			</h1>
 
 			<p class="mt-5 max-w-xl text-lg text-[var(--text-muted)]" style="animation-delay: 120ms">
 				Sin registro, sin descargas, sin complicaciones. Un enlace y tu pantalla, en el aire.
 			</p>
 
-			<p class="mt-1 text-sm text-[var(--text-subtle)]" style="animation-delay: 160ms">
-				Audio incluido · Chrome, Firefox, Edge y Safari
-			</p>
-
 			<!-- CTAs -->
-			<div class="mt-9 flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center" style="animation-delay: 200ms">
-				<Button onclick={shareScreen} loading={isCreating} size="lg" class="w-full sm:w-auto">
-					{#if !isCreating}
-						<Radio class="h-5 w-5" />
-					{/if}
-					{isCreating ? 'Preparando…' : 'Compartir mi pantalla'}
-					{#if !isCreating}
-						<ChevronRight class="h-4 w-4 opacity-70" />
-					{/if}
-				</Button>
-				<a
-					href="#join"
-					class="btn-secondary inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base sm:w-auto"
+			<div class="mt-9 flex w-full flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start" style="animation-delay: 200ms">
+				<div class="relative">
+					<Button onclick={shareScreen} loading={isCreating} size="lg" class="w-full sm:w-auto">
+						{#if !isCreating}
+							<Radio class="h-5 w-5" />
+						{/if}
+						{isCreating ? 'Preparando…' : 'Compartir mi pantalla'}
+						{#if !isCreating}
+							<ChevronRight class="h-4 w-4 opacity-70" />
+						{/if}
+					</Button>
+					<span
+						class="absolute -right-2 -top-2 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[10px] font-bold text-black shadow-glow"
+					>
+						Gratis
+					</span>
+				</div>
+				<button
+					onclick={() => (showOnboarding = true)}
+					class="text-sm font-medium text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]"
 				>
-					<Link2 class="h-5 w-5" />
-					Tengo un enlace
-				</a>
-			</div>
-
-			<!-- Join card -->
-			<div id="join" class="mt-12 w-full max-w-md scroll-mt-24" style="animation-delay: 240ms">
-				<Card glass class="text-left">
-					<div class="mb-4 flex items-center gap-3">
-						<span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand)]/15 text-[var(--brand)]">
-							<Link2 class="h-4 w-4" />
-						</span>
-						<div>
-							<p class="text-sm font-semibold text-[var(--text)]">¿Tienes un enlace?</p>
-							<p class="text-xs text-[var(--text-subtle)]">Pega el enlace que te compartió el anfitrión</p>
-						</div>
-					</div>
-					<div class="flex gap-2">
-						<div class="flex-1">
-							<Input
-								type="text"
-								placeholder="https://wachaut.billytech.es/room/…"
-								bind:value={joinUrl}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') handleJoin();
-								}}
-							/>
-						</div>
-						<Button onclick={handleJoin} aria-label="Entrar en la sala" class="px-5">
-							<ArrowRight class="h-5 w-5" />
-						</Button>
-					</div>
-				</Card>
+					¿Cómo funciona?
+				</button>
 			</div>
 		</div>
+
+		<!-- Mockup -->
+		<div class="mt-14 w-full max-w-md lg:mt-0 lg:max-w-lg lg:flex-1" style="animation-delay: 240ms">
+			<ScreenMockup />
+		</div>
 	</main>
+
+	<!-- Join section -->
+	<section id="join" class="mx-auto w-full max-w-5xl px-4 py-12">
+		<Card glass class="max-w-2xl mx-auto">
+			<div class="mb-4 flex items-center gap-3">
+				<span class="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand)]/15 text-[var(--brand)]">
+					<Users class="h-4 w-4" />
+				</span>
+				<div>
+					<p class="text-sm font-semibold text-[var(--text)]">¿Eres espectador?</p>
+					<p class="text-xs text-[var(--text-subtle)]">Pega el enlace que te compartió el anfitrión</p>
+				</div>
+			</div>
+			<div class="flex gap-2">
+				<div class="flex-1">
+					<Input
+						type="text"
+						placeholder="https://wachaut.billytech.es/room/…"
+						bind:value={joinUrl}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') handleJoin();
+						}}
+					/>
+				</div>
+				<Button onclick={handleJoin} aria-label="Entrar en la sala" class="px-5">
+					<ArrowRight class="h-5 w-5" />
+				</Button>
+			</div>
+		</Card>
+	</section>
 
 	<!-- Features -->
 	<section class="mx-auto w-full max-w-5xl px-4 py-16">

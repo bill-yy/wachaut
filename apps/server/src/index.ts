@@ -81,7 +81,7 @@ const MAX_ROOMS_SIMULTANEOUS = 200;
 const MAX_CHAT_LENGTH = SECURITY_MAX_CHAT;
 const MAX_REACTIONS_PER_MINUTE = 30;
 const MAX_USERNAME_LENGTH = SECURITY_MAX_USERNAME;
-const MAX_VIEWERS_PER_ROOM = 5;
+const MAX_VIEWERS_PER_ROOM = 20;
 const MAX_PIN_ATTEMPTS = 5;        // per IP, per 5-min window
 const PIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
 
@@ -154,6 +154,7 @@ for (const [roomId, room] of rooms) {
     // Notify occupants so they don't become silent orphans
     io.to(roomId).emit('room:closed');
     rooms.delete(roomId);
+    hostToRoom.delete(room.hostId);
     for (const [viewerId] of room.viewers) {
       viewerToRoom.delete(viewerId);
     }
@@ -513,9 +514,9 @@ fastify.get('/health', { logLevel: 'error' }, async () => {
 
 // Readiness probe: checks that Socket.IO is accepting connections.
 // Use this for Traefik/Docker load-balancer routing decisions.
-fastify.get('/ready', async () => {
+fastify.get('/ready', async (req, reply) => {
   const sfuUrl = process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '';
-  let sfuReachable = true;
+  let sfuReachable = false;
   if (sfuUrl) {
     try {
       const httpUrl = sfuUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
@@ -525,7 +526,9 @@ fastify.get('/ready', async () => {
       sfuReachable = false;
     }
   }
-  return { ready: sfuReachable, sfu: sfuReachable ? 'reachable' : 'unreachable' };
+  // Return 503 when the SFU is unreachable so Traefik can failover.
+  const code = sfuReachable ? 200 : 503;
+  return reply.code(code).send({ ready: sfuReachable, sfu: sfuReachable ? 'reachable' : 'unreachable' });
 });
 
 // Start server

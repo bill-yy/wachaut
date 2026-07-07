@@ -271,6 +271,22 @@
 
   /* Staggered entrance helper: apply to a container's children via inline delay. */
   .stagger > * { opacity: 0; animation: slide-up var(--duration-slow) var(--ease-out-soft) forwards; }
+
+  /* ── Landing background: animated aurora mesh ── */
+  .aurora-bg {
+    background:
+      radial-gradient(ellipse at 20% 20%, rgba(255, 179, 0, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 30%, rgba(255, 201, 51, 0.1) 0%, transparent 45%),
+      radial-gradient(ellipse at 50% 80%, rgba(255, 179, 0, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 30% 70%, rgba(212, 128, 0, 0.06) 0%, transparent 40%);
+    animation: aurora-shift 20s ease-in-out infinite alternate;
+  }
+  @keyframes aurora-shift {
+    0% { transform: scale(1) translate(0, 0); }
+    33% { transform: scale(1.08) translate(-2%, 1%); }
+    66% { transform: scale(1.05) translate(1%, -2%); }
+    100% { transform: scale(1.1) translate(2%, 2%); }
+  }
 }
 
 @keyframes float {

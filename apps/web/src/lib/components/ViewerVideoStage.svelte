@@ -1,21 +1,15 @@
 <script lang="ts">
-	import { Volume2, Volume1, VolumeX, Maximize, Minimize, Share2 } from 'lucide-svelte';
-	import Pill from './Pill.svelte';
+	import { Volume2, Volume1, VolumeX, Maximize, Minimize, Share2, PictureInPicture2 } from 'lucide-svelte';
 	import type { FloatingReaction } from '$lib/types/room';
 
 	interface Props {
-		/** Mute state of the local video. */
 		muted: boolean;
-		/** Volume 0-100. */
 		volume: number;
 		fullscreen: boolean;
 		hostMuted: boolean;
 		assignedUsername: string;
-		/** Floating reactions to render over the video. */
 		reactions: FloatingReaction[];
-		/** Expose the <video> element to the parent. */
 		onVideoMount: (el: HTMLVideoElement) => void;
-		/** Expose the container (for fullscreen). */
 		onContainerMount: (el: HTMLDivElement) => void;
 		onToggleMute: () => void;
 		onVolumeChange: (v: number) => void;
@@ -45,16 +39,40 @@
 	let videoEl: HTMLVideoElement | null = $state(null);
 	let containerEl: HTMLDivElement | null = $state(null);
 
-	// Propagate element refs up to the parent. Reading the prop inside $effect is
-	// intentional; the parent's callback identity is stable in practice.
-	$effect(() => {
-		const el = videoEl;
-		if (el) onVideoMount(el);
-	});
-	$effect(() => {
-		const el = containerEl;
-		if (el) onContainerMount(el);
-	});
+	$effect(() => { const el = videoEl; if (el) onVideoMount(el); });
+	$effect(() => { const el = containerEl; if (el) onContainerMount(el); });
+
+	let isPip = $state(false);
+
+	async function togglePip() {
+		if (!videoEl) return;
+		try {
+			if (document.pictureInPictureElement) {
+				await document.exitPictureInPicture();
+			} else {
+				await videoEl.requestPictureInPicture();
+			}
+		} catch {
+			/* PiP not supported or blocked */
+		}
+	}
+
+	// Track PiP state changes (user can exit PiP from the floating window).
+	function onPipChange() {
+		isPip = !!document.pictureInPictureElement;
+	}
+
+	// Svelte action: attach PiP event listeners to the video element.
+	function pipEvents(node: HTMLVideoElement) {
+		node.addEventListener('enterpictureinpicture', onPipChange);
+		node.addEventListener('leavepictureinpicture', onPipChange);
+		return {
+			destroy() {
+				node.removeEventListener('enterpictureinpicture', onPipChange);
+				node.removeEventListener('leavepictureinpicture', onPipChange);
+			},
+		};
+	}
 </script>
 
 <div
@@ -63,42 +81,49 @@
 	role="region"
 	aria-label="Video en vivo"
 >
-	<!-- Video -->
 	<video
 		bind:this={videoEl}
 		autoplay
 		muted
 		playsinline
 		onclick={onVideoClick}
+		use:pipEvents
 		class="h-full w-full cursor-pointer object-contain"
 		title="Haz clic para activar audio"
 	></video>
 
 	<!-- Top-left overlays -->
-	<div class="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
-		<Pill tone="danger" pulse>EN VIVO</Pill>
+	<div class="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2">
+		<!-- LIVE badge: custom, matches HostHeader style -->
+		<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/90 px-2.5 py-1 text-xs font-bold text-white backdrop-blur-sm">
+			<span class="relative flex h-1.5 w-1.5">
+				<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
+				<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-white"></span>
+			</span>
+			EN VIVO
+		</span>
 		{#if hostMuted}
-			<Pill tone="warning">
+			<span class="flex items-center gap-1 rounded-full bg-[var(--warning)]/90 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm">
 				<VolumeX class="h-3 w-3" />
 				Silenciado
-			</Pill>
+			</span>
 		{/if}
 		{#if assignedUsername}
-			<span class="hidden items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-[var(--text-muted)] glass md:flex">
+			<span class="hidden items-center gap-1 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium text-[var(--text-muted)] backdrop-blur-sm md:flex">
 				@{assignedUsername}
 			</span>
 		{/if}
 	</div>
 
-	<!-- Bottom controls (hover / focus-within) -->
+	<!-- Bottom controls: glass bar matching host treatment -->
 	<div
-		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100"
+		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100"
 	>
-		<div class="pointer-events-auto flex items-center gap-3">
+		<div class="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2">
 			<!-- Mute -->
 			<button
 				onclick={onToggleMute}
-				class="p-1 text-white transition-colors hover:text-white/80"
+				class="flex h-10 w-10 items-center justify-center rounded-xl text-white transition-all hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
 				title={muted ? 'Activar sonido' : 'Silenciar'}
 				aria-label={muted ? 'Activar sonido' : 'Silenciar'}
 			>
@@ -131,17 +156,27 @@
 			<!-- Share -->
 			<button
 				onclick={onShare}
-				class="p-1 text-white/70 transition-colors hover:text-white"
+				class="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:h-11 sm:w-11"
 				title="Compartir enlace"
 				aria-label="Compartir enlace"
 			>
 				<Share2 class="h-4 w-4" />
 			</button>
 
+			<!-- Picture-in-Picture -->
+			<button
+				onclick={togglePip}
+				class="flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 sm:h-11 sm:w-11 {isPip ? 'bg-[var(--brand)]/20 text-[var(--brand)]' : 'text-white/70 hover:bg-white/15 hover:text-white'}"
+				title={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
+				aria-label={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
+			>
+				<PictureInPicture2 class="h-4 w-4" />
+			</button>
+
 			<!-- Fullscreen -->
 			<button
 				onclick={onToggleFullscreen}
-				class="p-1 text-white/70 transition-colors hover:text-white"
+				class="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:h-11 sm:w-11"
 				title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 				aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 			>
@@ -155,7 +190,7 @@
 			<!-- Shortcuts help -->
 			<button
 				onclick={onShowShortcuts}
-				class="p-1 font-mono text-xs text-white/50 transition-colors hover:text-white/80"
+				class="flex h-10 w-10 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95 sm:h-11 sm:w-11"
 				title="Atajos de teclado"
 				aria-label="Atajos de teclado"
 			>
@@ -180,7 +215,6 @@
 </div>
 
 <style>
-	/* Custom volume slider for the viewer video controls. */
 	input[type='range'].volume-slider {
 		-webkit-appearance: none;
 		appearance: none;

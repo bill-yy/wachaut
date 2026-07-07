@@ -74,6 +74,7 @@
 	let chatInputEl: HTMLInputElement | null = $state(null);
 	let shortcutsTimeout: ReturnType<typeof setTimeout> | null = null;
 	let errorClearTimer: ReturnType<typeof setTimeout> | null = null;
+	let autoConnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Connection Stats ---
 	let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
@@ -405,7 +406,10 @@
 	}
 
 	async function shareLink() {
-		const url = `${window.location.origin}/room/${roomId}`;
+		// Include the PIN in the hash so the recipient doesn't need to type it.
+		const url = pin
+			? `${window.location.origin}/room/${roomId}#${pin}`
+			: `${window.location.origin}/room/${roomId}`;
 		try {
 			if (navigator.share) {
 				await navigator.share({ title: 'Wachaut — Únete a mi pantalla', url });
@@ -567,6 +571,7 @@
 	onDestroy(() => {
 		if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
 		if (errorClearTimer) clearTimeout(errorClearTimer);
+		if (autoConnectTimer) clearTimeout(autoConnectTimer);
 		stopStatsPolling();
 		cleanupReconnect();
 		document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -578,6 +583,17 @@
 		try { username = localStorage.getItem(USERNAME_STORAGE_KEY) || ''; } catch { username = ''; }
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+		// If the PIN is embedded in the URL hash (e.g. /room/abc#123456), pre-fill it.
+		// The hash is never sent to the server, preserving PIN security.
+		const hashPin = window.location.hash.replace('#', '').trim();
+		if (hashPin && /^\d{4,6}$/.test(hashPin)) {
+			pin = hashPin;
+			// Auto-connect if we already have a saved username (skip the auth screen entirely).
+			if (username.trim().length >= 2) {
+				autoConnectTimer = setTimeout(() => connect(), 100);
+			}
+		}
 	});
 </script>
 
@@ -669,7 +685,7 @@
 			<!-- Mobile backdrop -->
 			{#if chatOpen}
 				<button
-					class="fixed inset-0 z-40 bg-black/50 md:hidden"
+					class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
 					onclick={toggleChat}
 					aria-label="Cerrar chat"
 					tabindex="-1"
@@ -678,11 +694,11 @@
 
 			<!-- Shortcuts overlay -->
 			{#if showShortcuts}
-				<div class="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-in md:bottom-6">
-					<div class="glass flex items-center gap-4 rounded-xl px-4 py-2.5 text-xs text-[var(--text-muted)] shadow-xl">
-						<span><kbd class="font-mono font-semibold text-[var(--text)]">M</kbd> silenciar</span>
-						<span><kbd class="font-mono font-semibold text-[var(--text)]">F</kbd> pantalla completa</span>
-						<span><kbd class="font-mono font-semibold text-[var(--text)]">/</kbd> chat</span>
+				<div class="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-in md:bottom-8">
+					<div class="glass flex items-center gap-3 rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[var(--text-muted)] shadow-xl">
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">M</kbd> silenciar</span>
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">F</kbd> pantalla completa</span>
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">/</kbd> chat</span>
 					</div>
 				</div>
 			{/if}

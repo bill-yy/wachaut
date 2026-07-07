@@ -13,6 +13,8 @@
 		maxLength?: number;
 		/** Show the char counter (host uses it, viewer may not). */
 		showCounter?: boolean;
+		/** Show the header row (hide when embedded in a panel with its own header). */
+		showHeader?: boolean;
 		/** Placeholder text. */
 		placeholder?: string;
 		/** Send the current draft. */
@@ -24,6 +26,7 @@
 		value = $bindable(),
 		maxLength = 500,
 		showCounter = true,
+		showHeader = true,
 		placeholder = 'Escribe un mensaje o /comando…',
 		onSend,
 	}: Props = $props();
@@ -49,18 +52,22 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-		<div class="flex items-center gap-2">
-			<MessageCircle class="h-4 w-4 text-[var(--text-subtle)]" />
-			<span class="text-sm font-semibold text-[var(--text)]">Chat</span>
-			<span class="text-xs text-[var(--text-subtle)]">({messages.length})</span>
+	{#if showHeader}
+	<!-- Header: compact, coherente con sidebar -->
+	<div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
+		<div class="flex items-center gap-1.5">
+			<MessageCircle class="h-3.5 w-3.5 text-[var(--text-subtle)]" />
+			<span class="text-xs font-bold uppercase tracking-wider text-[var(--text-subtle)]">Chat</span>
+			{#if messages.length > 0}
+				<span class="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--surface-2)] px-1 text-[10px] font-medium text-[var(--text-subtle)]">{messages.length}</span>
+			{/if}
 		</div>
 		<div class="flex items-center gap-1 text-[var(--text-subtle)]">
 			<Terminal class="h-3 w-3" />
 			<span class="font-mono text-[10px]">/help</span>
 		</div>
 	</div>
+	{/if}
 
 	<!-- Messages -->
 	<div
@@ -70,9 +77,14 @@
 		aria-label="Mensajes de chat"
 	>
 		{#if messages.length === 0}
-			<div class="flex h-full flex-col items-center justify-center py-8 text-center">
-				<MessageCircle class="mb-2 h-8 w-8 text-[var(--text-subtle)] opacity-50" />
-				<p class="text-sm text-[var(--text-muted)]">Aún no hay mensajes</p>
+			<div class="flex h-full flex-col items-center justify-center px-6 text-center">
+				<div class="relative mb-4">
+					<div class="absolute inset-0 rounded-full opacity-20 blur-2xl gradient-brand"></div>
+					<div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+						<MessageCircle class="h-6 w-6 text-[var(--text-subtle)]" />
+					</div>
+				</div>
+				<p class="text-sm font-medium text-[var(--text-muted)]">Aún no hay mensajes</p>
 				<p class="mt-1 text-xs text-[var(--text-subtle)]">Los mensajes aparecerán aquí</p>
 			</div>
 		{:else}

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Monitor, Wifi, WifiOff, AlertTriangle } from 'lucide-svelte';
-	import Spinner from './Spinner.svelte';
 	import Button from './Button.svelte';
 
 	type Status = 'connecting' | 'auth' | 'waiting' | 'error' | 'disconnected' | 'reconnecting';
@@ -22,8 +21,8 @@
 	<div class="w-full max-w-sm text-center">
 		{#if status === 'connecting' || status === 'auth'}
 			<div class="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
-				<div class="absolute inset-0 rounded-full opacity-40 blur-xl gradient-brand"></div>
-				<div class="relative flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface)] border border-[var(--border)]">
+				<div class="absolute inset-0 rounded-2xl opacity-40 blur-xl gradient-brand"></div>
+				<div class="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
 					<Wifi class="h-7 w-7 text-[var(--brand)]" />
 				</div>
 			</div>
@@ -34,9 +33,9 @@
 
 		{:else if status === 'waiting'}
 			<div class="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center">
-				<div class="absolute inset-0 rounded-full opacity-30 blur-2xl gradient-brand animate-pulse-slow"></div>
-				<div class="relative flex h-20 w-20 items-center justify-center rounded-full bg-[var(--surface)] border border-[var(--border)]">
-					<Monitor class="h-10 w-10 text-[var(--text-subtle)]" />
+				<div class="absolute inset-0 rounded-3xl opacity-30 blur-2xl gradient-brand animate-pulse-slow"></div>
+				<div class="relative flex h-20 w-20 animate-float items-center justify-center rounded-3xl bg-[var(--surface)] border border-[var(--border)]">
+					<Monitor class="h-10 w-10 text-[var(--brand)]" />
 				</div>
 			</div>
 			<h2 class="mb-2 text-lg font-bold text-[var(--text)]" style="font-family: var(--font-display);">
@@ -46,7 +45,7 @@
 			<Button variant="secondary" onclick={onLeave}>Salir de la sala</Button>
 
 		{:else if status === 'error'}
-			<div class="glass rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
+			<div class="glass mx-auto rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
 				<div class="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center">
 					<div class="absolute inset-0 rounded-full opacity-30 blur-xl bg-[var(--danger)]"></div>
 					<div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-[var(--danger)]/12">
@@ -55,11 +54,16 @@
 				</div>
 				<h2 class="mb-2 text-lg font-bold text-[var(--text)]" style="font-family: var(--font-display);">Error</h2>
 				<p class="mb-6 text-sm text-[var(--text-muted)]" role="alert">{errorMessage}</p>
-				<Button onclick={onRetry} class="w-full">Intentar de nuevo</Button>
+				<button
+					onclick={onRetry}
+					class="gradient-brand flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-black shadow-glow transition-all hover:brightness-110 active:scale-[0.98]"
+				>
+					Intentar de nuevo
+				</button>
 			</div>
 
 		{:else if status === 'disconnected'}
-			<div class="glass rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
+			<div class="glass mx-auto rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
 				<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-2)]">
 					<WifiOff class="h-7 w-7 text-[var(--text-subtle)]" />
 				</div>
@@ -69,7 +73,7 @@
 			</div>
 
 		{:else if status === 'reconnecting'}
-			<div class="glass rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
+			<div class="glass mx-auto rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
 				<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--warning)]/12">
 					<Wifi class="h-7 w-7 text-[var(--warning)] animate-pulse" />
 				</div>

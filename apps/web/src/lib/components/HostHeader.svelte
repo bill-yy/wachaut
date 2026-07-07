@@ -1,8 +1,7 @@
 <script lang="ts">
 	import Brand from './Brand.svelte';
 	import IconButton from './IconButton.svelte';
-	import Pill from './Pill.svelte';
-	import { ArrowLeft, Users, Bell, BellOff, MessageCircle } from 'lucide-svelte';
+	import { ArrowLeft, Users, Bell, BellOff } from 'lucide-svelte';
 
 	type Health = 'good' | 'degraded' | 'poor';
 
@@ -32,65 +31,59 @@
 		onOpenViewers,
 	}: Props = $props();
 
-	const healthMeta: Record<Health, { tone: 'success' | 'warning' | 'danger'; label: string }> = {
-		good: { tone: 'success', label: 'Estable' },
-		degraded: { tone: 'warning', label: 'Estableciendo' },
-		poor: { tone: 'danger', label: 'Inestable' },
+	const healthMeta: Record<Health, { color: string; bg: string; label: string }> = {
+		good: { color: 'bg-[var(--success)]', bg: 'bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/25', label: 'Estable' },
+		degraded: { color: 'bg-[var(--warning)]', bg: 'bg-[var(--warning)]/10 text-[var(--warning)] border-[var(--warning)]/25', label: 'Estableciendo' },
+		poor: { color: 'bg-[var(--danger)]', bg: 'bg-[var(--danger)]/10 text-[var(--danger)] border-[var(--danger)]/25', label: 'Inestable' },
 	};
 </script>
 
-<header class="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 bg-[var(--surface)]">
-	<div class="flex items-center gap-2">
-		<IconButton label="Volver" onclick={onBack} variant="ghost">
-			<ArrowLeft class="h-5 w-5" />
+<header class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
+	<div class="flex items-center gap-1.5">
+		<IconButton label="Volver" onclick={onBack} variant="ghost" size="sm">
+			<ArrowLeft class="h-4 w-4" />
 		</IconButton>
-		<Brand size="md" />
+		<Brand size="sm" />
 	</div>
 
-	<div class="flex items-center gap-2">
+	<div class="flex items-center gap-1.5">
 		{#if sharing}
-			<Pill tone="danger" pulse class="animate-fade-in">EN VIVO</Pill>
-			<Pill tone={healthMeta[health].tone} dot={!health ? false : true}>
+			<!-- LIVE badge: pulsing red dot + label -->
+			<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/10 px-2.5 py-1 text-xs font-bold text-[var(--danger)] animate-fade-in">
+				<span class="relative flex h-1.5 w-1.5">
+					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--danger)] opacity-75"></span>
+					<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--danger)]"></span>
+				</span>
+				EN VIVO
+			</span>
+			<!-- Health pill -->
+			<span class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${healthMeta[health].bg}`}>
+				<span class={`h-1.5 w-1.5 rounded-full ${healthMeta[health].color}`}></span>
 				{healthMeta[health].label}
-			</Pill>
+			</span>
 		{/if}
 
+		<!-- Viewer count: chip with glow when viewers present -->
 		<button
 			onclick={onOpenViewers}
-			class="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 transition-all hover:border-[var(--text-subtle)] active:scale-95"
+			class="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition-all hover:border-[var(--brand)]/40 active:scale-95 {viewerCount > 0 ? 'shadow-glow' : ''}"
 			aria-label="Ver espectadores"
 		>
-			<Users class="h-4 w-4 text-[var(--text-subtle)]" />
-			<span class="text-sm font-medium text-[var(--text)]">{viewerCount}</span>
+			<Users class={`h-3.5 w-3.5 ${viewerCount > 0 ? 'text-[var(--brand)]' : 'text-[var(--text-subtle)]'}`} />
+			{viewerCount}
 		</button>
 
 		<IconButton
 			label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
 			onclick={onToggleNotifications}
 			variant="ghost"
+			size="sm"
 		>
 			{#if notificationsMuted}
-				<BellOff class="h-5 w-5 text-[var(--text-subtle)]" />
+				<BellOff class="h-4 w-4 text-[var(--text-subtle)]" />
 			{:else}
-				<Bell class="h-5 w-5" />
+				<Bell class="h-4 w-4" />
 			{/if}
-		</IconButton>
-
-		<div class="relative">
-			<IconButton
-				label="Chat"
-				onclick={onToggleChat}
-				variant={chatOpen ? 'solid' : 'ghost'}
-			>
-				<MessageCircle class="h-5 w-5" />
 			</IconButton>
-			{#if unreadCount > 0 && !chatOpen}
-				<span
-					class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-[10px] font-bold text-white"
-				>
-					{unreadCount > 9 ? '9+' : unreadCount}
-				</span>
-			{/if}
 		</div>
-	</div>
-</header>
+	</header>
