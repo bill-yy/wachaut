@@ -62,8 +62,8 @@
   // ─── Connection Health ──────────────────────────────────────────────
   let connectionHealth = $state<'good' | 'degraded' | 'poor'>('good');
   let healthMonitorInterval: ReturnType<typeof setInterval> | null = null;
-  let lastSentBytes = 0;
-  let lastSentTime = 0;
+  let lastPacketsLost = 0;
+  let lastPacketsSent = 0;
   let targetBitrate = 2_500_000;
   let lastHealthState: 'good' | 'degraded' | 'poor' = 'good';
 
@@ -71,8 +71,8 @@
   function startHealthMonitor(bitrate: number) {
     stopHealthMonitor();
     targetBitrate = bitrate;
-    lastSentBytes = 0;
-    lastSentTime = 0;
+    lastPacketsLost = 0;
+    lastPacketsSent = 0;
     connectionHealth = 'good';
     lastHealthState = 'good';
     healthMonitorInterval = setInterval(checkHealth, 5000);
@@ -91,34 +91,34 @@
       const stats = await sfuClient.getStats();
       if (!stats) return;
 
-      let outboundBitrate = 0;
-      let packetsLost = 0;
-      let packetsSent = 0;
+      // For screen sharing, the observed bitrate is NOT a reliable health indicator —
+      // a static screen legitimately uses very little bandwidth. We derive health
+      // primarily from packet loss (reported by remote-inbound-rtp), which is the
+      // true signal of network problems.
+      let currentPacketsLost = 0;
+      let currentPacketsSent = 0;
 
       for (const report of stats as any[]) {
-        if (report.type === 'outbound-rtp' && report.kind === 'video') {
-          const now = Date.now();
-          const bytesSent = report.bytesSent || 0;
-          if (lastSentTime > 0) {
-            const elapsed = (now - lastSentTime) / 1000;
-            const delta = bytesSent - lastSentBytes;
-            outboundBitrate = (delta * 8) / elapsed;
-          }
-          lastSentBytes = bytesSent;
-          lastSentTime = now;
-        }
-        if (report.type === 'remote-inbound-rtp') {
-          packetsLost = report.packetsLost || 0;
-          packetsSent = report.packetsSent || 1;
+        if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
+          currentPacketsLost = report.packetsLost || 0;
+          currentPacketsSent = report.packetsSent || 0;
         }
       }
 
-      const lossRate = packetsSent > 0 ? packetsLost / packetsSent : 0;
-      const bitrateRatio = targetBitrate > 0 ? outboundBitrate / targetBitrate : 1;
+      // Compute DELTA loss rate (loss since last poll, not cumulative since start).
+      // Cumulative loss rate is misleading: 50 lost out of 10000 = 0.5% looks fine
+      // even if ALL recent packets were lost.
+      const deltaLost = Math.max(0, currentPacketsLost - lastPacketsLost);
+      const deltaSent = Math.max(0, currentPacketsSent - lastPacketsSent);
+      lastPacketsLost = currentPacketsLost;
+      lastPacketsSent = currentPacketsSent;
+
+      // If no packets were sent in this interval, we can't measure — assume good.
+      const recentLossRate = deltaSent > 0 ? deltaLost / deltaSent : 0;
 
       let newState: 'good' | 'degraded' | 'poor';
-      if (lossRate > 0.05 || bitrateRatio < 0.25) newState = 'poor';
-      else if (lossRate > 0.02 || bitrateRatio < 0.50) newState = 'degraded';
+      if (recentLossRate > 0.08) newState = 'poor';
+      else if (recentLossRate > 0.03) newState = 'degraded';
       else newState = 'good';
 
       connectionHealth = newState;
