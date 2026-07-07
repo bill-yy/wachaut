@@ -469,12 +469,19 @@
       if (data.username) addSystemMessage(`${data.username} se unio a la sala.`);
       try { playViewerJoin(); } catch {}
       if (wasEmpty) triggerFirstViewerCelebration();
+      // Keep the viewers list fresh if the panel is open.
+      if (data.viewerId) requestViewersList();
     });
 
     socket.on('viewer:left', (data: any) => {
       viewerCount = Math.max(0, viewerCount - 1);
       if (data.username) addSystemMessage(`${data.username} salio de la sala.`);
       try { playViewerLeave(); } catch {}
+      // Remove from local list + refresh from server if panel is open.
+      if (data.viewerId) {
+        viewersList = viewersList.filter(v => v.viewerId !== data.viewerId);
+        if (showViewersPanel) requestViewersList();
+      }
     });
 
     // Chat
@@ -659,7 +666,10 @@
   function kickViewer(viewerId: string) {
     if (!socket || !connected) return;
     socket.emit('host:kick', { roomId, viewerId });
+    // Remove locally + refresh from server.
+    viewersList = viewersList.filter(v => v.viewerId !== viewerId);
     addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
+    requestViewersList();
   }
 
   // ─── Clipboard ──────────────────────────────────────────────────────
