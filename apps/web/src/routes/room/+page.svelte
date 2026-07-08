@@ -124,11 +124,20 @@
 
       connectionHealth = newState;
 
-      // Auto-adapt: notify on health degradation (only if toggle is on and state changed).
-      if (autoAdaptQuality && newState !== lastHealthState && newState !== 'good') {
-        const label = newState === 'poor' ? 'inestable' : 'degradada';
-        const advice = qualityPreset !== 'low' ? ' Considera bajar la calidad.' : '';
-        showAutoAdaptNotification(`Conexión ${label}.${advice}`);
+      // Auto-adapt: when health degrades, tell the SFU to drop the top spatial
+      // layer (viewers get mid-quality instead of freezing). When it recovers,
+      // restore the top layer. This is the "Adaptación automática" toggle doing
+      // something real, not just showing a toast.
+      if (autoAdaptQuality && newState !== lastHealthState) {
+        if (newState === 'poor' && socket && connected) {
+          socket.emit('host:set-spatial-layer', { roomId, spatialLayer: 1 });
+          showAutoAdaptNotification('Conexión inestable. Calidad ajustada automáticamente.');
+        } else if (newState === 'good' && lastHealthState !== 'good' && socket && connected) {
+          socket.emit('host:set-spatial-layer', { roomId, spatialLayer: 2 });
+          showAutoAdaptNotification('Conexión restablecida. Calidad óptima restaurada.');
+        } else if (newState === 'degraded') {
+          showAutoAdaptNotification('Conexión débil. Monitoreando…');
+        }
       }
       lastHealthState = newState;
     } catch {}
