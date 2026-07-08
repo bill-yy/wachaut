@@ -117,7 +117,7 @@
 
 	<!-- Bottom controls: glass bar matching host treatment -->
 	<div
-		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-4 pt-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100"
+		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-4 pt-10 opacity-100 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 sm:opacity-0"
 	>
 		<div class="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2">
 			<!-- Mute -->
@@ -156,7 +156,7 @@
 			<!-- Share -->
 			<button
 				onclick={onShare}
-				class="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95"
 				title="Compartir enlace"
 				aria-label="Compartir enlace"
 			>
@@ -176,7 +176,7 @@
 			<!-- Fullscreen -->
 			<button
 				onclick={onToggleFullscreen}
-				class="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95"
 				title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 				aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 			>
@@ -190,7 +190,7 @@
 			<!-- Shortcuts help -->
 			<button
 				onclick={onShowShortcuts}
-				class="flex h-10 w-10 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95 sm:h-11 sm:w-11"
 				title="Atajos de teclado"
 				aria-label="Atajos de teclado"
 			>

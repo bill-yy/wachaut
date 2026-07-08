@@ -115,7 +115,7 @@
 		>
 			<button
 				onclick={onToggleMute}
-				class="flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
 				title={muted ? 'Activar audio' : 'Silenciar audio'}
 				aria-label={muted ? 'Activar audio' : 'Silenciar audio'}
 			>
@@ -128,7 +128,7 @@
 
 			<button
 				onclick={onToggleFullscreen}
-				class="flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
 				title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 				aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 			>
@@ -152,7 +152,7 @@
 			{:else}
 				<button
 					onclick={onStartRecording}
-					class="flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+					class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
 					title="Grabar sesión"
 					aria-label="Grabar sesión"
 				>

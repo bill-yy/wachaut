@@ -59,7 +59,7 @@
 		</div>
 		<div class="flex items-center gap-2">
 			{#if connectionStats.resolution}
-				<div class="flex items-center gap-1 text-[10px] text-[var(--text-subtle)]">
+				<div class="hidden items-center gap-1 text-[10px] text-[var(--text-subtle)] sm:flex">
 					<Activity class="h-3 w-3" />
 					<span class="h-1.5 w-1.5 rounded-full {qualityColor[connectionQuality]}"></span>
 					<span class="font-mono">{connectionStats.resolution}</span>

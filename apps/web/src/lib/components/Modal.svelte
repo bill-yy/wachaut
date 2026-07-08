@@ -79,7 +79,7 @@
 			aria-label={title ?? label}
 			tabindex="-1"
 			class={cn(
-				'relative w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl focus:outline-none',
+				'relative w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl focus:outline-none sm:p-6',
 				sizeClass[size],
 			)}
 			use:focusTrap

@@ -38,35 +38,37 @@
 	};
 </script>
 
-<header class="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5">
-	<div class="flex items-center gap-1.5">
-		<IconButton label="Volver" onclick={onBack} variant="ghost" size="sm">
+<header class="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
+	<div class="flex min-w-0 items-center gap-1.5">
+		<IconButton label="Volver" onclick={onBack} variant="ghost" size="md">
 			<ArrowLeft class="h-4 w-4" />
 		</IconButton>
-		<Brand size="sm" />
+		<span class="min-w-0">
+			<Brand size="sm" />
+		</span>
 	</div>
 
-	<div class="flex items-center gap-1.5">
+	<div class="flex items-center gap-1 sm:gap-1.5">
 		{#if sharing}
-			<!-- LIVE badge: pulsing red dot + label -->
-			<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/10 px-2.5 py-1 text-xs font-bold text-[var(--danger)] animate-fade-in">
+			<!-- LIVE badge: dot + label (icon-only on mobile) -->
+			<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/10 px-2 py-1 text-xs font-bold text-[var(--danger)] animate-fade-in sm:px-2.5">
 				<span class="relative flex h-1.5 w-1.5">
 					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--danger)] opacity-75"></span>
 					<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--danger)]"></span>
 				</span>
-				EN VIVO
+				<span class="hidden sm:inline">EN VIVO</span>
 			</span>
-			<!-- Health pill -->
-			<span class={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${healthMeta[health].bg}`}>
+			<!-- Health pill: dot only on mobile, label on sm+ -->
+			<span class={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium sm:px-2.5 ${healthMeta[health].bg}`}>
 				<span class={`h-1.5 w-1.5 rounded-full ${healthMeta[health].color}`}></span>
-				{healthMeta[health].label}
+				<span class="hidden sm:inline">{healthMeta[health].label}</span>
 			</span>
 		{/if}
 
-		<!-- Viewer count: chip with glow when viewers present -->
+		<!-- Viewer count -->
 		<button
 			onclick={onOpenViewers}
-			class="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition-all hover:border-[var(--brand)]/40 active:scale-95 {viewerCount > 0 ? 'shadow-glow' : ''}"
+			class="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs font-medium text-[var(--text)] transition-all hover:border-[var(--brand)]/40 active:scale-95 sm:px-3 {viewerCount > 0 ? 'shadow-glow' : ''}"
 			aria-label="Ver espectadores"
 		>
 			<Users class={`h-3.5 w-3.5 ${viewerCount > 0 ? 'text-[var(--brand)]' : 'text-[var(--text-subtle)]'}`} />
@@ -77,13 +79,13 @@
 			label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
 			onclick={onToggleNotifications}
 			variant="ghost"
-			size="sm"
+			size="md"
 		>
 			{#if notificationsMuted}
 				<BellOff class="h-4 w-4 text-[var(--text-subtle)]" />
 			{:else}
 				<Bell class="h-4 w-4" />
 			{/if}
-			</IconButton>
-		</div>
+		</IconButton>
+	</div>
 	</header>

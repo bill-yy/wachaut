@@ -152,7 +152,7 @@
 
 			<!-- Headline -->
 			<h1
-				class="mt-6 max-w-3xl text-5xl font-extrabold leading-[1.05] tracking-tight text-[var(--text)] sm:text-6xl lg:text-7xl"
+				class="mt-6 max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight text-[var(--text)] sm:text-6xl lg:text-7xl"
 				style="font-family: var(--font-display); animation-delay: 60ms"
 			>
 				Comparte tu pantalla
