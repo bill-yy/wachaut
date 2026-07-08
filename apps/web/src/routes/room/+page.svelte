@@ -29,6 +29,7 @@
   import type { Viewer, FloatingReaction, ConfettiParticle } from '$lib/types/room';
   import type { QualityPreset } from '$lib/components/QualitySettings.svelte';
   import { AlertTriangle, Eye, Settings as SettingsIcon, Monitor, ArrowLeft } from 'lucide-svelte';
+  import { devlog } from '$lib/utils/devlog';
 
   // ─── State ───────────────────────────────────────────────────────────
   let socket: any = $state(null);
@@ -239,16 +240,32 @@
   let viewersList = $state<Viewer[]>([]);
   let showViewersPanel = $state(false);
 
-  // Room info
-  let roomId = $state(crypto.randomUUID());
+  // Room info — try to reclaim a previous session (host refresh survival).
+  const HOST_SESSION_KEY = 'wachaut.host.session';
+  function loadHostSession(): { roomId: string; pin: string } | null {
+    try {
+      const raw = sessionStorage.getItem(HOST_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed.roomId && parsed.pin) return parsed;
+    } catch { /* ignore */ }
+    return null;
+  }
+  function saveHostSession(rid: string, p: string) {
+    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p })); } catch { /* ignore */ }
+  }
+  function clearHostSession() {
+    try { sessionStorage.removeItem(HOST_SESSION_KEY); } catch { /* ignore */ }
+  }
+
+  const savedSession = loadHostSession();
+  let roomId = $state(savedSession?.roomId || crypto.randomUUID());
   function generatePin(): string {
     const arr = new Uint32Array(1);
     crypto.getRandomValues(arr);
     return String(100000 + (arr[0] % 900000));
   }
-  const pin = generatePin();
-  // Embed the PIN in the URL hash so viewers don't need to type it.
-  // The hash (#) is never sent to the server, preserving the PIN's security.
+  const pin = savedSession?.pin || generatePin();
   const roomUrl = $derived(`${typeof window !== 'undefined' ? window.location.origin : ''}/room/${roomId}#${pin}`);
 
   // Attach stream to video element when both are available
@@ -355,7 +372,7 @@
           sfu: sfuClient ? 'Conectado' : 'Desconectado',
           quality: presetLabel(qualityPreset)
         };
-        addSystemMessage(`Estadísticas: Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, SFU=${stats.sfu}, Calidad=${stats.quality}`);
+        addSystemMessage(`Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, Calidad=${stats.quality}`);
         return true;
       }
       case '/clear': {
@@ -439,15 +456,16 @@
           if (!sfuClient) {
             const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
             sfuClient = new SfuClient(sfuUrl);
-            sfuClient.on('error', (msg: string) => console.error('[sfu]', msg));
-            sfuClient.on('peer-joined', (d: any) => console.log('[sfu] peer-joined:', d));
-            sfuClient.on('peer-left', (d: any) => console.log('[sfu] peer-left:', d));
+            sfuClient.on('error', (msg: string) => devlog('[sfu]', msg));
+            sfuClient.on('peer-joined', (d: any) => devlog('[sfu] peer-joined:', d));
+            sfuClient.on('peer-left', (d: any) => devlog('[sfu] peer-left:', d));
             sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
-              .then(() => console.log('[sfu] joined room'))
-              .catch((err: unknown) => console.error('[sfu] join failed:', err));
+              .then(() => devlog('[sfu] joined room'))
+              .catch((err: unknown) => devlog('[sfu] join failed:', err));
           }
         }
         loading = false; // Room is ready — no artificial delay
+        saveHostSession(roomId, pin);
       });
     });
 
@@ -688,6 +706,7 @@
   // ─── Navigation ─────────────────────────────────────────────────────
   function leaveRoom() {
     stopSharing();
+    clearHostSession();
     if (socket) socket.disconnect();
     goto('/');
   }
