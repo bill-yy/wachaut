@@ -75,14 +75,14 @@
 	}: Props = $props();
 </script>
 
-<aside class="flex h-full w-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--surface)] lg:w-80">
+<aside class="flex h-full w-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--surface)] md:w-80">
 	<!-- ── Room info: PIN protagonista + URL compacta ── -->
 	<div class="shrink-0 space-y-2.5 border-b border-[var(--border)] p-4">
 		<!-- PIN: prominent card with brand glow (display only) -->
 		<div class="relative overflow-hidden rounded-xl border border-[var(--brand)]/20 bg-[var(--surface-2)] p-3.5">
 			<div class="absolute -right-8 -top-8 h-20 w-20 rounded-full opacity-20 blur-2xl gradient-brand"></div>
 			<span class="relative text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">PIN de acceso</span>
-			<p class="relative font-mono text-3xl font-bold tracking-[0.25em] text-[var(--brand)]">{pin}</p>
+			<p class="relative font-mono text-2xl font-bold tracking-[0.15em] text-[var(--brand)] sm:text-3xl sm:tracking-[0.25em]">{pin}</p>
 		</div>
 
 		<!-- Single copy invitation button (URL + PIN embedded) -->

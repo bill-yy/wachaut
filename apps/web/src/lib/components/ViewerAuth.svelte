@@ -38,7 +38,7 @@
 </script>
 
 <div class="w-full max-w-sm">
-	<div class="glass relative overflow-hidden rounded-2xl border border-[var(--border)] p-8 shadow-2xl">
+	<div class="glass relative overflow-hidden rounded-2xl border border-[var(--border)] p-6 shadow-2xl sm:p-8">
 		<!-- Ambient glow -->
 		<div class="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl gradient-brand"></div>
 
