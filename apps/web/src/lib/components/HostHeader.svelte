@@ -33,7 +33,7 @@
 
 	const healthMeta: Record<Health, { color: string; bg: string; label: string }> = {
 		good: { color: 'bg-[var(--success)]', bg: 'bg-[var(--success)]/10 text-[var(--success)] border-[var(--success)]/25', label: 'Estable' },
-		degraded: { color: 'bg-[var(--warning)]', bg: 'bg-[var(--warning)]/10 text-[var(--warning)] border-[var(--warning)]/25', label: 'Estableciendo' },
+		degraded: { color: 'bg-[var(--warning)]', bg: 'bg-[var(--warning)]/10 text-[var(--warning)] border-[var(--warning)]/25', label: 'Conexión débil' },
 		poor: { color: 'bg-[var(--danger)]', bg: 'bg-[var(--danger)]/10 text-[var(--danger)] border-[var(--danger)]/25', label: 'Inestable' },
 	};
 </script>

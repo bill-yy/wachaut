@@ -185,7 +185,7 @@
 		username = cleanedUsername;
 
 		if (cleanedUsername.length < 2) {
-			errorMessage = 'Ingresa un username de al menos 2 caracteres';
+			errorMessage = 'Ingresa un nombre de al menos 2 caracteres';
 			status = 'error';
 			return;
 		}
@@ -452,7 +452,7 @@
 			await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
 			await sfuClient.consume();
 		} catch {
-			errorMessage = 'No se pudo conectar al SFU. La calidad puede ser reducida.';
+			errorMessage = 'No se pudo conectar la transmisión. La calidad puede verse afectada.';
 			if (errorClearTimer) clearTimeout(errorClearTimer);
 			errorClearTimer = setTimeout(() => { errorMessage = ''; }, 8000);
 		}

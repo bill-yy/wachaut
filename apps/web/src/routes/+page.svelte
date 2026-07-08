@@ -25,12 +25,26 @@
 	let isCreating = $state(false);
 	let showOnboarding = $state(false);
 	let onboardingStep = $state(0);
+	let serviceOnline = $state(true);
+
+	async function checkServiceStatus() {
+		try {
+			const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
+			const httpUrl = wsUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
+			const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(3000) });
+			serviceOnline = res.ok;
+		} catch {
+			serviceOnline = false;
+		}
+	}
 
 	onMount(() => {
+		checkServiceStatus();
+		const healthInterval = setInterval(checkServiceStatus, 60000);
 		if (!localStorage.getItem('wachaut-onboarded')) {
 			// Slight delay so the hero entrance animation finishes first.
 			const t = setTimeout(() => (showOnboarding = true), 600);
-			return () => clearTimeout(t);
+			return () => { clearTimeout(t); clearInterval(healthInterval); };
 		}
 	});
 
@@ -134,7 +148,11 @@
 	<!-- Nav -->
 	<nav class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
 		<Brand size="md" />
-		<Pill tone="success" pulse><span class="hidden sm:inline">Servicio activo</span><span class="sm:hidden">Activo</span></Pill>
+		{#if serviceOnline}
+			<Pill tone="success" pulse><span class="hidden sm:inline">Servicio activo</span><span class="sm:hidden">Activo</span></Pill>
+		{:else}
+			<Pill tone="danger"><span class="hidden sm:inline">Servicio no disponible</span><span class="sm:hidden">Caído</span></Pill>
+		{/if}
 	</nav>
 
 	<!-- Hero -->
@@ -246,7 +264,10 @@
 	<footer class="border-t border-[var(--border)] px-4 py-8 text-center">
 		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 sm:flex-row sm:justify-between">
 			<Brand size="sm" />
-			<p class="text-xs text-[var(--text-subtle)]">Comparte tu pantalla con amigos · {new Date().getFullYear()}</p>
+			<div class="flex items-center gap-4">
+				<p class="text-xs text-[var(--text-subtle)]">Comparte tu pantalla con amigos · {new Date().getFullYear()}</p>
+				<a href="/privacidad" class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">Privacidad</a>
+			</div>
 		</div>
 	</footer>
 </div>
