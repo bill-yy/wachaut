@@ -123,7 +123,7 @@
 			<!-- Mute -->
 			<button
 				onclick={onToggleMute}
-				class="flex h-10 w-10 items-center justify-center rounded-xl text-white transition-all hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl text-white transition-all hover:bg-white/15 active:scale-95"
 				title={muted ? 'Activar sonido' : 'Silenciar'}
 				aria-label={muted ? 'Activar sonido' : 'Silenciar'}
 			>
@@ -166,7 +166,7 @@
 			<!-- Picture-in-Picture -->
 			<button
 				onclick={togglePip}
-				class="flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 sm:h-11 sm:w-11 {isPip ? 'bg-[var(--brand)]/20 text-[var(--brand)]' : 'text-white/70 hover:bg-white/15 hover:text-white'}"
+				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all active:scale-95 {isPip ? 'bg-[var(--brand)]/20 text-[var(--brand)]' : 'text-white/70 hover:bg-white/15 hover:text-white'}"
 				title={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
 				aria-label={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
 			>
@@ -190,7 +190,7 @@
 			<!-- Shortcuts help -->
 			<button
 				onclick={onShowShortcuts}
-				class="flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95"
 				title="Atajos de teclado"
 				aria-label="Atajos de teclado"
 			>
