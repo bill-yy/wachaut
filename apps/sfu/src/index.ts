@@ -538,6 +538,25 @@ io.on('connection', (socket) => {
     callback?.({ ok: true });
   });
 
+  // ── Set Spatial Layer (host-driven auto-adapt) ─────────────────────
+  // When the host's connection degrades, they emit this to drop the top
+  // spatial layer. Viewers then receive mid-quality (layer 1) instead of
+  // freezing. When the connection recovers, layer 2 (top) is restored.
+  socket.on('host:set-spatial-layer', ({ spatialLayer }: { spatialLayer: number }) => {
+    const peer = socketToPeer.get(socket.id);
+    if (!peer) return;
+    for (const producer of peer.producers) {
+      if (producer.kind === 'video') {
+        try {
+          (producer as any).setMaxSpatialLayer(spatialLayer);
+          console.log(`[sfu] Producer ${producer.id} spatial layer set to ${spatialLayer} by host`);
+        } catch (err) {
+          console.error(`[sfu] Failed to set spatial layer:`, err);
+        }
+      }
+    }
+  });
+
   // ── Consumer Resume ────────────────────────────────────────────────
   socket.on('resume-consumer', async ({ consumerId }, callback) => {
     const peer = socketToPeer.get(socket.id);

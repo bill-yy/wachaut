@@ -77,10 +77,12 @@
 	let autoConnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Connection Stats ---
-	let connectionStats = $state({ resolution: '', fps: '', bitrate: '' });
+	let connectionStats = $state({ resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 });
 	let statsInterval: ReturnType<typeof setInterval> | null = null;
 	let lastBytesReceived = 0;
 	let lastStatsTime = 0;
+	let lastPacketsLost = 0;
+	let lastPacketsReceived = 0;
 
 	// --- Reactions ---
 	let showEmotePicker = $state(false);
@@ -97,11 +99,15 @@
 	}
 
 	// --- Derived ---
+	// Quality is derived from real packet loss and jitter, not resolution.
+	// A 1080p stream at 20% loss is worse than a 720p stream at 0% loss.
 	let connectionQuality = $derived.by<'buena' | 'regular' | 'desconocida'>(() => {
-		const res = connectionStats.resolution || '';
-		if (res.includes('1920')) return 'buena';
-		if (res.includes('1280')) return 'regular';
-		return 'desconocida';
+		const loss = connectionStats.lossRate;
+		const jitter = connectionStats.jitter;
+		if (loss === 0 && jitter === 0 && !connectionStats.resolution) return 'desconocida';
+		if (loss > 0.05 || jitter > 150) return 'desconocida';
+		if (loss > 0.02 || jitter > 80) return 'regular';
+		return 'buena';
 	});
 
 	// --- Chat helpers ---
@@ -317,7 +323,7 @@
 		assignedUsername = '';
 		chatMessages = [];
 		errorMessage = '';
-		connectionStats = { resolution: '', fps: '', bitrate: '' };
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
 	}
 
 	function cleanupSocket() {
@@ -463,18 +469,21 @@
 		try {
 			const stats = await sfuClient.getStats();
 			if (!stats) return;
-			// Build the new values in locals, then reassign once to avoid
-			// triggering 3 separate reactive notifications per poll tick.
 			let resolution = connectionStats.resolution;
 			let fps = connectionStats.fps;
 			let bitrate = connectionStats.bitrate;
+			let lossRate = 0;
+			let jitter = 0;
 
 			for (const report of stats as any[]) {
 				if (report.type === 'inbound-rtp' && report.kind === 'video') {
 					resolution = `${report.frameWidth || '?'}×${report.frameHeight || '?'}`;
 					fps = `${report.framesPerSecond || '?'}`;
+					jitter = report.jitter ? Math.round(report.jitter * 1000) : 0; // ms
 					const now = Date.now();
 					const bytesReceived = report.bytesReceived || 0;
+					const packetsLost = report.packetsLost || 0;
+					const packetsReceived = report.packetsReceived || 0;
 					if (lastStatsTime > 0) {
 						const elapsed = (now - lastStatsTime) / 1000;
 						const deltaBytes = bytesReceived - lastBytesReceived;
@@ -482,16 +491,21 @@
 						if (bps >= 1000000) bitrate = `${(bps / 1000000).toFixed(1)} Mbps`;
 						else if (bps >= 1000) bitrate = `${(bps / 1000).toFixed(0)} Kbps`;
 						else bitrate = `${Math.round(bps)} bps`;
+						// Delta loss rate (since last poll, not cumulative)
+						const deltaLost = Math.max(0, packetsLost - lastPacketsLost);
+						const deltaRecv = Math.max(0, packetsReceived - lastPacketsReceived);
+						lossRate = deltaRecv > 0 ? deltaLost / (deltaLost + deltaRecv) : 0;
 					}
 					lastBytesReceived = bytesReceived;
 					lastStatsTime = now;
-					break; // only the first video inbound-rtp report matters
+					lastPacketsLost = packetsLost;
+					lastPacketsReceived = packetsReceived;
+					break;
 				}
 			}
 
-			// Only trigger reactivity if something actually changed.
-			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate) {
-				connectionStats = { resolution, fps, bitrate };
+			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate || lossRate !== connectionStats.lossRate || jitter !== connectionStats.jitter) {
+				connectionStats = { resolution, fps, bitrate, lossRate, jitter };
 			}
 		} catch {}
 	}
@@ -500,7 +514,9 @@
 		stopStatsPolling();
 		lastBytesReceived = 0;
 		lastStatsTime = 0;
-		connectionStats = { resolution: '', fps: '', bitrate: '' };
+		lastPacketsLost = 0;
+		lastPacketsReceived = 0;
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
 		// Poll every 5s (was 3s) — resolution/fps rarely change, reduces getStats overhead.
 		statsInterval = setInterval(updateStats, 5000);
 	}
