@@ -50,18 +50,20 @@
 
 	<div class="flex items-center gap-1 sm:gap-1.5">
 		{#if sharing}
-			<!-- LIVE badge: dot + label (icon-only on mobile) -->
-			<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/10 px-2 py-1 text-xs font-bold text-[var(--danger)] animate-fade-in sm:px-2.5">
+			<!-- LIVE badge: dot + label (icon-only on mobile, sr-only for a11y) -->
+			<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/10 px-2 py-1 text-xs font-bold text-[var(--danger)] animate-fade-in sm:px-2.5" role="status">
 				<span class="relative flex h-1.5 w-1.5">
 					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--danger)] opacity-75"></span>
 					<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--danger)]"></span>
 				</span>
 				<span class="hidden sm:inline">EN VIVO</span>
+				<span class="sr-only">En vivo</span>
 			</span>
 			<!-- Health pill: dot only on mobile, label on sm+ -->
-			<span class={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium sm:px-2.5 ${healthMeta[health].bg}`}>
+			<span class={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium sm:px-2.5 ${healthMeta[health].bg}`} role="status">
 				<span class={`h-1.5 w-1.5 rounded-full ${healthMeta[health].color}`}></span>
 				<span class="hidden sm:inline">{healthMeta[health].label}</span>
+				<span class="sr-only">{healthMeta[health].label}</span>
 			</span>
 		{/if}
 

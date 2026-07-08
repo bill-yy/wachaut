@@ -142,7 +142,7 @@
 			{#if recording}
 				<button
 					onclick={onStopRecording}
-					class="flex h-10 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-all hover:bg-[var(--danger)] active:scale-95 sm:h-11"
+					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-all hover:bg-[var(--danger)] active:scale-95"
 					title="Detener grabación"
 					aria-label="Detener grabación"
 				>
@@ -164,7 +164,7 @@
 
 			<button
 				onclick={onStopSharing}
-				class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-all hover:bg-[var(--danger)] active:scale-95 sm:h-11 sm:w-11"
+				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-all hover:bg-[var(--danger)] active:scale-95"
 				title="Detener compartición"
 				aria-label="Detener compartición"
 			>
