@@ -560,6 +560,8 @@
           width: { ideal: captureWidth },
           height: { ideal: captureHeight },
           frameRate: { ideal: captureFps },
+          // @ts-expect-error — cursor is valid for getDisplayMedia but not in TS types
+          cursor: 'always',
         },
         audio: includeAudio,
       });

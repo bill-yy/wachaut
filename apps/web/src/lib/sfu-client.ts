@@ -25,7 +25,7 @@ export class SfuClient {
   #rtpCapabilities: any = null;
   #pendingConsumers: Array<any> = [];
   #stream: MediaStream | null = null;
-  #iceServers: RTCIceServer[] = [];
+  #iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
   constructor(url: string) {
     this.#url = url;
@@ -103,6 +103,10 @@ export class SfuClient {
             await device.load({
               routerRtpCapabilities: response.rtpCapabilities,
             });
+
+            // Send our RTP capabilities to the SFU for proper codec negotiation.
+            const peerCaps = device.rtpCapabilities;
+            this.#socket!.emit('rtp-capabilities', { rtpCapabilities: peerCaps });
 
             devlog('[sfu] device loaded, existing producers:', response.existingProducers?.length || 0);
             this.#emit('connected');
@@ -203,32 +207,40 @@ export class SfuClient {
 
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
-      // Try VP9 SVC (Scalable Video Coding) for adaptive layer selection.
-      // If the codec/browser doesn't support it, fall back to a single encode.
+      // Try SVC (Scalable Video Coding) for adaptive layer selection.
+      // Single encoding entry with scalabilityMode produces multiple layers
+      // internally (3 spatial + 3 temporal for S3T3_KEY). The SFU selects
+      // which layer each viewer receives via setPreferredLayers.
       const capabilities = device.rtpCapabilities;
-      const canVp9Svc = capabilities?.codecs?.some(
-        (c: any) => c.mimeType.toLowerCase() === 'video/vp9'
+      const canSvc = capabilities?.codecs?.some(
+        (c: any) => ['video/vp9', 'video/av1'].includes(c.mimeType.toLowerCase())
       );
 
-      if (canVp9Svc) {
+      if (canSvc) {
         try {
+          // Prefer AV1 if available (better screen-share quality), else VP9
+          const svcCodec = capabilities.codecs.find((c: any) => c.mimeType.toLowerCase() === 'video/av1')
+            ? 'video/AV1'
+            : undefined; // let mediasoup pick VP9 by default
+
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },
+            ...(svcCodec ? { codec: svcCodec } : {}),
             codecOptions: {
               videoGoogleStartBitrate: Math.max(startBitrate, 100),
             },
-            // VP9 SVC: 3 spatial layers, allows the SFU to pick a lower-res
-            // layer per viewer based on their available bandwidth.
+            // Single SVC encoding — 3 spatial + 3 temporal layers internally
             encodings: [
-              { maxBitrate: layerBitrates[0], scaleResolutionDownBy: 4, scalabilityMode: 'S3T3_KEY' },
-              { maxBitrate: layerBitrates[1], scaleResolutionDownBy: 2, scalabilityMode: 'S3T3_KEY' },
-              { maxBitrate: layerBitrates[2], scaleResolutionDownBy: 1, scalabilityMode: 'S3T3_KEY' },
+              {
+                maxBitrate: layerBitrates[2],
+                scalabilityMode: 'S3T3_KEY',
+              },
             ],
           });
-          devlog('[sfu] Video producer created with VP9 SVC:', this.#producer.id);
+          devlog('[sfu] Video producer created with SVC:', this.#producer.id, svcCodec || 'VP9');
         } catch (svcErr) {
-          devwarn('[sfu] VP9 SVC failed, falling back to single encode:', svcErr);
+          devwarn('[sfu] SVC failed, falling back to single encode:', svcErr);
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },

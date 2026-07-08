@@ -59,6 +59,7 @@ interface Peer {
   recvTransport?: mediasoup.types.WebRtcTransport;
   producers: mediasoup.types.Producer[];
   consumers: Map<string, mediasoup.types.Consumer>;
+  rtpCapabilities?: any;
 }
 
 interface Room {
@@ -87,7 +88,37 @@ function totalPeerCount(): number {
 }
 
 // ─── Mediasoup Setup ───────────────────────────────────────────────────
+// rtcpFeedback: transport-cc only (modern), no goog-remb (deprecated, causes double BWE)
+const videoRtcpFeedback = [
+  { type: 'nack' },
+  { type: 'nack', parameter: 'pli' },
+  { type: 'ccm', parameter: 'fir' },
+  { type: 'transport-cc' },
+];
+
 const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
+  // AV1 — best quality/bitrate for screen sharing on modern Chrome
+  {
+    kind: 'video',
+    mimeType: 'video/AV1',
+    clockRate: 90000,
+    parameters: {
+      'x-google-start-bitrate': 1000,
+      'x-google-max-bitrate': 8000,
+    },
+    rtcpFeedback: videoRtcpFeedback,
+  },
+  {
+    kind: 'video',
+    mimeType: 'video/VP9',
+    clockRate: 90000,
+    parameters: {
+      'profile-id': 0, // profile 0 (4:2:0 8-bit) — what Chrome's SVC encoder produces
+      'x-google-start-bitrate': 1000,
+      'x-google-max-bitrate': 5000,
+    },
+    rtcpFeedback: videoRtcpFeedback,
+  },
   {
     kind: 'video',
     mimeType: 'video/VP8',
@@ -96,30 +127,7 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
       'x-google-start-bitrate': 1000,
       'x-google-max-bitrate': 5000,
     },
-    rtcpFeedback: [
-      { type: 'nack' },
-      { type: 'nack', parameter: 'pli' },
-      { type: 'ccm', parameter: 'fir' },
-      { type: 'goog-remb' },
-      { type: 'transport-cc' },
-    ],
-  },
-  {
-    kind: 'video',
-    mimeType: 'video/VP9',
-    clockRate: 90000,
-    parameters: {
-      'profile-id': 2,
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 5000,
-    },
-    rtcpFeedback: [
-      { type: 'nack' },
-      { type: 'nack', parameter: 'pli' },
-      { type: 'ccm', parameter: 'fir' },
-      { type: 'goog-remb' },
-      { type: 'transport-cc' },
-    ],
+    rtcpFeedback: videoRtcpFeedback,
   },
   {
     kind: 'video',
@@ -132,13 +140,7 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
       'x-google-start-bitrate': 1000,
       'x-google-max-bitrate': 5000,
     },
-    rtcpFeedback: [
-      { type: 'nack' },
-      { type: 'nack', parameter: 'pli' },
-      { type: 'ccm', parameter: 'fir' },
-      { type: 'goog-remb' },
-      { type: 'transport-cc' },
-    ],
+    rtcpFeedback: videoRtcpFeedback,
   },
   {
     kind: 'audio',
@@ -372,18 +374,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── RTP Capabilities (viewer sends its caps for proper codec negotiation) ──
+  socket.on('rtp-capabilities', ({ rtpCapabilities }: { rtpCapabilities: any }) => {
+    const peer = socketToPeer.get(socket.id);
+    if (peer && rtpCapabilities) {
+      peer.rtpCapabilities = rtpCapabilities;
+      console.log(`[sfu] RTP capabilities stored for ${peer.displayName}`);
+    }
+  });
+
   // ── Create WebRTC Transport ────────────────────────────────────────
   socket.on('create-transport', async ({ direction }, callback) => {
     try {
       const room = getRoom(socket);
       if (!room) { callback?.({ error: 'Not in a room' }); return; }
 
+      // Higher initial bitrate for recv (viewers need quality fast); lower for send (host uplink ramps)
+      const initialBitrate = direction === 'cons' ? 3_000_000 : 1_000_000;
+
       const transport = await room.router.createWebRtcTransport({
         listenInfos: WEBRTC_LISTENIPS,
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
-        initialAvailableOutgoingBitrate: 1_000_000,
+        initialAvailableOutgoingBitrate: initialBitrate,
       });
 
       // Store transport on peer
@@ -433,7 +447,7 @@ io.on('connection', (socket) => {
               console.log(`[sfu] Auto-consume for ${peer.displayName}: producer ${producer.id} (${producer.kind}) from ${otherPeer.displayName}`);
               const canConsume = room.router.canConsume({
                 producerId: producer.id,
-                rtpCapabilities: room.router.rtpCapabilities,
+                rtpCapabilities: peer.rtpCapabilities || room.router.rtpCapabilities,
               });
               if (canConsume) {
                 await createConsumer(room, producer, peer);
@@ -496,7 +510,7 @@ io.on('connection', (socket) => {
         if (viewerId !== socket.id && viewer.recvTransport) {
           const canConsume = room.router.canConsume({
             producerId: producer.id,
-            rtpCapabilities: room.router.rtpCapabilities,
+            rtpCapabilities: viewer.rtpCapabilities || room.router.rtpCapabilities,
           });
           if (canConsume) {
             console.log(`[sfu] Auto-consuming ${kind} for viewer ${viewer.displayName}`);
@@ -620,14 +634,17 @@ async function createConsumer(
   viewer: Peer
 ): Promise<void> {
   if (!viewer.recvTransport) return;
-  if (!room.router.canConsume({ producerId: producer.id, rtpCapabilities: room.router.rtpCapabilities })) {
+  // Use the viewer's own RTP capabilities (proper codec negotiation), with
+  // fallback to router caps if the viewer hasn't sent them yet.
+  const peerCaps = viewer.rtpCapabilities || room.router.rtpCapabilities;
+  if (!room.router.canConsume({ producerId: producer.id, rtpCapabilities: peerCaps })) {
     console.log(`[sfu] cannot consume producer ${producer.id} for ${viewer.displayName}`);
     return;
   }
 
   const consumer = await viewer.recvTransport.consume({
     producerId: producer.id,
-    rtpCapabilities: room.router.rtpCapabilities,
+    rtpCapabilities: peerCaps,
     paused: true,
   });
 
