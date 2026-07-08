@@ -560,6 +560,7 @@
           width: { ideal: captureWidth },
           height: { ideal: captureHeight },
           frameRate: { ideal: captureFps },
+          cursor: 'always',
         },
         audio: includeAudio,
       });
