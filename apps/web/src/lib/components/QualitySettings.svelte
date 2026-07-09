@@ -32,7 +32,7 @@
 		contentHint = $bindable('detail'),
 		customRes = $bindable(1080),
 		customFps = $bindable(30),
-		customBitrate = $bindable(2_500_000),
+		customBitrate = $bindable(4_000_000),
 	}: Props = $props();
 
 	// Resolution options for the custom slider.
@@ -224,8 +224,8 @@
 					id="q-bitrate"
 					type="range"
 					min="500000"
-					max="5000000"
-					step="250000"
+					max="10000000"
+					step="500000"
 					bind:value={customBitrate}
 					class="q-slider w-full"
 					aria-label="Bitrate"
