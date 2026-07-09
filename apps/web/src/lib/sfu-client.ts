@@ -83,9 +83,7 @@ export class SfuClient {
             // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
             if (Array.isArray(response.iceServers) && response.iceServers.length > 0) {
               this.#iceServers = [...this.#iceServers, ...response.iceServers];
-              console.log('[sfu] TURN credentials received via join-room:', response.iceServers.length, 'server(s)');
-            } else {
-              console.warn('[sfu] No TURN credentials in join-room response — relay will not work');
+              devlog('[sfu] TURN credentials received via join-room:', response.iceServers.length, 'server(s)');
             }
 
             const device = await this.#ensureDevice();
@@ -125,15 +123,8 @@ export class SfuClient {
   }
 
   async produce(screenStream: MediaStream, options?: { maxBitrate?: number }): Promise<void> {
-    // Scale the SVC layer bitrates relative to the preset's max bitrate.
-    // Default (no options) keeps the original 100k / 500k / 2.5M split.
     const maxBitrate = options?.maxBitrate ?? 2_500_000;
-    const layerBitrates = [
-      Math.round(maxBitrate * 0.04),  // base layer (~4%)
-      Math.round(maxBitrate * 0.20),  // mid layer (~20%)
-      maxBitrate,                      // top layer (100%)
-    ];
-    const startBitrate = Math.round(maxBitrate * 0.25); // 25% of max as sane start
+    const startBitrate = Math.round(maxBitrate * 0.25);
     const device = await this.#ensureDevice();
     if (!device.loaded && this.#rtpCapabilities) {
       await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
@@ -141,13 +132,6 @@ export class SfuClient {
     if (!device.loaded) throw new Error('Device not loaded');
 
     const transportParams = await this.#createTransport('prod');
-    console.log('[sfu] create-transport response:', {
-      hasIceCandidates: !!transportParams.iceCandidates,
-      candidateCount: transportParams.iceCandidates?.length || 0,
-      candidatePort: transportParams.iceCandidates?.[0]?.port,
-      hasIceServers: !!transportParams.iceServers,
-      iceServerCount: transportParams.iceServers?.length || 0,
-    });
     this.#sendTransport = device.createSendTransport({
       id: transportParams.id,
       iceParameters: transportParams.iceParameters,
@@ -157,27 +141,8 @@ export class SfuClient {
       iceTransportPolicy: 'all',
     });
 
-    // Log ICE state changes for debugging (visible in production console).
-    try {
-      const pc = (this.#sendTransport as any)._handler?._pc;
-      if (pc) {
-        console.log('[sfu] send PC initial ICE state:', pc.iceConnectionState);
-        pc.addEventListener('iceconnectionstatechange', () => {
-          console.log('[sfu] send ICE state:', pc.iceConnectionState);
-        });
-        pc.addEventListener('icegatheringstatechange', () => {
-          console.log('[sfu] send ICE gathering:', pc.iceGatheringState);
-        });
-        pc.addEventListener('connectionstatechange', () => {
-          console.log('[sfu] send PC state:', pc.connectionState);
-        });
-      }
-    } catch (e) {
-      console.error('[sfu] Could not attach ICE listeners:', e);
-    }
-
     this.#sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
-      console.log('[sfu] send transport connect event fired');
+      devlog('[sfu] send transport connect event');
       try {
         this.#socket!.emit('connect-transport', {
           transportId: this.#sendTransport!.id,
@@ -197,7 +162,7 @@ export class SfuClient {
     });
 
     this.#sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
-      console.log('[sfu] produce event fired for kind:', kind);
+      devlog('[sfu] produce event for kind:', kind);
       const response = await new Promise<any>((resolve) => {
         this.#socket!.emit(
           'produce',
@@ -218,23 +183,16 @@ export class SfuClient {
       callback({ id: response.id });
     });
 
-    // Monitor ICE on send transport
     this.#monitorIce(this.#sendTransport, 'send');
 
+    // ── Video producer (single encode, no SVC) ──────────────────────────
+    // SVC was removed: S3T3_KEY scalabilityMode caused OperationError on
+    // Chrome versions whose VP9 encoder doesn't support it, and the failed
+    // produce() left the transport's AwaitQueue stuck, blocking all retries.
+    // A single high-quality encode is stable, reliable, and looks great for
+    // screen sharing. Quality is controlled via maxBitrate from the preset.
     const videoTrack = screenStream.getVideoTracks()[0];
-    console.log('[sfu] Video track:', videoTrack ? `${videoTrack.kind} ${videoTrack.readyState}` : 'none');
     if (videoTrack) {
-      // Try SVC (Scalable Video Coding) for adaptive layer selection.
-      const capabilities = device.rtpCapabilities;
-      console.log('[sfu] Available codecs:', capabilities?.codecs?.map((c: any) => c.mimeType));
-
-      // Produce video with a single encoding (no SVC).
-      // SVC (S3T3_KEY) was removed because it caused OperationError on Chrome
-      // versions whose VP9 encoder doesn't support that scalabilityMode.
-      // A single high-quality encode is more reliable and still looks great
-      // for screen sharing. Simulcast/quality adaptation happens at the
-      // preset level (maxBitrate scaling) rather than SVC layers.
-      console.log('[sfu] Calling sendTransport.produce() (single encode)...');
       this.#producer = await this.#sendTransport.produce({
         track: videoTrack,
         appData: { mediaTag: 'screen-video' },
@@ -243,7 +201,7 @@ export class SfuClient {
           videoGoogleMaxBitrate: maxBitrate,
         },
       });
-      console.log('[sfu] Video producer created:', this.#producer.id);
+      devlog('[sfu] Video producer created:', this.#producer.id);
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
