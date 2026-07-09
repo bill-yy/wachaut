@@ -91,13 +91,13 @@ function authMiddleware(req: FastifyRequest, reply: FastifyReply, done: () => vo
 // ── Plugin ───────────────────────────────────────────────────────────
 
 export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
-  app.addHook('preHandler', (req, reply, done) => {
-    // Skip auth for login endpoint.
-    if (req.url === '/api/admin/login') { done(); return; }
+  // Auth middleware — only applied to individual protected routes via preHandler,
+  // NOT as a global hook (that would block /health, /ready, /socket.io).
+  const requireAuth = (req: FastifyRequest, reply: FastifyReply, done: () => void) => {
     authMiddleware(req, reply, done);
-  });
+  };
 
-  // ── POST /login ──────────────────────────────────────────────────
+  // ── POST /login (no auth required) ───────────────────────────────
   app.post('/api/admin/login', async (req: FastifyRequest, reply: FastifyReply) => {
     const { username, password } = req.body as { username?: string; password?: string };
     const ip = req.ip;
@@ -131,7 +131,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /metrics ─────────────────────────────────────────────────
-  app.get('/api/admin/metrics', async () => {
+  app.get('/api/admin/metrics', { preHandler: requireAuth }, async () => {
     const roomCount = state.rooms.size;
     let totalViewers = 0;
     for (const room of state.rooms.values()) {
@@ -157,7 +157,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /rooms ───────────────────────────────────────────────────
-  app.get('/api/admin/rooms', async () => {
+  app.get('/api/admin/rooms', { preHandler: requireAuth }, async () => {
     const roomsData = [];
     for (const [id, room] of state.rooms) {
       const viewers = Array.from(room.viewers.values()).map((v: any) => ({
@@ -180,7 +180,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /security ────────────────────────────────────────────────
-  app.get('/api/admin/security', async () => {
+  app.get('/api/admin/security', { preHandler: requireAuth }, async () => {
     const ips = [];
     for (const [ip, count] of state.connectionCounts) {
       ips.push({ ip, connections: count, country: lookupCountry(ip) });
@@ -196,7 +196,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /stats ───────────────────────────────────────────────────
-  app.get('/api/admin/stats', async () => {
+  app.get('/api/admin/stats', { preHandler: requireAuth }, async () => {
     // Last 7 days of traffic.
     const traffic = db.prepare(
       `SELECT date, total_rooms, peak_viewers, total_viewers, countries
@@ -219,7 +219,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── POST /maintenance ────────────────────────────────────────────
-  app.post('/api/admin/maintenance', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/admin/maintenance', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { enabled } = req.body as { enabled?: boolean };
     if (typeof enabled !== 'boolean') {
       return reply.code(400).send({ error: 'enabled (boolean) required' });
@@ -231,12 +231,12 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /users ───────────────────────────────────────────────────
-  app.get('/api/admin/users', async () => {
+  app.get('/api/admin/users', { preHandler: requireAuth }, async () => {
     return { users: listUsers() };
   });
 
   // ── POST /users (superadmin only) ────────────────────────────────
-  app.post('/api/admin/users', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/admin/users', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = (req as any).adminUser as AdminToken;
     if (user.role !== 'superadmin') {
       return reply.code(403).send({ error: 'Only superadmins can create users' });
@@ -261,7 +261,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── DELETE /users/:id (superadmin only) ──────────────────────────
-  app.delete('/api/admin/users/:id', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/api/admin/users/:id', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = (req as any).adminUser as AdminToken;
     if (user.role !== 'superadmin') {
       return reply.code(403).send({ error: 'Only superadmins can revoke users' });
@@ -281,7 +281,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── POST /users/:id/password ─────────────────────────────────────
-  app.post('/api/admin/users/:id/password', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/admin/users/:id/password', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = (req as any).adminUser as AdminToken;
     const { id } = req.params as { id: string };
     const targetId = parseInt(id);
@@ -304,7 +304,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── POST /users/:id/activate (superadmin only) ───────────────────
-  app.post('/api/admin/users/:id/activate', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/admin/users/:id/activate', { preHandler: requireAuth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = (req as any).adminUser as AdminToken;
     if (user.role !== 'superadmin') {
       return reply.code(403).send({ error: 'Only superadmins can activate users' });
