@@ -238,11 +238,13 @@ export class SfuClient {
   }
 
   async consume(): Promise<MediaStream> {
+    console.log('[sfu] consume() called');
     const device = await this.#ensureDevice();
     if (!device.loaded && this.#rtpCapabilities) {
       await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
     }
     if (!device.loaded) throw new Error('Device not loaded');
+    console.log('[sfu] device loaded for consume, calling create-transport...');
 
     this.#stream = new MediaStream();
 
@@ -261,7 +263,9 @@ export class SfuClient {
     });
 
     // Create receive transport
+    console.log('[sfu] consume: creating recv transport...');
     const transportParams = await this.#createTransport('cons');
+    console.log('[sfu] consume: transport created, port:', transportParams.iceCandidates?.[0]?.port);
     this.#recvTransport = device.createRecvTransport({
       id: transportParams.id,
       iceParameters: transportParams.iceParameters,
@@ -293,6 +297,7 @@ export class SfuClient {
 
     // Monitor ICE on recv transport
     this.#monitorIce(this.#recvTransport, 'recv');
+    console.log('[sfu] consume: recv transport ready, waiting for consumers...');
 
     // Process any consumers that arrived before the transport was ready
     if (this.#pendingConsumers.length > 0) {
