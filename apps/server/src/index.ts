@@ -3,6 +3,10 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { Server } from 'socket.io';
 import crypto from 'node:crypto';
+import geoip from 'geoip-country';
+import { db } from './db.js';
+import { bootstrapAdmin } from './admin/auth.js';
+import { registerAdminRoutes, isMaintenanceMode, type ServerState } from './admin/routes.js';
 import {
   pinHash,
   pinEquals,
@@ -153,6 +157,8 @@ for (const [roomId, room] of rooms) {
   if (now.getTime() - room.createdAt.getTime() > twoHours) {
     // Notify occupants so they don't become silent orphans
     io.to(roomId).emit('room:closed');
+    // Record room close for admin stats.
+    try { db.prepare('INSERT INTO room_events (event_type, room_id, viewer_count) VALUES (?, ?, ?)').run('closed', roomId, room.viewers.size); } catch {}
     rooms.delete(roomId);
     hostToRoom.delete(room.hostId);
     for (const [viewerId] of room.viewers) {
@@ -290,6 +296,14 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.emit('room:created', { roomId });
     fastify.log.info(`Room created: ${roomId}`);
+
+    // Record room creation for admin stats.
+    const hostIp = realIp(socket);
+    try {
+      db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, 0)').run(
+        'created', roomId, hostIp, geoip.lookup(hostIp)?.country || null
+      );
+    } catch { /* non-critical */ }
   });
 
   socket.on('host:stop-sharing', ({ roomId }: { roomId: string }) => {
@@ -420,7 +434,15 @@ io.on('connection', (socket) => {
     
     socket.emit('room:joined', { roomId, username: reservedUsername });
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
-    
+
+    // Record viewer join for admin stats.
+    const viewerIp = realIp(socket);
+    try {
+      db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, ?)').run(
+        'viewer_joined', roomId, viewerIp, geoip.lookup(viewerIp)?.country || null, room.viewers.size
+      );
+    } catch { /* non-critical */ }
+
     // Send chat history to the joining viewer (last 100 messages)
     socket.emit('chat:history', { messages: room.chat.slice(-100) });
 
@@ -505,8 +527,8 @@ io.on('connection', (socket) => {
 
 // Health check endpoint
 fastify.get('/health', { logLevel: 'error' }, async () => {
-  return { 
-    status: 'ok', 
+  return {
+    status: 'ok',
     rooms: rooms.size,
     connections: io.engine.clientsCount
   };
@@ -515,6 +537,10 @@ fastify.get('/health', { logLevel: 'error' }, async () => {
 // Readiness probe: checks that Socket.IO is accepting connections.
 // Use this for Traefik/Docker load-balancer routing decisions.
 fastify.get('/ready', async (req, reply) => {
+  // Maintenance mode: return 503 so Traefik shows the maintenance page.
+  if (isMaintenanceMode()) {
+    return reply.code(503).send({ ready: false, maintenance: true });
+  }
   const sfuUrl = process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '';
   let sfuReachable = false;
   if (sfuUrl) {
@@ -531,9 +557,19 @@ fastify.get('/ready', async (req, reply) => {
   return reply.code(code).send({ ready: sfuReachable, sfu: sfuReachable ? 'reachable' : 'unreachable' });
 });
 
+// ── Admin API ────────────────────────────────────────────────────────
+// Register admin routes with access to live server state.
+const sfuHealthUrl = (process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '')
+  .replace(/^ws/, 'http').replace(/\?.*$/, '');
+const adminState: ServerState = { rooms, io, connectionCounts, sfuHealthUrl };
+registerAdminRoutes(fastify, adminState);
+
 // Start server
 const PORT = parseInt(process.env.PORT || '3001');
 const HOST = process.env.HOST || '0.0.0.0';
+
+// Bootstrap the first admin user if the DB is empty.
+bootstrapAdmin();
 
 try {
   await fastify.listen({ port: PORT, host: HOST });

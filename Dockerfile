@@ -42,14 +42,17 @@ ENV NODE_ENV=production
 ENTRYPOINT ["tini", "--"]
 CMD ["serve", "web/build", "-l", "3000", "-s"]
 
-# ── Server (Node API + Socket.IO) ───────────────────────────────────
+# ── Server (Node API + Socket.IO + Admin) ────────────────────────────
 FROM node:22-slim AS server
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends tini curl && \
+# python3 make g++ needed for better-sqlite3 native compilation.
+RUN apt-get update && apt-get install -y --no-install-recommends tini curl python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/apps/server/dist ./server/dist
 COPY --from=builder /app/apps/server/package.json ./server/package.json
 RUN cd server && npm install --omit=dev
+# Create data directory for SQLite (writable by appuser).
+RUN mkdir -p /app/server/data && chown 1001:1001 /app/server/data
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser
 USER appuser
@@ -57,6 +60,7 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HOST=0.0.0.0
+ENV WACHAUT_DB_PATH=/app/server/data/wachaut.db
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3001/health || exit 1
 ENTRYPOINT ["tini", "--"]
