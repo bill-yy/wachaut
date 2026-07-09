@@ -232,6 +232,7 @@ export class SfuClient {
       const canSvc = capabilities?.codecs?.some(
         (c: any) => ['video/vp9', 'video/av1'].includes(c.mimeType.toLowerCase())
       );
+      console.log('[sfu] canSvc:', canSvc, 'codecs:', capabilities?.codecs?.map((c: any) => c.mimeType));
 
       if (canSvc) {
         try {
@@ -240,6 +241,7 @@ export class SfuClient {
             ? 'video/AV1'
             : undefined; // let mediasoup pick VP9 by default
 
+          console.log('[sfu] Calling sendTransport.produce() with SVC...', svcCodec || 'VP9');
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },
@@ -257,19 +259,20 @@ export class SfuClient {
           });
           console.log('[sfu] Video producer created with SVC:', this.#producer.id, svcCodec || 'VP9');
         } catch (svcErr) {
-          devwarn('[sfu] SVC failed, falling back to single encode:', svcErr);
+          console.warn('[sfu] SVC failed, falling back to single encode:', svcErr);
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },
           });
-          devlog('[sfu] Video producer created (fallback):', this.#producer.id);
+          console.log('[sfu] Video producer created (fallback):', this.#producer.id);
         }
       } else {
+        console.log('[sfu] Calling sendTransport.produce() (no SVC)...');
         this.#producer = await this.#sendTransport.produce({
           track: videoTrack,
           appData: { mediaTag: 'screen-video' },
         });
-        devlog('[sfu] Video producer created (no VP9):', this.#producer.id);
+        console.log('[sfu] Video producer created (no VP9):', this.#producer.id);
       }
     }
 
