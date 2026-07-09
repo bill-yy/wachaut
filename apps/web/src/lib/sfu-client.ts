@@ -226,47 +226,24 @@ export class SfuClient {
     if (videoTrack) {
       // Try SVC (Scalable Video Coding) for adaptive layer selection.
       const capabilities = device.rtpCapabilities;
-      const hasVp9 = capabilities?.codecs?.some(
-        (c: any) => c.mimeType.toLowerCase() === 'video/vp9'
-      );
+      console.log('[sfu] Available codecs:', capabilities?.codecs?.map((c: any) => c.mimeType));
 
-      if (hasVp9) {
-        // VP9 SVC — the proven, stable codec for screen sharing.
-        // S3T3_KEY = 3 spatial + 3 temporal layers. The SFU selects which
-        // layer each viewer receives via setPreferredLayers.
-        try {
-          console.log('[sfu] Calling sendTransport.produce() with VP9 SVC...');
-          this.#producer = await this.#sendTransport.produce({
-            track: videoTrack,
-            appData: { mediaTag: 'screen-video' },
-            codec: 'video/VP9',
-            codecOptions: {
-              videoGoogleStartBitrate: Math.max(startBitrate, 100),
-            },
-            encodings: [
-              {
-                maxBitrate: layerBitrates[2],
-                scalabilityMode: 'S3T3_KEY',
-              },
-            ],
-          });
-          console.log('[sfu] Video producer created with VP9 SVC:', this.#producer.id);
-        } catch (svcErr) {
-          console.warn('[sfu] VP9 SVC failed, falling back to default:', svcErr);
-          this.#producer = await this.#sendTransport.produce({
-            track: videoTrack,
-            appData: { mediaTag: 'screen-video' },
-          });
-          console.log('[sfu] Video producer created (fallback):', this.#producer.id);
-        }
-      } else {
-        console.log('[sfu] Calling sendTransport.produce() (no VP9, single encode)...');
-        this.#producer = await this.#sendTransport.produce({
-          track: videoTrack,
-          appData: { mediaTag: 'screen-video' },
-        });
-        console.log('[sfu] Video producer created (no VP9):', this.#producer.id);
-      }
+      // Produce video with a single encoding (no SVC).
+      // SVC (S3T3_KEY) was removed because it caused OperationError on Chrome
+      // versions whose VP9 encoder doesn't support that scalabilityMode.
+      // A single high-quality encode is more reliable and still looks great
+      // for screen sharing. Simulcast/quality adaptation happens at the
+      // preset level (maxBitrate scaling) rather than SVC layers.
+      console.log('[sfu] Calling sendTransport.produce() (single encode)...');
+      this.#producer = await this.#sendTransport.produce({
+        track: videoTrack,
+        appData: { mediaTag: 'screen-video' },
+        codecOptions: {
+          videoGoogleStartBitrate: Math.max(startBitrate, 100),
+          videoGoogleMaxBitrate: maxBitrate,
+        },
+      });
+      console.log('[sfu] Video producer created:', this.#producer.id);
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
