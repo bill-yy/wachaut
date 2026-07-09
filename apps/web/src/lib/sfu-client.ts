@@ -185,23 +185,23 @@ export class SfuClient {
 
     this.#monitorIce(this.#sendTransport, 'send');
 
-    // ── Video producer (single encode, no SVC) ──────────────────────────
-    // SVC was removed: S3T3_KEY scalabilityMode caused OperationError on
-    // Chrome versions whose VP9 encoder doesn't support it, and the failed
-    // produce() left the transport's AwaitQueue stuck, blocking all retries.
-    // A single high-quality encode is stable, reliable, and looks great for
-    // screen sharing. Quality is controlled via maxBitrate from the preset.
+    // ── Video producer — VP9 single encode ──────────────────────────────
+    // VP9 compresses text and screen content 30-50% better than VP8 at the
+    // same bitrate. No scalabilityMode (S3T3_KEY caused OperationError on
+    // Chrome). A single VP9 encode is stable, efficient, and produces
+    // significantly sharper text for screen sharing.
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
       this.#producer = await this.#sendTransport.produce({
         track: videoTrack,
         appData: { mediaTag: 'screen-video' },
+        codec: 'video/VP9',
         codecOptions: {
           videoGoogleStartBitrate: Math.max(startBitrate, 100),
           videoGoogleMaxBitrate: maxBitrate,
         },
       });
-      devlog('[sfu] Video producer created:', this.#producer.id);
+      devlog('[sfu] Video producer created (VP9):', this.#producer.id);
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];

@@ -222,9 +222,9 @@
   let qualityPreset = $state('normal');
   let showSettings = $state(false);
   const presets = $state<Record<string, QualityPreset>>({
-    low: { label: 'Liviano', resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_000_000, desc: 'Ideal para conexiones lentas' },
-    normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 2_500_000, desc: 'Uso general' },
-    high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 5_000_000, desc: 'Gaming y diseño' }
+    low: { label: 'Liviano', resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_500_000, desc: 'Ideal para conexiones lentas' },
+    normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_000_000, desc: 'Uso general' },
+    high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 6_000_000, desc: 'Gaming y diseño' }
   });
 
   // Safe label lookup that handles the 'custom' preset (not in the presets map).
@@ -242,7 +242,7 @@
   // Custom quality sliders (used when qualityPreset === 'custom')
   let customRes = $state(1080);
   let customFps = $state(30);
-  let customBitrate = $state(2_500_000);
+  let customBitrate = $state(4_000_000);
   let autoAdaptNotification = $state('');
   let autoAdaptNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
   // Viewer list for kick
