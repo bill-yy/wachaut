@@ -42,24 +42,6 @@ export class SfuClient {
     return this.#device;
   }
 
-  /** Fetch TURN/STUN credentials from the SFU (for viewers behind symmetric NAT). */
-  async #fetchIceServers(): Promise<void> {
-    try {
-      // Convert ws(s):// URL to http(s):// for the REST endpoint.
-      const httpUrl = this.#url.replace(/^ws/, 'http').replace(/\?.*$/, '');
-      const res = await fetch(`${httpUrl}/turn-credentials`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.iceServers) && data.iceServers.length > 0) {
-          this.#iceServers = data.iceServers;
-          devlog('[sfu] TURN credentials fetched:', data.iceServers.length, 'server(s)');
-        }
-      }
-    } catch (err) {
-      devwarn('[sfu] Could not fetch TURN credentials (relay may not work behind strict NAT):', err);
-    }
-  }
-
   on(event: string, fn: Function) {
     if (!this.#listeners.has(event)) this.#listeners.set(event, []);
     this.#listeners.get(event)!.push(fn);
@@ -87,8 +69,6 @@ export class SfuClient {
 
       this.#socket.on('connect', () => {
         devlog('[sfu] socket connected');
-        // Fetch TURN credentials in the background (non-blocking).
-        this.#fetchIceServers();
         this.#socket!.emit(
           'join-room',
           { roomId, pin, displayName, role },
@@ -99,6 +79,13 @@ export class SfuClient {
             }
 
             this.#rtpCapabilities = response.rtpCapabilities;
+
+            // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
+            if (Array.isArray(response.iceServers) && response.iceServers.length > 0) {
+              this.#iceServers = [...this.#iceServers, ...response.iceServers];
+              devlog('[sfu] TURN credentials received via join-room:', response.iceServers.length, 'server(s)');
+            }
+
             const device = await this.#ensureDevice();
             await device.load({
               routerRtpCapabilities: response.rtpCapabilities,
