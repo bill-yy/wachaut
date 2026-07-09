@@ -83,7 +83,9 @@ export class SfuClient {
             // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
             if (Array.isArray(response.iceServers) && response.iceServers.length > 0) {
               this.#iceServers = [...this.#iceServers, ...response.iceServers];
-              devlog('[sfu] TURN credentials received via join-room:', response.iceServers.length, 'server(s)');
+              console.log('[sfu] TURN credentials received via join-room:', response.iceServers.length, 'server(s)');
+            } else {
+              console.warn('[sfu] No TURN credentials in join-room response — relay will not work');
             }
 
             const device = await this.#ensureDevice();
@@ -139,6 +141,13 @@ export class SfuClient {
     if (!device.loaded) throw new Error('Device not loaded');
 
     const transportParams = await this.#createTransport('prod');
+    console.log('[sfu] create-transport response:', {
+      hasIceCandidates: !!transportParams.iceCandidates,
+      candidateCount: transportParams.iceCandidates?.length || 0,
+      candidatePort: transportParams.iceCandidates?.[0]?.port,
+      hasIceServers: !!transportParams.iceServers,
+      iceServerCount: transportParams.iceServers?.length || 0,
+    });
     this.#sendTransport = device.createSendTransport({
       id: transportParams.id,
       iceParameters: transportParams.iceParameters,
@@ -148,8 +157,27 @@ export class SfuClient {
       iceTransportPolicy: 'all',
     });
 
+    // Log ICE state changes for debugging (visible in production console).
+    try {
+      const pc = (this.#sendTransport as any)._handler?._pc;
+      if (pc) {
+        console.log('[sfu] send PC initial ICE state:', pc.iceConnectionState);
+        pc.addEventListener('iceconnectionstatechange', () => {
+          console.log('[sfu] send ICE state:', pc.iceConnectionState);
+        });
+        pc.addEventListener('icegatheringstatechange', () => {
+          console.log('[sfu] send ICE gathering:', pc.iceGatheringState);
+        });
+        pc.addEventListener('connectionstatechange', () => {
+          console.log('[sfu] send PC state:', pc.connectionState);
+        });
+      }
+    } catch (e) {
+      console.error('[sfu] Could not attach ICE listeners:', e);
+    }
+
     this.#sendTransport.on('connect', async ({ dtlsParameters }: any, callback: any, errback: any) => {
-      devlog('[sfu] send transport connect event');
+      console.log('[sfu] send transport connect event fired');
       try {
         this.#socket!.emit('connect-transport', {
           transportId: this.#sendTransport!.id,
@@ -169,6 +197,7 @@ export class SfuClient {
     });
 
     this.#sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: any, errback: any) => {
+      console.log('[sfu] produce event fired for kind:', kind);
       const response = await new Promise<any>((resolve) => {
         this.#socket!.emit(
           'produce',
@@ -193,6 +222,7 @@ export class SfuClient {
     this.#monitorIce(this.#sendTransport, 'send');
 
     const videoTrack = screenStream.getVideoTracks()[0];
+    console.log('[sfu] Video track:', videoTrack ? `${videoTrack.kind} ${videoTrack.readyState}` : 'none');
     if (videoTrack) {
       // Try SVC (Scalable Video Coding) for adaptive layer selection.
       // Single encoding entry with scalabilityMode produces multiple layers
@@ -225,7 +255,7 @@ export class SfuClient {
               },
             ],
           });
-          devlog('[sfu] Video producer created with SVC:', this.#producer.id, svcCodec || 'VP9');
+          console.log('[sfu] Video producer created with SVC:', this.#producer.id, svcCodec || 'VP9');
         } catch (svcErr) {
           devwarn('[sfu] SVC failed, falling back to single encode:', svcErr);
           this.#producer = await this.#sendTransport.produce({
