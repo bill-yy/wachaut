@@ -225,31 +225,24 @@ export class SfuClient {
     console.log('[sfu] Video track:', videoTrack ? `${videoTrack.kind} ${videoTrack.readyState}` : 'none');
     if (videoTrack) {
       // Try SVC (Scalable Video Coding) for adaptive layer selection.
-      // Single encoding entry with scalabilityMode produces multiple layers
-      // internally (3 spatial + 3 temporal for S3T3_KEY). The SFU selects
-      // which layer each viewer receives via setPreferredLayers.
       const capabilities = device.rtpCapabilities;
-      const canSvc = capabilities?.codecs?.some(
-        (c: any) => ['video/vp9', 'video/av1'].includes(c.mimeType.toLowerCase())
+      const hasVp9 = capabilities?.codecs?.some(
+        (c: any) => c.mimeType.toLowerCase() === 'video/vp9'
       );
-      console.log('[sfu] canSvc:', canSvc, 'codecs:', capabilities?.codecs?.map((c: any) => c.mimeType));
 
-      if (canSvc) {
+      if (hasVp9) {
+        // VP9 SVC — the proven, stable codec for screen sharing.
+        // S3T3_KEY = 3 spatial + 3 temporal layers. The SFU selects which
+        // layer each viewer receives via setPreferredLayers.
         try {
-          // Prefer AV1 if available (better screen-share quality), else VP9
-          const svcCodec = capabilities.codecs.find((c: any) => c.mimeType.toLowerCase() === 'video/av1')
-            ? 'video/AV1'
-            : undefined; // let mediasoup pick VP9 by default
-
-          console.log('[sfu] Calling sendTransport.produce() with SVC...', svcCodec || 'VP9');
+          console.log('[sfu] Calling sendTransport.produce() with VP9 SVC...');
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },
-            ...(svcCodec ? { codec: svcCodec } : {}),
+            codec: 'video/VP9',
             codecOptions: {
               videoGoogleStartBitrate: Math.max(startBitrate, 100),
             },
-            // Single SVC encoding — 3 spatial + 3 temporal layers internally
             encodings: [
               {
                 maxBitrate: layerBitrates[2],
@@ -257,9 +250,9 @@ export class SfuClient {
               },
             ],
           });
-          console.log('[sfu] Video producer created with SVC:', this.#producer.id, svcCodec || 'VP9');
+          console.log('[sfu] Video producer created with VP9 SVC:', this.#producer.id);
         } catch (svcErr) {
-          console.warn('[sfu] SVC failed, falling back to single encode:', svcErr);
+          console.warn('[sfu] VP9 SVC failed, falling back to default:', svcErr);
           this.#producer = await this.#sendTransport.produce({
             track: videoTrack,
             appData: { mediaTag: 'screen-video' },
@@ -267,7 +260,7 @@ export class SfuClient {
           console.log('[sfu] Video producer created (fallback):', this.#producer.id);
         }
       } else {
-        console.log('[sfu] Calling sendTransport.produce() (no SVC)...');
+        console.log('[sfu] Calling sendTransport.produce() (no VP9, single encode)...');
         this.#producer = await this.#sendTransport.produce({
           track: videoTrack,
           appData: { mediaTag: 'screen-video' },
