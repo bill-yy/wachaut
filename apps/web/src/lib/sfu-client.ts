@@ -363,8 +363,22 @@ export class SfuClient {
     });
   }
 
-  stopProducing() {
-    if (this.#producer) {
+  /**
+   * Dynamically adjust the video producer's max bitrate without rebuilding
+   * the transport. Used by the health monitor to reduce quality when the
+   * connection degrades and restore it when it recovers.
+   */
+  setMaxBitrate(bitrate: number): void {
+    if (!this.#producer) return;
+    try {
+      this.#producer.setMaxBitrate(bitrate);
+      devlog('[sfu] Producer bitrate set to', bitrate);
+    } catch (err) {
+      console.error('[sfu] Failed to set bitrate:', err);
+    }
+  }
+
+  stopProducing() {    if (this.#producer) {
       this.#producer.close();
       this.#socket?.emit('close-producer', { producerId: this.#producer.id });
       this.#producer = null;

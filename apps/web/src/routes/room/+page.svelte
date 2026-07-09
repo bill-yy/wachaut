@@ -124,19 +124,23 @@
 
       connectionHealth = newState;
 
-      // Auto-adapt: when health degrades, tell the SFU to drop the top spatial
-      // layer (viewers get mid-quality instead of freezing). When it recovers,
-      // restore the top layer. This is the "Adaptación automática" toggle doing
-      // something real, not just showing a toast.
+      // Auto-adapt: dynamically scale the producer bitrate based on connection
+      // health. This replaces the old host:set-spatial-layer approach (which
+      // did nothing on a single-encode producer). Now we directly adjust the
+      // encoder's max bitrate via mediasoup's setMaxBitrate().
       if (autoAdaptQuality && newState !== lastHealthState) {
-        if (newState === 'poor' && socket && connected) {
-          socket.emit('host:set-spatial-layer', { roomId, spatialLayer: 1 });
+        if (newState === 'poor') {
+          // Severe packet loss — cut bitrate to 40% to stop the bleeding.
+          sfuClient?.setMaxBitrate(Math.round(targetBitrate * 0.4));
           showAutoAdaptNotification('Conexión inestable. Calidad ajustada automáticamente.');
-        } else if (newState === 'good' && lastHealthState !== 'good' && socket && connected) {
-          socket.emit('host:set-spatial-layer', { roomId, spatialLayer: 2 });
+        } else if (newState === 'good' && lastHealthState !== 'good') {
+          // Connection recovered — restore full quality.
+          sfuClient?.setMaxBitrate(targetBitrate);
           showAutoAdaptNotification('Conexión restablecida. Calidad óptima restaurada.');
         } else if (newState === 'degraded') {
-          showAutoAdaptNotification('Conexión débil. Monitoreando…');
+          // Moderate loss — reduce to 70% to ease congestion.
+          sfuClient?.setMaxBitrate(Math.round(targetBitrate * 0.7));
+          showAutoAdaptNotification('Conexión débil. Calidad ajustada.');
         }
       }
       lastHealthState = newState;
