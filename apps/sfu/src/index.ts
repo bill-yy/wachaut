@@ -220,8 +220,8 @@ fastify.get('/health', { logLevel: 'error' }, async () => ({
 
 /**
  * Issue short-lived TURN credentials using the coturn shared-secret mechanism
- * (HMAC-SHA1 of "timestamp:userid", base64). Clients fetch this before creating
- * transports and pass iceServers to mediasoup-client.
+ * (HMAC-SHA1 of "timestamp:userid", base64). Included in the join-room
+ * response so clients get them via Socket.IO (no separate HTTP endpoint).
  */
 function generateTurnCredentials(): { username: string; credential: string } | null {
   if (!TURN_URL || !TURN_SECRET) return null;
@@ -232,15 +232,15 @@ function generateTurnCredentials(): { username: string; credential: string } | n
   return { username, credential };
 }
 
-fastify.get('/turn-credentials', async () => {
-  const creds = generateTurnCredentials();
-  if (!creds) return { iceServers: [] };
-  // Parse the TURN_URL into iceServers format.
-  const iceServers = [
-    { urls: TURN_URL, username: creds.username, credential: creds.credential },
-  ];
-  return { iceServers };
-});
+/** Build the iceServers array for clients (TURN + STUN). */
+function buildIceServers(): any[] {
+  const servers: any[] = [];
+  const turnCreds = generateTurnCredentials();
+  if (turnCreds) {
+    servers.push({ urls: TURN_URL, username: turnCreds.username, credential: turnCreds.credential });
+  }
+  return servers;
+}
 
 // ─── Socket.IO ─────────────────────────────────────────────────────────
 const io = new Server(fastify.server, {
@@ -347,7 +347,7 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Return router's RTP capabilities + existing producers
+      // Return router's RTP capabilities + existing producers + TURN creds
       callback?.({
         rtpCapabilities: room.router.rtpCapabilities,
         roomId,
@@ -358,6 +358,7 @@ io.on('connection', (socket) => {
           producerCount: p.producers.length,
         })),
         existingProducers,
+        iceServers: buildIceServers(),
       });
 
       // Notify others
