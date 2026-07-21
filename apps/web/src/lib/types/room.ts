@@ -5,6 +5,10 @@
 export interface Viewer {
 	viewerId: string;
 	name?: string;
+	/** Whether the viewer is currently connected (vs. a zombie entry). */
+	connected?: boolean;
+	/** Join timestamp (ms epoch), if provided by the server. */
+	joinedAt?: number;
 }
 
 export interface FloatingReaction {
