@@ -38,7 +38,7 @@ services:
       - PORT=3001
       - HOST=0.0.0.0
       - ALLOWED_ORIGINS=https://wachaut.billytech.es
-    mem_limit: 512m
+    mem_limit: 768m
     cpus: 1
     logging:
       driver: json-file

@@ -26,7 +26,10 @@ const NUM_WORKERS = parseInt(process.env.NUM_WORKERS || String(os.cpus().length)
 // strict firewalls can get a relay path.
 const TURN_URL = process.env.TURN_URL || '';            // e.g. turn:wachaut.billytech.es:3478?transport=udp
 const TURN_SECRET = process.env.TURN_SECRET || '';
-const TURN_EXPIRY_SECONDS = parseInt(process.env.TURN_EXPIRY_SECONDS || '3600');
+// Short-lived credentials (30 min default). Clients must call `refresh-ice-servers`
+// before they expire — see SfuClient. Shorter window = safer; long broadcasts
+// (a 2h football match) rotate creds multiple times.
+const TURN_EXPIRY_SECONDS = parseInt(process.env.TURN_EXPIRY_SECONDS || '1800');
 
 // Allowed CORS origins (single source, env-configurable).
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billytech.es,http://localhost:5173,http://localhost:4173')
@@ -41,6 +44,12 @@ const MAX_TOTAL_PEERS = parseInt(process.env.MAX_TOTAL_PEERS || '1200');
 // Grace period (ms) before destroying a room when the host disconnects,
 // giving them a chance to reconnect after a transient network blip.
 const HOST_RECONNECT_GRACE_MS = parseInt(process.env.HOST_RECONNECT_GRACE_MS || '30000');
+
+// Idle TTL for orphan SFU rooms. Mirrors the signaling server's ROOM_IDLE_TTL_MS
+// so that when the signaling layer reaps an abandoned room, the SFU doesn't
+// leak the corresponding router + transports indefinitely. A room is only
+// reaped here if it has had no peers at all for this long.
+const ROOM_IDLE_TTL_MS = parseInt(process.env.ROOM_IDLE_TTL_MS || String(4 * 60 * 60 * 1000));
 const WEBRTC_LISTENIPS = [
   {
     protocol: 'udp' as const,
@@ -69,6 +78,8 @@ interface Room {
   router: mediasoup.types.Router;
   peers: Map<string, Peer>;
   createdAt: Date;
+  /** Last time any peer was present or activity happened. Drives idle TTL. */
+  lastActivityAt: Date;
   /** Timer that fires if the host doesn't reconnect within the grace period. */
   hostDisconnectTimer?: ReturnType<typeof setTimeout>;
 }
@@ -85,6 +96,29 @@ function totalPeerCount(): number {
   let total = 0;
   for (const room of rooms.values()) total += room.peers.size;
   return total;
+}
+
+/**
+ * Pure garbage-collector for orphan SFU rooms. A room is reaped only if it
+ * has zero peers AND has been idle for longer than ROOM_IDLE_TTL_MS. Exported
+ * for unit testing.
+ */
+export function gcExpiredSfuRooms(
+  roomsMap: Map<string, Room>,
+  now: Date,
+  idleTtlMs: number = ROOM_IDLE_TTL_MS
+): string[] {
+  const reaped: string[] = [];
+  const nowMs = now.getTime();
+  for (const [roomId, room] of roomsMap) {
+    if (room.peers.size === 0 && nowMs - room.lastActivityAt.getTime() > idleTtlMs) {
+      reaped.push(roomId);
+      if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
+      try { room.router.close(); } catch { /* already closed */ }
+      roomsMap.delete(roomId);
+    }
+  }
+  return reaped;
 }
 
 // ─── Mediasoup Setup ───────────────────────────────────────────────────
@@ -222,10 +256,15 @@ fastify.get('/health', { logLevel: 'error' }, async () => ({
  * Issue short-lived TURN credentials using the coturn shared-secret mechanism
  * (HMAC-SHA1 of "timestamp:userid", base64). Included in the join-room
  * response so clients get them via Socket.IO (no separate HTTP endpoint).
+ *
+ * Exported for unit testing.
  */
-function generateTurnCredentials(): { username: string; credential: string } | null {
+export function generateTurnCredentials(
+  nowMs: number = Date.now(),
+  expirySeconds: number = TURN_EXPIRY_SECONDS
+): { username: string; credential: string } | null {
   if (!TURN_URL || !TURN_SECRET) return null;
-  const expiry = Math.floor(Date.now() / 1000) + TURN_EXPIRY_SECONDS;
+  const expiry = Math.floor(nowMs / 1000) + expirySeconds;
   const userid = crypto.randomUUID();
   const username = `${expiry}:${userid}`;
   const credential = crypto.createHmac('sha1', TURN_SECRET).update(username).digest('base64');
@@ -263,6 +302,7 @@ io.on('connection', (socket) => {
       let room = rooms.get(roomId);
 
       // Host creates room (or reclaims after a reconnect within the grace window)
+      let hostReclaiming = false;
       if (role === 'host') {
         if (room) {
           // Host reconnecting within the grace period: rebind to the new socket.
@@ -270,6 +310,7 @@ io.on('connection', (socket) => {
             clearTimeout(room.hostDisconnectTimer);
             room.hostDisconnectTimer = undefined;
             room.hostSocketId = socket.id;
+            hostReclaiming = true;
             console.log(`[sfu] Host reconnected to room ${roomId}, grace timer cancelled`);
           } else {
             callback?.({ error: 'Room already exists' });
@@ -287,13 +328,15 @@ io.on('connection', (socket) => {
           }
 
           const router = await createRouter();
+          const now = new Date();
           room = {
             id: roomId,
             pin,
             hostSocketId: socket.id,
             router,
             peers: new Map(),
-            createdAt: new Date(),
+            createdAt: now,
+            lastActivityAt: now,
           };
           rooms.set(roomId, room);
           console.log(`[sfu] Room ${roomId} created`);
@@ -317,21 +360,56 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Create peer
-      const peer: Peer = {
-        id: socket.id,
-        socketId: socket.id,
-        displayName,
-        role,
-        producers: [],
-        consumers: new Map(),
-      };
+      // On host reclaim, rebind the existing peer (with its live producers and
+      // transports) to the new socket instead of creating an empty one. This
+      // is what makes the reclaim seamless: the producers never died, so
+      // viewers' consumers keep flowing.
+      if (hostReclaiming) {
+        // Find the existing host peer (keyed by the OLD socket.id, which no
+        // longer has a socket lookup entry — see the disconnect handler).
+        let existingHostPeer: Peer | undefined;
+        for (const [, p] of room.peers) {
+          if (p.role === 'host') { existingHostPeer = p; break; }
+        }
+        if (existingHostPeer) {
+          // Re-key the peer in room.peers under the new socket.id and update
+          // its id/socketId so subsequent handler lookups work.
+          for (const [key, p] of room.peers) {
+            if (p === existingHostPeer) room.peers.delete(key);
+          }
+          existingHostPeer.id = socket.id;
+          existingHostPeer.socketId = socket.id;
+          room.peers.set(socket.id, existingHostPeer);
+          socketToRoom.set(socket.id, roomId);
+          socketToPeer.set(socket.id, existingHostPeer);
+          socket.join(roomId);
+          room.lastActivityAt = new Date();
+          console.log(`[sfu] Host peer rebound to new socket ${socket.id}, producers preserved: ${existingHostPeer.producers.length}`);
+        } else {
+          // No existing peer to rebind (e.g. server restarted) — fall through
+          // to the create-peer branch so the host can re-produce.
+          hostReclaiming = false;
+        }
+      }
 
-      room.peers.set(socket.id, peer);
-      socketToRoom.set(socket.id, roomId);
-      socketToPeer.set(socket.id, peer);
+      if (!hostReclaiming) {
+        // Create peer (normal first-join path for host or viewer)
+        const peer: Peer = {
+          id: socket.id,
+          socketId: socket.id,
+          displayName,
+          role,
+          producers: [],
+          consumers: new Map(),
+        };
 
-      socket.join(roomId);
+        room.peers.set(socket.id, peer);
+        room.lastActivityAt = new Date();
+        socketToRoom.set(socket.id, roomId);
+        socketToPeer.set(socket.id, peer);
+
+        socket.join(roomId);
+      }
 
       // Collect ALL existing producers for the new peer
       const existingProducers: Array<{ producerId: string; kind: string; peerId: string }> = [];
@@ -361,14 +439,19 @@ io.on('connection', (socket) => {
         iceServers: buildIceServers(),
       });
 
-      // Notify others
-      socket.to(roomId).emit('peer-joined', {
-        peerId: socket.id,
-        displayName,
-        role,
-      });
+      // Notify others of a fresh peer join — but skip this on host reclaim
+      // (the host is already in the room from the viewers' perspective; we
+      // already emitted peer-left on drop and they'll get the host back via
+      // their existing consumers resuming).
+      if (!hostReclaiming) {
+        socket.to(roomId).emit('peer-joined', {
+          peerId: socket.id,
+          displayName,
+          role,
+        });
+      }
 
-      console.log(`[sfu] ${displayName} joined room ${roomId} (${room.peers.size} peers, ${existingProducers.length} existing producers)`);
+      console.log(`[sfu] ${displayName} joined room ${roomId} (${room.peers.size} peers, ${existingProducers.length} existing producers)${hostReclaiming ? ' [RECLAIM]' : ''}`);
     } catch (err: any) {
       console.error(`[sfu] join-room error:`, err?.message || err);
       callback?.({ error: err?.message || 'Failed to join room' });
@@ -382,6 +465,15 @@ io.on('connection', (socket) => {
       peer.rtpCapabilities = rtpCapabilities;
       console.log(`[sfu] RTP capabilities stored for ${peer.displayName}`);
     }
+  });
+
+  // ── Refresh TURN credentials ───────────────────────────────────────
+  // Clients call this periodically (every ~25 min) before their current TURN
+  // credentials expire (TURN_EXPIRY_SECONDS = 30 min). Without this, viewers
+  // behind symmetric NAT/firewalls lose their relay path mid-broadcast and
+  // the transport dies irrevocably at the ~30-60 min mark.
+  socket.on('refresh-ice-servers', (_payload, callback) => {
+    callback?.({ iceServers: buildIceServers() });
   });
 
   // ── Create WebRTC Transport ────────────────────────────────────────
@@ -407,7 +499,14 @@ io.on('connection', (socket) => {
       transport.on('dtlsstatechange', (state) => {
         console.log(`[sfu] Transport ${transport.id} DTLS state: ${state} (${peer?.displayName || 'unknown'})`);
         if (state === 'failed') {
-          console.error(`[sfu] DTLS FAILED for ${peer?.displayName} — UDP ports unreachable!`);
+          // DTLS FAILED = sustained connectivity loss (UDP ports unreachable).
+          // Force an ICE restart so mediasoup regenerates candidates and the
+          // client can re-gather. This is the server-side half of recovering
+          // from a transient network failure during long broadcasts.
+          console.error(`[sfu] DTLS FAILED for ${peer?.displayName} — restarting ICE`);
+          try { transport.restartIce(); } catch (err: any) {
+            console.error(`[sfu] restartIce failed for transport ${transport.id}:`, err?.message || err);
+          }
         }
         if (state === 'closed') {
           transport.close();
@@ -416,6 +515,22 @@ io.on('connection', (socket) => {
 
       transport.on('icestatechange', (iceState) => {
         console.log(`[sfu] Transport ${transport.id} ICE state: ${iceState} (${peer?.displayName || 'unknown'})`);
+        // mediasoup's IceState has no 'failed' (that surfaces via DTLS above).
+        // On 'disconnected' we arm a watchdog — if it stays disconnected too
+        // long, restart ICE preemptively before DTLS gives up.
+        if (iceState === 'disconnected') {
+          setTimeout(() => {
+            try {
+              // transport.iceState is still the live value at fire time.
+              if ((transport as any).iceState === 'disconnected') {
+                console.warn(`[sfu] Transport ${transport.id} ICE disconnected >10s — restarting ICE`);
+                transport.restartIce();
+              }
+            } catch (err: any) {
+              console.error(`[sfu] preemptive restartIce failed:`, err?.message || err);
+            }
+          }, 10_000);
+        }
       });
 
       console.log(`[sfu] Transport ${transport.id} for ${peer?.displayName} (${direction}), iceCandidates:`, JSON.stringify(transport.iceCandidates));
@@ -574,55 +689,63 @@ io.on('connection', (socket) => {
     const roomId = socketToRoom.get(socket.id);
     const peer = socketToPeer.get(socket.id);
 
-    if (roomId && peer) {
-      const room = rooms.get(roomId);
-      if (room) {
-        const isHost = room.hostSocketId === socket.id;
+    if (!roomId || !peer) {
+      socketToRoom.delete(socket.id);
+      socketToPeer.delete(socket.id);
+      return;
+    }
 
-        // Close all peer's producers
-        for (const producer of peer.producers) {
-          // Close all consumers referencing this producer
-          for (const [, p] of room.peers) {
-            for (const [cId, consumer] of p.consumers) {
-              if (consumer.producerId === producer.id) {
-                consumer.close();
-                p.consumers.delete(cId);
-              }
-            }
-          }
-          producer.close();
+    const room = rooms.get(roomId);
+    if (!room) {
+      socketToRoom.delete(socket.id);
+      socketToPeer.delete(socket.id);
+      return;
+    }
+
+    const isHost = room.hostSocketId === socket.id;
+
+    if (isHost) {
+      // ── Host disconnect ──────────────────────────────────────────────
+      // Do NOT close the host's producers/transports immediately. We keep
+      // them alive for HOST_RECONNECT_GRACE_MS so that if the host reconnects
+      // within that window, viewers' consumers keep working and no media is
+      // lost. The socket→peer/socket→room maps are cleared (the old socket.id
+      // is dead) but the Peer entry stays in room.peers so closeRoom() can
+      // still clean it up if the grace timer fires.
+      console.log(`[sfu] Host disconnected from ${roomId}, starting ${HOST_RECONNECT_GRACE_MS}ms grace timer`);
+      socketToRoom.delete(socket.id);
+      socketToPeer.delete(socket.id);
+      // Notify viewers so they enter the "reconnecting" state. (Their consumer
+      // tracks may freeze but will resume when the host reclaims.)
+      socket.to(roomId).emit('peer-left', { peerId: socket.id, displayName: peer.displayName });
+      if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
+      room.hostDisconnectTimer = setTimeout(() => {
+        const currentRoom = rooms.get(roomId);
+        if (currentRoom) {
+          closeRoom(currentRoom);
+          console.log(`[sfu] Room ${roomId} closed (host did not reconnect)`);
         }
+      }, HOST_RECONNECT_GRACE_MS);
+      return;
+    }
 
-        // Close peer's transports
-        peer.sendTransport?.close();
-        peer.recvTransport?.close();
-
-        // Remove peer
-        room.peers.delete(socket.id);
-
-        // Notify others
-        socket.to(roomId).emit('peer-left', {
-          peerId: socket.id,
-          displayName: peer.displayName,
-        });
-
-        if (isHost) {
-          // R1: Don't destroy the room immediately — give the host a grace period
-          // to reconnect after a transient network blip. If they rejoin within
-          // HOST_RECONNECT_GRACE_MS, the timer is cancelled in the join handler.
-          console.log(`[sfu] Host disconnected from ${roomId}, starting ${HOST_RECONNECT_GRACE_MS}ms grace timer`);
-          room.hostDisconnectTimer = setTimeout(() => {
-            const currentRoom = rooms.get(roomId);
-            if (currentRoom) {
-              closeRoom(currentRoom);
-              console.log(`[sfu] Room ${roomId} closed (host did not reconnect)`);
-            }
-          }, HOST_RECONNECT_GRACE_MS);
-        } else {
-          console.log(`[sfu] ${peer.displayName} left room ${roomId} (${room.peers.size} peers)`);
+    // ── Viewer disconnect: full teardown as before ──────────────────────
+    for (const producer of peer.producers) {
+      for (const [, p] of room.peers) {
+        for (const [cId, consumer] of p.consumers) {
+          if (consumer.producerId === producer.id) {
+            consumer.close();
+            p.consumers.delete(cId);
+          }
         }
       }
+      producer.close();
     }
+    peer.sendTransport?.close();
+    peer.recvTransport?.close();
+    room.peers.delete(socket.id);
+    socket.to(roomId).emit('peer-left', { peerId: socket.id, displayName: peer.displayName });
+    room.lastActivityAt = new Date();
 
     socketToRoom.delete(socket.id);
     socketToPeer.delete(socket.id);
@@ -709,6 +832,15 @@ async function main(): Promise<void> {
   console.log(`[sfu] Server listening on ${HOST}:${PORT}`);
   console.log(`[sfu] Workers: ${workers.length}, RTC ports: ${RTC_MIN_PORT}-${RTC_MAX_PORT}`);
 
+  // Reap orphan rooms every 5 minutes. A room is only reaped if it has had
+  // zero peers for ROOM_IDLE_TTL_MS — this catches the case where the
+  // signaling server closed a room (TTL, host drop) but the SFU never got
+  // the corresponding peer disconnects, leaking the router + transports.
+  setInterval(() => {
+    const reaped = gcExpiredSfuRooms(rooms, new Date());
+    for (const id of reaped) console.log(`[sfu] Reaped orphan room ${id} (idle TTL)`);
+  }, 5 * 60 * 1000);
+
   // Graceful shutdown — close routers/workers so clients aren't hard-disconnected.
   let shuttingDown = false;
   async function shutdown(signal: string) {
@@ -727,7 +859,12 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-main().catch((err) => {
-  console.error('[sfu] Fatal:', err);
-  process.exit(1);
-});
+// Only boot the full server when invoked directly (not when imported by tests).
+// Tests import generateTurnCredentials / gcExpiredSfuRooms without wanting
+// Fastify + mediasoup workers to spin up.
+if (process.env.NODE_ENV !== 'test') {
+  main().catch((err) => {
+    console.error('[sfu] Fatal:', err);
+    process.exit(1);
+  });
+}

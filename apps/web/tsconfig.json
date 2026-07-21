@@ -13,5 +13,6 @@
     "module": "ESNext",
     "target": "ESNext",
     "types": ["vite/client"]
-  }
+  },
+  "exclude": ["node_modules", ".svelte-kit", "build", "test"]
 }

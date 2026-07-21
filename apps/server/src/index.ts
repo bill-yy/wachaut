@@ -16,6 +16,19 @@ import {
   MAX_CHAT_LENGTH as SECURITY_MAX_CHAT,
   MAX_USERNAME_LENGTH as SECURITY_MAX_USERNAME,
 } from './security.js';
+import {
+  gcExpiredRooms,
+  createRoom,
+  touchRoom,
+  removeViewer,
+  type Room,
+  type ViewerInfo,
+  type ChatMessage,
+} from './room-store.js';
+
+// Re-export for tests / external consumers.
+export { gcExpiredRooms, createRoom, touchRoom, removeViewer };
+export type { Room, ViewerInfo, ChatMessage };
 
 // Single source of truth for allowed origins (env-configurable).
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billytech.es')
@@ -42,31 +55,12 @@ await fastify.register(helmet, {
   contentSecurityPolicy: false,
 });
 
-// Room storage (in-memory with TTL)
-interface ViewerInfo {
-  socketId: string;
-  name: string;
-  joinedAt: number;
-  connected: boolean;
-}
-
-interface Room {
-  id: string;
-  pin: string;
-  hostId: string;
-  viewers: Map<string, ViewerInfo>;
-  createdAt: Date;
-  isSharing: boolean;
-  chat: ChatMessage[];
-  isMuted: boolean;
-}
-
-interface ChatMessage {
-  id: string;
-  sender: string;
-  text: string;
-  timestamp: number;
-}
+// Room storage (in-memory with activity-based TTL).
+// The TTL is measured from `lastActivityAt` (not `createdAt`), so a room that
+// is actively used (host sharing, viewers chatting/reacting) never expires.
+// Only truly abandoned rooms (no activity for ROOM_IDLE_TTL_MS) get reaped.
+// Types and pure helpers (gcExpiredRooms, touchRoom, createRoom) live in
+// ./room-store.ts so they can be unit-tested without booting the server.
 
 const rooms = new Map<string, Room>();
 const viewerToRoom = new Map<string, string>(); // socketId -> roomId
@@ -88,6 +82,15 @@ const MAX_USERNAME_LENGTH = SECURITY_MAX_USERNAME;
 const MAX_VIEWERS_PER_ROOM = 20;
 const MAX_PIN_ATTEMPTS = 5;        // per IP, per 5-min window
 const PIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
+
+// Idle TTL for abandoned rooms. A room is only reaped if it has had no activity
+// (no joins, no chat, no reactions) for this long. Active rooms (e.g. a long
+// World Cup broadcast) never expire. Env-configurable, default 4h.
+const ROOM_IDLE_TTL_MS = parseInt(process.env.ROOM_IDLE_TTL_MS || String(4 * 60 * 60 * 1000));
+
+// Grace period before a room is destroyed when the host disconnects, giving the
+// host a chance to reclaim after a transient network blip. Aligned with the SFU.
+const HOST_RECONNECT_GRACE_MS = parseInt(process.env.HOST_RECONNECT_GRACE_MS || '30000');
 
 // ── Security helpers (imported from security.ts) ────────────────────
 
@@ -148,39 +151,41 @@ function findViewer(room: Room, viewerRef: string): ViewerInfo | undefined {
   );
 }
 
-// Cleanup expired rooms every 5 minutes
+// Reap abandoned rooms every 5 minutes. Active rooms (host still sharing,
+// viewers chatting/reacting) never expire because touchRoom() keeps
+// lastActivityAt fresh.
 setInterval(() => {
-const now = new Date();
-const twoHours = 2 * 60 * 60 * 1000;
-
-for (const [roomId, room] of rooms) {
-  if (now.getTime() - room.createdAt.getTime() > twoHours) {
-    // Notify occupants so they don't become silent orphans
+  const now = new Date();
+  const reaped = gcExpiredRooms({ rooms, viewerToRoom, hostToRoom }, now, ROOM_IDLE_TTL_MS);
+  for (const roomId of reaped) {
     io.to(roomId).emit('room:closed');
-    // Record room close for admin stats.
-    try { db.prepare('INSERT INTO room_events (event_type, room_id, viewer_count) VALUES (?, ?, ?)').run('closed', roomId, room.viewers.size); } catch {}
-    rooms.delete(roomId);
-    hostToRoom.delete(room.hostId);
-    for (const [viewerId] of room.viewers) {
-      viewerToRoom.delete(viewerId);
+    const room = rooms.get(roomId);
+    try {
+      db.prepare('INSERT INTO room_events (event_type, room_id, viewer_count) VALUES (?, ?, ?)')
+        .run('closed', roomId, room?.viewers.size ?? 0);
+    } catch { /* non-critical */ }
+  }
+
+  // Cleanup rate limit entries
+  const nowMs = Date.now();
+  for (const [key, entry] of eventCounts) {
+    if (nowMs > entry.resetAt) {
+      eventCounts.delete(key);
     }
   }
-}
-
-// Cleanup rate limit entries
-    const nowMs = Date.now();
-    for (const [key, entry] of eventCounts) {
-      if (nowMs > entry.resetAt) {
-        eventCounts.delete(key);
-      }
+  // Cleanup join attempt rate limits
+  for (const [key, entry] of joinAttempts) {
+    if (nowMs > entry.resetAt) {
+      joinAttempts.delete(key);
     }
-    // Cleanup join attempt rate limits
-    for (const [key, entry] of joinAttempts) {
-      if (nowMs > entry.resetAt) {
-        joinAttempts.delete(key);
-      }
-    }
-  }, 5 * 60 * 1000);
+  }
+  // Cleanup stale connection counts (defensive — the disconnect handler
+  // already decrements, but if a socket leaked we'd otherwise hold the IP
+  // forever and block that IP/CGNAT from reconnecting after a mass drop).
+  for (const [ip, count] of connectionCounts) {
+    if (count <= 0) connectionCounts.delete(ip);
+  }
+}, 5 * 60 * 1000);
 
 // Socket.IO setup
 const io = new Server(fastify.server, {
@@ -229,8 +234,12 @@ io.on('connection', (socket) => {
     if (hostRoomId) {
       const room = rooms.get(hostRoomId);
       if (room) {
+        // Notify viewers that the host dropped — they enter a "reconnecting"
+        // state instead of being kicked immediately. If the host reclaims
+        // within HOST_RECONNECT_GRACE_MS we emit host:reconnected.
         socket.to(hostRoomId).emit('host:disconnected');
-        setTimeout(() => {
+        if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
+        room.hostDisconnectTimer = setTimeout(() => {
           const currentRoom = rooms.get(hostRoomId);
           if (currentRoom && currentRoom.hostId === socket.id) {
             io.to(hostRoomId).emit('room:closed');
@@ -240,7 +249,7 @@ io.on('connection', (socket) => {
               viewerToRoom.delete(viewerId);
             }
           }
-        }, 30000); // aligned with SFU grace period (30s)
+        }, HOST_RECONNECT_GRACE_MS); // aligned with SFU grace period
       }
       return;
     }
@@ -248,11 +257,15 @@ io.on('connection', (socket) => {
     // O(1) viewer lookup via reverse map.
     const viewerRoomId = viewerToRoom.get(socket.id);
     if (viewerRoomId) {
-      const room = rooms.get(viewerRoomId);
-      if (room) {
-        const viewer = room.viewers.get(socket.id);
-        if (viewer) {
-          viewer.connected = false;
+      // Hard-delete the viewer entry so the room's viewers map and the
+      // reverse map stay in sync with reality. Previously this only set
+      // `connected = false`, which left zombie entries that inflated
+      // room.viewers.size (breaking MAX_VIEWERS_PER_ROOM, admin metrics,
+      // and the host's viewers panel).
+      const viewer = removeViewer({ rooms, viewerToRoom, hostToRoom }, viewerRoomId, socket.id);
+      if (viewer) {
+        const room = rooms.get(viewerRoomId);
+        if (room) {
           io.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
         }
       }
@@ -261,10 +274,48 @@ io.on('connection', (socket) => {
 
   // ─── HOST EVENTS ────────────────────────────────────────
 
-  socket.on('host:create-room', ({ pin }: { pin: string }) => {
+  socket.on('host:create-room', ({ pin, roomId: requestedRoomId }: { pin: string; roomId?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
+    }
+
+    // ── Reclaim path: host reconnecting after a transient drop ──────────
+    // If the client supplies a roomId and that room still exists in memory
+    // (within the idle TTL), we rebind it to the new socket instead of
+    // creating a fresh one. This keeps the existing viewers connected and
+    // preserves the roomId they're joined to. Without this, any reconnect
+    // (Socket.IO auto-reconnect after a blip) would silently generate a new
+    // roomId and orphan all viewers — the original Bug 2.
+    if (requestedRoomId) {
+      const existingRoom = rooms.get(requestedRoomId);
+      if (existingRoom) {
+        // PIN must match the room's stored hash to authorize the reclaim.
+        if (!pinEquals(existingRoom.pin, pin)) {
+          socket.emit('room:error', { message: 'PIN incorrecto para reclaim.' });
+          return;
+        }
+        // Free the old host mapping (the previous socket.id is gone).
+        if (existingRoom.hostId && existingRoom.hostId !== socket.id) {
+          hostToRoom.delete(existingRoom.hostId);
+        }
+        existingRoom.hostId = socket.id;
+        hostToRoom.set(socket.id, requestedRoomId);
+        socket.join(requestedRoomId);
+        // Cancel the pending destruction timer if one was armed.
+        if (existingRoom.hostDisconnectTimer) {
+          clearTimeout(existingRoom.hostDisconnectTimer);
+          existingRoom.hostDisconnectTimer = undefined;
+        }
+        touchRoom(existingRoom);
+        socket.emit('room:created', { roomId: requestedRoomId, reclaimed: true });
+        // Tell viewers the host is back so they can exit the "reconnecting" state.
+        socket.to(requestedRoomId).emit('host:reconnected');
+        fastify.log.info(`Room reclaimed by host: ${requestedRoomId} (socket ${socket.id})`);
+        return;
+      }
+      // Room doesn't exist anymore — fall through to create a new one with
+      // the requested roomId so the host's shareable link stays valid.
     }
 
     if (rooms.size >= MAX_ROOMS_SIMULTANEOUS) {
@@ -272,29 +323,22 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Limit one active room per host to prevent resource abuse
-    const existingRoom = Array.from(rooms.values()).find((r) => r.hostId === socket.id);
-    if (existingRoom) {
+    // Limit one active room per host to prevent resource abuse.
+    const existingByHost = Array.from(rooms.values()).find((r) => r.hostId === socket.id);
+    if (existingByHost) {
       socket.emit('room:error', { message: 'Ya tienes una sala activa. Ciérrala antes de crear otra.' });
       return;
     }
 
-    const roomId = crypto.randomUUID();
-    const room: Room = {
-      id: roomId,
-      pin: pinHash(pin),  // store hashed, never plaintext
-      hostId: socket.id,
-      viewers: new Map(),
-      createdAt: new Date(),
-      isSharing: false,
-      chat: [],
-      isMuted: false
-    };
-    
+    // Use the client-provided roomId if supplied (stable shareable link),
+    // otherwise mint a fresh one.
+    const roomId = requestedRoomId && requestedRoomId.length > 0 ? requestedRoomId : crypto.randomUUID();
+    const room = createRoom(roomId, pinHash(pin), socket.id);
+
     rooms.set(roomId, room);
     hostToRoom.set(socket.id, roomId);
     socket.join(roomId);
-    socket.emit('room:created', { roomId });
+    socket.emit('room:created', { roomId, reclaimed: false });
     fastify.log.info(`Room created: ${roomId}`);
 
     // Record room creation for admin stats.
@@ -310,6 +354,7 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       room.isSharing = false;
+      touchRoom(room);
       socket.to(roomId).emit('host:stopped-sharing');
     }
   });
@@ -317,6 +362,10 @@ io.on('connection', (socket) => {
   socket.on('host:close-room', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
+      if (room.hostDisconnectTimer) {
+        clearTimeout(room.hostDisconnectTimer);
+        room.hostDisconnectTimer = undefined;
+      }
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
       hostToRoom.delete(socket.id);
@@ -431,6 +480,7 @@ io.on('connection', (socket) => {
     });
     viewerToRoom.set(socket.id, roomId);
     socket.join(roomId);
+    touchRoom(room);
     
     socket.emit('room:joined', { roomId, username: reservedUsername });
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
@@ -479,6 +529,7 @@ io.on('connection', (socket) => {
       };
       room.chat.push(msg);
       if (room.chat.length > 100) room.chat.shift();
+      touchRoom(room);
       io.to(hostRoomId).emit('chat:message', msg);
       return;
     }
@@ -495,6 +546,7 @@ io.on('connection', (socket) => {
     };
     room.chat.push(msg);
     if (room.chat.length > 100) room.chat.shift();
+    touchRoom(room);
     io.to(roomId).emit('chat:message', msg);
   });
 
@@ -511,6 +563,8 @@ io.on('connection', (socket) => {
       // Host reacting — O(1) lookup via reverse map.
       const hostRoomId = hostToRoom.get(socket.id);
       if (hostRoomId) {
+        const hostRoom = rooms.get(hostRoomId);
+        if (hostRoom) touchRoom(hostRoom);
         io.to(hostRoomId).emit('reaction:receive', { emoji, from: 'Anfitrión' });
       }
       return;
@@ -520,6 +574,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     const viewer = room.viewers.get(socket.id);
+    touchRoom(room);
     // Broadcast reaction to host and all other viewers in the room
     io.to(roomId).emit('reaction:receive', { emoji, from: viewer?.name || 'Espectador' });
   });

@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { io } from 'socket.io-client';
 	import { SfuClient } from '$lib/sfu-client';
+	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
 	import {
 		playHostMuted,
 		playChatMessage,
@@ -36,6 +37,9 @@
 	let assignedUsername = $state('');
 	let reconnectAttempt = $state(0);
 	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	// Viewer-side watchdog that fires if the host doesn't reclaim within the
+	// grace window after a `host:disconnected` event.
+	let hostReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	const USERNAME_STORAGE_KEY = 'wachaut.viewer.username';
 
 	// --- Socket & SFU ---
@@ -208,7 +212,11 @@
 		socket = io(wsUrl, { transports: ['websocket'] });
 
 		socket.on('connect', () => {
-			socket.emit('viewer:join', { roomId, pin, username: cleanedUsername });
+			// On reconnect, prefer the server-assigned username from the
+			// previous successful join so the viewer keeps a stable identity
+			// instead of being re-reserved as "name-2", "name-3", etc.
+			const user = assignedUsername || cleanedUsername;
+			socket.emit('viewer:join', { roomId, pin, username: user });
 			status = 'auth';
 		});
 
@@ -232,6 +240,10 @@
 			assignedUsername = data?.username || cleanedUsername;
 			username = assignedUsername;
 			saveUsername(assignedUsername);
+			// Successful (re)join — reset the backoff so the next disconnect
+			// starts fresh.
+			reconnectAttempt = 0;
+			if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
 			status = 'waiting';
 			connectSfu(assignedUsername);
 		});
@@ -284,14 +296,41 @@
 		});
 
 		socket.on('host:disconnected', () => {
-			errorMessage = 'El anfitrión se desconectó';
-			status = 'error';
-			sfuClient?.disconnect();
-			sfuClient = null;
-			stopStatsPolling();
+			// The host dropped but may reclaim within the grace window. Enter
+			// a "reconnecting" state instead of hard-erroring so the viewer
+			// auto-resumes when the host comes back (host:reconnected event).
+			// Only escalate to error if we don't hear back within the grace
+			// window plus a safety margin.
+			errorMessage = 'El anfitrión se está reconectando…';
+			status = 'reconnecting';
+			if (hostReconnectTimer) clearTimeout(hostReconnectTimer);
+			// HOST_RECONNECT_GRACE_MS on the server is 30s; give a 45s ceiling
+			// here so the viewer doesn't give up before the server does.
+			hostReconnectTimer = setTimeout(() => {
+				if (status === 'reconnecting') {
+					errorMessage = 'El anfitrión se desconectó';
+					status = 'error';
+					sfuClient?.disconnect();
+					sfuClient = null;
+					stopStatsPolling();
+				}
+			}, 45000);
+		});
+
+		// Host came back after a transient drop — exit reconnecting state and
+		// re-attach to the SFU so media resumes.
+		socket.on('host:reconnected', () => {
+			if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
+			if (status === 'reconnecting') {
+				errorMessage = '';
+				status = 'live';
+				// The SFU preserved our consumers; nothing to do here unless
+				// the recv transport died, in which case the next check kicks in.
+			}
 		});
 
 		socket.on('room:closed', () => {
+			if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
 			errorMessage = 'La sala se cerró';
 			status = 'error';
 			sfuClient?.disconnect();
@@ -314,6 +353,7 @@
 	function disconnect() {
 		stopStatsPolling();
 		cleanupReconnect();
+		if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
 		sfuClient?.disconnect();
 		sfuClient = null;
 		cleanupSocket();
@@ -335,13 +375,13 @@
 	}
 
 	function scheduleReconnect() {
-		if (reconnectAttempt >= 3) {
+		if (shouldGiveUpReconnect(reconnectAttempt)) {
 			status = 'error';
 			errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
 			reconnectAttempt = 0;
 			return;
 		}
-		const delay = Math.min(2000 * Math.pow(2, reconnectAttempt), 8000);
+		const delay = reconnectDelayForAttempt(reconnectAttempt);
 		reconnectAttempt++;
 		if (reconnectTimer) clearTimeout(reconnectTimer);
 		reconnectTimer = setTimeout(() => {

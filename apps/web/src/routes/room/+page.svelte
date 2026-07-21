@@ -247,6 +247,9 @@
   let customRes = $state(1080);
   let customFps = $state(30);
   let customBitrate = $state(4_000_000);
+  // Bitrate passed to the last produce() call. Stashed so we can re-produce
+  // with the same setting after an SFU reconnect without recomputing it.
+  let currentMaxBitrate = 2_500_000;
   let autoAdaptNotification = $state('');
   let autoAdaptNotificationTimeout: ReturnType<typeof setTimeout> | null = null;
   // Viewer list for kick
@@ -460,11 +463,21 @@
         toast.success('Conexión restablecida');
       }
 
+      // Always send the current roomId so the server can reclaim it instead
+      // of minting a new one (which would orphan all viewers).
       socket.emit('host:create-room', { roomId, pin });
       socket.once('room:created', (data: any) => {
         if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
         if (data?.roomId) {
+          // On reclaim the server returns the SAME roomId; on first create it
+          // may return a fresh one. Either way, keep our local in sync.
           roomId = data.roomId;
+          // On reclaim, ask the server for the authoritative viewer list so
+          // our local viewerCount/viewersList resync (they may have changed
+          // while our socket was down).
+          if (data.reclaimed) {
+            requestViewersList();
+          }
           // Only create a new SFU client on first connect (not on reconnect).
           if (!sfuClient) {
             const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
@@ -472,6 +485,23 @@
             sfuClient.on('error', (msg: string) => devlog('[sfu]', msg));
             sfuClient.on('peer-joined', (d: any) => devlog('[sfu] peer-joined:', d));
             sfuClient.on('peer-left', (d: any) => devlog('[sfu] peer-left:', d));
+            // After an SFU socket reconnect, the host's old producers may be
+            // dead (transport closed) even if the server-side reclaim kept the
+            // room alive. Re-produce the local stream to guarantee media flow.
+            sfuClient.on('reconnected', () => {
+              devlog('[sfu] host reconnected — re-producing stream if needed');
+              if (isSharing && localStream) {
+                // stopProducing clears any zombie client-side producers before
+                // we re-call produce() with a fresh send transport.
+                try { sfuClient?.stopProducing(); } catch {}
+                sfuClient?.produce(localStream, { maxBitrate: currentMaxBitrate })
+                  .then(() => toast.success('Retransmisión restablecida'))
+                  .catch((err: unknown) => {
+                    console.error('[sfu] re-produce failed:', err);
+                    toast.error('No se pudo restablecer la retransmisión.');
+                  });
+              }
+            });
             sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
               .then(() => devlog('[sfu] joined room'))
               .catch((err: unknown) => devlog('[sfu] join failed:', err));
@@ -536,9 +566,16 @@
     // Reactions from viewers
     socket.on('reaction:receive', (data: any) => addReaction(data.emoji));
 
-    // Viewers list
+    // Viewers list — authoritative snapshot from the server. Reconcile both
+    // the panel list AND the header counter from this snapshot so they can
+    // never drift apart (previously only viewersList was updated and
+    // viewerCount was driven purely by incremental events, which desynced
+    // after reconnects/zombies).
     socket.on('host:viewers-list', (data: any) => {
-      if (data?.viewers) viewersList = data.viewers;
+      if (data?.viewers) {
+        viewersList = data.viewers;
+        viewerCount = data.viewers.length;
+      }
     });
 
     socket.on('host:kick-failed', (data: any) => {
@@ -588,6 +625,7 @@
       if (vTrack) vTrack.contentHint = contentHintMode;
 
       if (sfuClient) {
+        currentMaxBitrate = captureBitrate;
         await sfuClient.produce(stream, { maxBitrate: captureBitrate });
       }
 
