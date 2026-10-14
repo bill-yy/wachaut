@@ -22,8 +22,13 @@ RUN pnpm install --frozen-lockfile --filter @wachaut/web --filter @wachaut/serve
 RUN node node_modules/.pnpm/esbuild@*/node_modules/esbuild/install.js 2>/dev/null || true
 # Now copy the rest of the source and build
 COPY . .
-ENV VITE_WS_URL=wss://wachaut.billytech.es
-ENV VITE_SFU_URL=wss://sfu-wachaut.billytech.es
+# Vite bakes these into the static bundle at build time. Override per
+# deployment with docker build args (Dokploy: Application > Build Args),
+# e.g. --build-arg VITE_WS_URL=wss://wachaut.com.
+ARG VITE_WS_URL=wss://wachaut.billytech.es
+ARG VITE_SFU_URL=wss://sfu-wachaut.billytech.es
+ENV VITE_WS_URL=${VITE_WS_URL}
+ENV VITE_SFU_URL=${VITE_SFU_URL}
 RUN pnpm --filter @wachaut/web build
 RUN pnpm --filter @wachaut/server build
 
