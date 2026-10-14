@@ -34,6 +34,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --config.ignore-scripts=true
 
+      - name: Fetch better-sqlite3 native binding
+        # Install skips scripts (mediasoup's heavy postinstall), so the
+        # better-sqlite3 prebuilt binary is never downloaded — fetch it
+        # explicitly or the admin integration tests can't open SQLite.
+        run: |
+          cd apps/server
+          BINDIR="$(node -p "require('path').dirname(require.resolve('better-sqlite3/package.json'))")"
+          cd "$BINDIR" && npx --yes prebuild-install@7 --runtime node
+
       - name: Typecheck web
         run: pnpm --filter web check
 
