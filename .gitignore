@@ -15,3 +15,6 @@ Thumbs.db
 
 .svelte-kit/
 _bmad-output/
+
+# Mimosa hook internal state
+.mimosa/

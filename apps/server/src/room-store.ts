@@ -125,3 +125,18 @@ export function removeViewer(
   maps.viewerToRoom.delete(viewerSocketId);
   return viewer;
 }
+
+/**
+ * Find a viewer by socket id OR by (case-insensitive) display name, with an
+ * optional leading '@'. Used by the host's kick command and by the admin
+ * moderation API so both accept the name the UI shows.
+ */
+export function findViewerInRoom(room: Room, viewerRef: string): ViewerInfo | undefined {
+  const directMatch = room.viewers.get(viewerRef);
+  if (directMatch) return directMatch;
+
+  const cleanedRef = viewerRef.replace(/^@/, '').toLowerCase();
+  return Array.from(room.viewers.values()).find(
+    (viewer) => viewer.name.toLowerCase() === cleanedRef
+  );
+}

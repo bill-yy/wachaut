@@ -1,12 +1,14 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { Server } from 'socket.io';
 import crypto from 'node:crypto';
 import geoip from 'geoip-country';
 import { db } from './db.js';
 import { bootstrapAdmin } from './admin/auth.js';
-import { registerAdminRoutes, isMaintenanceMode, type ServerState } from './admin/routes.js';
+import { registerAdminRoutes, isMaintenanceMode, cleanupLoginAttempts, type ServerState } from './admin/routes.js';
+import { rollupTrafficStats } from './stats.js';
 import {
   pinHash,
   pinEquals,
@@ -21,14 +23,24 @@ import {
   createRoom,
   touchRoom,
   removeViewer,
+  findViewerInRoom,
   type Room,
   type ViewerInfo,
   type ChatMessage,
 } from './room-store.js';
 
 // Re-export for tests / external consumers.
-export { gcExpiredRooms, createRoom, touchRoom, removeViewer };
+export { gcExpiredRooms, createRoom, touchRoom, removeViewer, findViewerInRoom };
 export type { Room, ViewerInfo, ChatMessage };
+
+/** Fire-and-forget room event write for admin stats (never breaks signaling). */
+function logRoomEvent(eventType: string, roomId: string, viewerCount = 0, ip?: string): void {
+  try {
+    db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, ?)').run(
+      eventType, roomId, ip ?? null, ip ? (geoip.lookup(ip)?.country || null) : null, viewerCount
+    );
+  } catch { /* non-critical */ }
+}
 
 // Single source of truth for allowed origins (env-configurable).
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billytech.es')
@@ -142,28 +154,23 @@ function reserveUsername(room: Room, requestedUsername: string): string {
 }
 
 function findViewer(room: Room, viewerRef: string): ViewerInfo | undefined {
-  const directMatch = room.viewers.get(viewerRef);
-  if (directMatch) return directMatch;
-
-  const cleanedRef = viewerRef.replace(/^@/, '').toLowerCase();
-  return Array.from(room.viewers.values()).find(
-    (viewer) => usernameKey(viewer.name) === cleanedRef
-  );
+  return findViewerInRoom(room, viewerRef);
 }
 
 // Reap abandoned rooms every 5 minutes. Active rooms (host still sharing,
 // viewers chatting/reacting) never expire because touchRoom() keeps
 // lastActivityAt fresh.
 setInterval(() => {
+  // Snapshot viewer counts first — gcExpiredRooms deletes the rooms, so the
+  // count would read 0 if we looked it up after the reap.
+  const viewerCounts = new Map<string, number>();
+  for (const [roomId, room] of rooms) viewerCounts.set(roomId, room.viewers.size);
+
   const now = new Date();
   const reaped = gcExpiredRooms({ rooms, viewerToRoom, hostToRoom }, now, ROOM_IDLE_TTL_MS);
   for (const roomId of reaped) {
     io.to(roomId).emit('room:closed');
-    const room = rooms.get(roomId);
-    try {
-      db.prepare('INSERT INTO room_events (event_type, room_id, viewer_count) VALUES (?, ?, ?)')
-        .run('closed', roomId, room?.viewers.size ?? 0);
-    } catch { /* non-critical */ }
+    logRoomEvent('closed', roomId, viewerCounts.get(roomId) ?? 0);
   }
 
   // Cleanup rate limit entries
@@ -179,6 +186,12 @@ setInterval(() => {
       joinAttempts.delete(key);
     }
   }
+  // Cleanup admin login rate limit entries (slow memory leak otherwise —
+  // entries keyed by attacker-controlled IPs were never deleted).
+  cleanupLoginAttempts(nowMs);
+  // Refresh today's traffic_stats row from room_events (idempotent upsert).
+  rollupTrafficStats(now);
+
   // Cleanup stale connection counts (defensive — the disconnect handler
   // already decrements, but if a socket leaked we'd otherwise hold the IP
   // forever and block that IP/CGNAT from reconnecting after a mass drop).
@@ -245,6 +258,7 @@ io.on('connection', (socket) => {
             io.to(hostRoomId).emit('room:closed');
             rooms.delete(hostRoomId);
             hostToRoom.delete(socket.id);
+            logRoomEvent('closed', hostRoomId, currentRoom.viewers.size);
             for (const [viewerId] of currentRoom.viewers) {
               viewerToRoom.delete(viewerId);
             }
@@ -267,6 +281,7 @@ io.on('connection', (socket) => {
         const room = rooms.get(viewerRoomId);
         if (room) {
           io.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
+          logRoomEvent('viewer_left', viewerRoomId, room.viewers.size, ip);
         }
       }
     }
@@ -342,12 +357,7 @@ io.on('connection', (socket) => {
     fastify.log.info(`Room created: ${roomId}`);
 
     // Record room creation for admin stats.
-    const hostIp = realIp(socket);
-    try {
-      db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, 0)').run(
-        'created', roomId, hostIp, geoip.lookup(hostIp)?.country || null
-      );
-    } catch { /* non-critical */ }
+    logRoomEvent('created', roomId, 0, realIp(socket));
   });
 
   socket.on('host:stop-sharing', ({ roomId }: { roomId: string }) => {
@@ -369,6 +379,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
       hostToRoom.delete(socket.id);
+      logRoomEvent('closed', roomId, room.viewers.size);
       for (const [viewerId] of room.viewers) {
         viewerToRoom.delete(viewerId);
       }
@@ -394,7 +405,7 @@ io.on('connection', (socket) => {
   socket.on('host:kick', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
     const room = rooms.get(roomId);
     if (!room || room.hostId !== socket.id) return;
-    const viewer = findViewer(room, viewerId);
+    const viewer = findViewerInRoom(room, viewerId);
     if (!viewer) {
       socket.emit('host:kick-failed', { viewerId, message: `No se encontro a ${viewerId}` });
       return;
@@ -404,6 +415,7 @@ io.on('connection', (socket) => {
     viewerToRoom.delete(viewer.socketId);
     io.to(viewer.socketId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrion' });
     socket.emit('viewer:left', { viewerId: viewer.socketId, username: viewer.name });
+    logRoomEvent('viewer_left', roomId, room.viewers.size);
   });
 
   socket.on('host:request-viewers', ({ roomId }: { roomId: string }) => {
@@ -486,12 +498,7 @@ io.on('connection', (socket) => {
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
 
     // Record viewer join for admin stats.
-    const viewerIp = realIp(socket);
-    try {
-      db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, ?)').run(
-        'viewer_joined', roomId, viewerIp, geoip.lookup(viewerIp)?.country || null, room.viewers.size
-      );
-    } catch { /* non-critical */ }
+    logRoomEvent('viewer_joined', roomId, room.viewers.size, realIp(socket));
 
     // Send chat history to the joining viewer (last 100 messages)
     socket.emit('chat:history', { messages: room.chat.slice(-100) });
@@ -616,8 +623,15 @@ fastify.get('/ready', async (req, reply) => {
 // Register admin routes with access to live server state.
 const sfuHealthUrl = (process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '')
   .replace(/^ws/, 'http').replace(/\?.*$/, '');
-const adminState: ServerState = { rooms, io, connectionCounts, sfuHealthUrl };
-registerAdminRoutes(fastify, adminState);
+const adminState: ServerState = { rooms, viewerToRoom, hostToRoom, io, connectionCounts, sfuHealthUrl };
+// Encapsulated scope so the rate limiter applies ONLY to the admin API —
+// signaling rides Socket.IO (not HTTP routes) and must not be throttled.
+// Generous ceiling to absorb dashboard polling; login keeps its own
+// stricter per-IP limiter inside the admin routes.
+await fastify.register(async (adminScope) => {
+  await adminScope.register(rateLimit, { global: true, max: 120, timeWindow: '1 minute' });
+  registerAdminRoutes(adminScope, adminState);
+});
 
 // Start server
 const PORT = parseInt(process.env.PORT || '3001');
@@ -625,6 +639,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 // Bootstrap the first admin user if the DB is empty.
 bootstrapAdmin();
+
+// Prime today's traffic row immediately instead of waiting for the sweeper.
+rollupTrafficStats();
 
 try {
   await fastify.listen({ port: PORT, host: HOST });
@@ -642,8 +659,9 @@ async function shutdown(signal: string) {
   fastify.log.info(`${signal} received, shutting down...`);
 
   // Give connected clients a chance to see the room close
-  for (const [roomId] of rooms) {
+  for (const [roomId, room] of rooms) {
     io.to(roomId).emit('room:closed');
+    logRoomEvent('closed', roomId, room.viewers.size);
   }
 
   io.close();

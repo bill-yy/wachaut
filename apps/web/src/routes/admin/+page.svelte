@@ -1,29 +1,43 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { login, isLoggedIn } from '$lib/admin';
+  import { login, ApiError } from '$lib/admin';
+  import { adminSession } from '$lib/admin-session.svelte';
   import Brand from '$lib/components/Brand.svelte';
-  import Spinner from '$lib/components/Spinner.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import Input from '$lib/components/Input.svelte';
   import { toast } from '$lib/stores/toast.svelte';
 
   let username = $state('');
   let password = $state('');
+  let code = $state('');
+  let needsCode = $state(false); // shown after a 401 with totpRequired
   let loading = $state(false);
 
   onMount(() => {
-    if (isLoggedIn()) goto('/admin/dashboard');
+    if (adminSession.token) {
+      goto(adminSession.user?.mustChangePassword ? '/admin/rotate' : '/admin/dashboard');
+    }
   });
 
   async function handleSubmit(e: Event) {
     e.preventDefault();
     if (!username || !password) return;
+    if (needsCode && !code) return;
     loading = true;
     try {
-      await login(username, password);
-      toast.success('Bienvenido');
-      goto('/admin/dashboard');
+      const { user } = await login(username, password, needsCode ? code : undefined);
+      toast.success(`Bienvenido, ${user.username}`);
+      goto(user.mustChangePassword ? '/admin/rotate' : '/admin/dashboard');
     } catch (err: any) {
-      toast.error(err?.message || 'Error al iniciar sesión');
+      if (err instanceof ApiError && err.status === 401 && err.data?.totpRequired) {
+        needsCode = true;
+        toast.warning('Introduce el código de tu app de autenticación (o un código de recuperación)');
+      } else if (err instanceof ApiError && err.status === 429) {
+        toast.error(err.message);
+      } else {
+        toast.error(err?.message || 'Error al iniciar sesión');
+      }
     } finally {
       loading = false;
     }
@@ -38,37 +52,21 @@
     </div>
 
     <form onsubmit={handleSubmit} class="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-xl">
-      <div>
-        <label for="username" class="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Usuario</label>
-        <input
-          id="username"
+      <Input label="Usuario" type="text" autocomplete="username" bind:value={username} placeholder="admin" required />
+      <Input label="Contraseña" type="password" autocomplete="current-password" bind:value={password} placeholder="••••••••" required />
+      {#if needsCode}
+        <Input
+          label="Código 2FA"
           type="text"
-          autocomplete="username"
-          bind:value={username}
-          class="input-field"
-          placeholder="admin"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          bind:value={code}
+          placeholder="123456"
+          hint="Código de 6 dígitos de tu app, o un código de recuperación"
           required
         />
-      </div>
-      <div>
-        <label for="password" class="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Contraseña</label>
-        <input
-          id="password"
-          type="password"
-          autocomplete="current-password"
-          bind:value={password}
-          class="input-field"
-          placeholder="••••••••"
-          required
-        />
-      </div>
-      <button type="submit" disabled={loading} class="btn-primary w-full justify-center">
-        {#if loading}
-          <Spinner size="sm" />
-        {:else}
-          Entrar
-        {/if}
-      </button>
+      {/if}
+      <Button type="submit" loading={loading} class="w-full justify-center">Entrar</Button>
     </form>
   </div>
 </div>

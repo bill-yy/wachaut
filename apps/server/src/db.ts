@@ -73,5 +73,47 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON admin_audit_log(timestamp);
 `);
 
+// ── Migrations (idempotent column/table additions) ─────────────────────
+//
+// SQLite has no "ADD COLUMN IF NOT EXISTS", so each migration checks the
+// current table info first. This runs on every boot and is a no-op once
+// applied.
+
+function hasColumn(table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return rows.some((r) => r.name === column);
+}
+
+/** True the first time the token-version migration runs (pre-2FA schema). */
+let ranTokenVersionMigration = false;
+if (!hasColumn('admin_users', 'token_version')) {
+  ranTokenVersionMigration = true;
+  db.exec(`
+    ALTER TABLE admin_users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE admin_users ADD COLUMN totp_secret TEXT;
+    ALTER TABLE admin_users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE admin_users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+  `);
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_recovery_codes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    code_hash  TEXT NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES admin_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_recovery_codes_user ON admin_recovery_codes(user_id);
+`);
+
+// One-time security rotation: every account that existed before token
+// versions were introduced must change its password on next login. This
+// retires credentials created from ADMIN_BOOTSTRAP_PASSWORD or the CLI.
+if (ranTokenVersionMigration) {
+  db.prepare('UPDATE admin_users SET must_change_password = 1').run();
+}
+
 export { db };
 export type Db = DatabaseType;

@@ -4,21 +4,28 @@
  *
  * Usage:
  *   node dist/admin/setup.js create-user
- *     Interactive: prompts for username + password, creates a superadmin.
+ *     Interactive: prompts for username + password + role.
  *
  *   node dist/admin/setup.js list-users
  *     Lists all admin users.
  *
  *   node dist/admin/setup.js reset-password <username>
  *     Interactive: prompts for new password.
+ *
+ * Every action is written to the audit log as user "cli".
  */
 
 import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import {
   createUser, listUsers, changePassword, findUserByUsername, bootstrapAdmin,
+  isValidUsername, isValidPassword, MIN_PASSWORD_LENGTH, auditLog,
 } from './auth.js';
 import { db } from '../db.js';
+
+function cliAudit(action: string): void {
+  auditLog(null, 'cli', action, 'system', '??');
+}
 
 async function prompt(rl: readline.Interface, question: string, hidden = false): Promise<string> {
   if (hidden) {
@@ -54,14 +61,21 @@ async function main() {
 
   if (command === 'create-user') {
     const username = (await prompt(rl, 'Username: ')).trim();
-    if (!username) { console.error('Username required'); process.exit(1); }
-    const password = await prompt(rl, 'Password: ', true);
-    if (password.length < 6) { console.error('Password must be at least 6 characters'); process.exit(1); }
+    if (!isValidUsername(username)) {
+      console.error(`Invalid username (3-32 chars: letters, numbers, . _ -)`);
+      process.exit(1);
+    }
+    const password = await prompt(rl, `Password (min ${MIN_PASSWORD_LENGTH} chars): `, true);
+    if (!isValidPassword(password)) {
+      console.error(`Password must be ${MIN_PASSWORD_LENGTH}-128 characters`);
+      process.exit(1);
+    }
     const roleInput = (await prompt(rl, 'Role (admin/superadmin) [admin]: ')).trim();
     const role = roleInput === 'superadmin' ? 'superadmin' : 'admin';
 
     try {
       const user = createUser(username, password, role);
+      cliAudit(`create_user:${user.username}`);
       console.log(`\n✓ Created ${role} "${user.username}" (id: ${user.id})`);
     } catch (err: any) {
       if (err?.message?.includes('UNIQUE')) {
@@ -78,7 +92,8 @@ async function main() {
       console.log('\nAdmin users:');
       for (const u of users) {
         const status = u.active ? '✓' : '✗';
-        console.log(`  ${status} ${u.username.padEnd(20)} ${u.role.padEnd(12)} created: ${u.created_at}  last_login: ${u.last_login || 'never'}`);
+        const totp = u.totp_enabled ? ' [2FA]' : '';
+        console.log(`  ${status} ${u.username.padEnd(20)} ${u.role.padEnd(12)} created: ${u.created_at}  last_login: ${u.last_login || 'never'}${totp}`);
       }
     }
   } else if (command === 'reset-password') {
@@ -86,10 +101,14 @@ async function main() {
     if (!username) { console.error('Usage: reset-password <username>'); process.exit(1); }
     const user = findUserByUsername(username);
     if (!user) { console.error('User not found'); process.exit(1); }
-    const password = await prompt(rl, 'New password: ', true);
-    if (password.length < 6) { console.error('Password must be at least 6 characters'); process.exit(1); }
-    changePassword(user.id, password);
-    console.log(`\n✓ Password changed for "${user.username}"`);
+    const password = await prompt(rl, `New password (min ${MIN_PASSWORD_LENGTH} chars): `, true);
+    if (!isValidPassword(password)) {
+      console.error(`Password must be ${MIN_PASSWORD_LENGTH}-128 characters`);
+      process.exit(1);
+    }
+    changePassword(user.id, password); // bumps token_version — kills the user's live sessions
+    cliAudit(`reset_password:${user.username}`);
+    console.log(`\n✓ Password changed for "${user.username}" (existing sessions invalidated)`);
   } else if (command === 'bootstrap') {
     bootstrapAdmin();
     console.log('Bootstrap check complete.');
