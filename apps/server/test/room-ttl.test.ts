@@ -228,3 +228,27 @@ test('Bug MAX_VIEWERS_PER_ROOM: with zombie entries gone, capacity is accurate',
   // would have rejected because size was still 20.
   assert.ok(room.viewers.size < MAX, 'must have headroom for new viewers');
 });
+
+// ── Host-claim authorization (room hijack hardening) ───────────────────
+
+test('verifyHostClaim: requires BOTH the PIN and the creator-only host secret', async () => {
+  const { verifyHostClaim, createRoom, randomSecret } = await import('../src/room-store.ts');
+  const { pinHash } = await import('../src/security.ts');
+
+  const secret = randomSecret();
+  const room = createRoom('room-claim', pinHash('123456'), 'host-1', new Date(), secret);
+
+  // Real creator: PIN + secret → allowed.
+  assert.ok(verifyHostClaim(room, '123456', secret));
+
+  // Malicious viewer (knows roomId + PIN from the share URL, no secret).
+  assert.ok(!verifyHostClaim(room, '123456'), 'missing secret must be rejected');
+  assert.ok(!verifyHostClaim(room, '123456', ''), 'empty secret must be rejected');
+  assert.ok(!verifyHostClaim(room, '123456', randomSecret()), 'wrong secret must be rejected');
+
+  // Secret alone with a wrong PIN is not enough either.
+  assert.ok(!verifyHostClaim(room, '000000', secret), 'wrong PIN must be rejected');
+
+  // Secrets are unique per room.
+  assert.notEqual(randomSecret(), randomSecret());
+});

@@ -77,6 +77,11 @@ function captureSfuError(err: unknown, component: string, roomId?: string): void
   } catch { /* capture must never break the SFU */ }
 }
 
+/** Only hosts may produce media into a room (viewers are recv-only). */
+export function canSendMedia(role?: string): boolean {
+  return role === 'host';
+}
+
 const WEBRTC_LISTENIPS = [
   {
     protocol: 'udp' as const,
@@ -102,6 +107,13 @@ interface Peer {
 interface Room {
   id: string;
   pin: string;
+  /**
+   * Secret returned ONLY to the socket that created the room (in the
+   * join-room callback). Required to reclaim the host slot: viewers know
+   * both the roomId and the PIN, so the PIN alone cannot distinguish the
+   * real host from a malicious viewer.
+   */
+  hostSecret: string;
   hostSocketId: string;
   router: mediasoup.types.Router;
   peers: Map<string, Peer>;
@@ -341,18 +353,26 @@ io.on('connection', (socket) => {
   console.log(`[sfu] Client connected: ${socket.id}`);
 
   // ── Join Room ──────────────────────────────────────────────────────
-  socket.on('join-room', async ({ roomId, pin, displayName, role }, callback) => {
+  socket.on('join-room', async ({ roomId, pin, displayName, role, hostSecret }, callback) => {
     try {
       console.log(`[sfu] join-room: ${displayName} (${role}) → ${roomId}`);
 
       let room = rooms.get(roomId);
+      let createdRoom = false;
 
       // Host creates room (or reclaims after a reconnect within the grace window)
       let hostReclaiming = false;
       if (role === 'host') {
         if (room) {
           // Host reconnecting within the grace period: rebind to the new socket.
+          // The claimant must present the host secret handed only to the
+          // creator — otherwise any viewer (who knows roomId+PIN) could
+          // hijack the host slot and its live producers.
           if (room.hostDisconnectTimer) {
+            if (!hostSecret || hostSecret !== room.hostSecret) {
+              callback?.({ error: 'Invalid host secret' });
+              return;
+            }
             clearTimeout(room.hostDisconnectTimer);
             room.hostDisconnectTimer = undefined;
             room.hostSocketId = socket.id;
@@ -378,6 +398,7 @@ io.on('connection', (socket) => {
           room = {
             id: roomId,
             pin,
+            hostSecret: crypto.randomUUID(),
             hostSocketId: socket.id,
             router,
             peers: new Map(),
@@ -385,6 +406,7 @@ io.on('connection', (socket) => {
             lastActivityAt: now,
           };
           rooms.set(roomId, room);
+          createdRoom = true;
           console.log(`[sfu] Room ${roomId} created`);
         }
       }
@@ -472,10 +494,12 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Return router's RTP capabilities + existing producers + TURN creds
+      // Return router's RTP capabilities + existing producers + TURN creds.
+      // hostSecret goes ONLY to the creator's socket so they can reclaim.
       callback?.({
         rtpCapabilities: room.router.rtpCapabilities,
         roomId,
+        ...(createdRoom ? { hostSecret: room.hostSecret } : {}),
         peers: Array.from(room.peers.values()).map((p) => ({
           id: p.id,
           displayName: p.displayName,
@@ -528,6 +552,18 @@ io.on('connection', (socket) => {
     try {
       const room = getRoom(socket);
       if (!room) { callback?.({ error: 'Not in a room' }); return; }
+      if (direction !== 'cons' && direction !== 'prod') {
+        callback?.({ error: 'Invalid direction' });
+        return;
+      }
+
+      // Only the host may send media: without this gate a malicious viewer
+      // could create a send transport and inject their own stream into the
+      // room (auto-distributed to every viewer by the produce handler).
+      if (direction === 'prod' && !canSendMedia(socketToPeer.get(socket.id)?.role)) {
+        callback?.({ error: 'Only the host can send media' });
+        return;
+      }
 
       // Higher initial bitrate for recv (viewers need quality fast); lower for send (host uplink ramps)
       const initialBitrate = direction === 'cons' ? 3_000_000 : 1_000_000;
@@ -657,6 +693,8 @@ io.on('connection', (socket) => {
       const peer = socketToPeer.get(socket.id);
       const room = getRoom(socket);
       if (!peer?.sendTransport || !room) { callback?.({ error: 'No transport' }); return; }
+      // Defense in depth: produce is host-only regardless of transports.
+      if (!canSendMedia(peer.role)) { callback?.({ error: 'Only the host can send media' }); return; }
 
       const producer = await peer.sendTransport.produce({
         kind,

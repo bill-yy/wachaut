@@ -22,6 +22,8 @@ export class SfuClient {
   #audioProducer: any = null;
   #consumers: Map<string, any> = new Map();
   #url: string;
+  /** SFU host-claim secret (received on room creation, re-sent on reconnect). */
+  #hostSecret = "";
   #listeners: Map<string, Function[]> = new Map();
   #rtpCapabilities: any = null;
   #pendingConsumers: Array<any> = [];
@@ -106,7 +108,10 @@ export class SfuClient {
         const { roomId, pin, displayName, role } = this.#joinParams;
         this.#socket.emit(
           "join-room",
-          { roomId, pin, displayName, role },
+          // hostSecret (received from the SFU on first join) proves this
+          // socket's owner created the room — required to reclaim the host
+          // slot on reconnect. Viewers never have one.
+          { roomId, pin, displayName, role, hostSecret: this.#hostSecret || undefined },
           async (response: any) => {
             if (response.error) {
               if (firstJoin) reject(new Error(response.error));
@@ -114,6 +119,7 @@ export class SfuClient {
               return;
             }
 
+            if (response.hostSecret) this.#hostSecret = response.hostSecret;
             this.#rtpCapabilities = response.rtpCapabilities;
 
             // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).

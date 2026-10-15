@@ -261,7 +261,7 @@
 
   // Room info — try to reclaim a previous session (host refresh survival).
   const HOST_SESSION_KEY = 'wachaut.host.session';
-  function loadHostSession(): { roomId: string; pin: string } | null {
+  function loadHostSession(): { roomId: string; pin: string; hostSecret?: string } | null {
     try {
       const raw = sessionStorage.getItem(HOST_SESSION_KEY);
       if (!raw) return null;
@@ -270,8 +270,8 @@
     } catch { /* ignore */ }
     return null;
   }
-  function saveHostSession(rid: string, p: string) {
-    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p })); } catch { /* ignore */ }
+  function saveHostSession(rid: string, p: string, secret?: string) {
+    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p, hostSecret: secret })); } catch { /* ignore */ }
   }
   function clearHostSession() {
     try { sessionStorage.removeItem(HOST_SESSION_KEY); } catch { /* ignore */ }
@@ -279,6 +279,7 @@
 
   const savedSession = loadHostSession();
   let roomId = $state(savedSession?.roomId || crypto.randomUUID());
+  let hostSecret = $state(savedSession?.hostSecret || '');
   function generatePin(): string {
     const arr = new Uint32Array(1);
     crypto.getRandomValues(arr);
@@ -480,14 +481,18 @@
       }
 
       // Always send the current roomId so the server can reclaim it instead
-      // of minting a new one (which would orphan all viewers).
-      socket.emit('host:create-room', { roomId, pin });
+      // of minting a new one (which would orphan all viewers). The host
+      // secret proves we created the room (viewers know roomId+PIN too).
+      socket.emit('host:create-room', { roomId, pin, hostSecret: hostSecret || undefined });
       socket.once('room:created', (data: any) => {
         if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
         if (data?.roomId) {
           // On reclaim the server returns the SAME roomId; on first create it
           // may return a fresh one. Either way, keep our local in sync.
           roomId = data.roomId;
+          // On first create the server hands us the host secret — keep it for
+          // future reclaims (page refresh survival).
+          if (data.hostSecret) hostSecret = data.hostSecret;
           // On reclaim, ask the server for the authoritative viewer list so
           // our local viewerCount/viewersList resync (they may have changed
           // while our socket was down).
@@ -524,7 +529,7 @@
           }
         }
         loading = false; // Room is ready — no artificial delay
-        saveHostSession(roomId, pin);
+        saveHostSession(roomId, pin, hostSecret || undefined);
       });
     });
 

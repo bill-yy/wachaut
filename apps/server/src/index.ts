@@ -31,13 +31,15 @@ import {
   touchRoom,
   removeViewer,
   findViewerInRoom,
+  verifyHostClaim,
+  randomSecret,
   type Room,
   type ViewerInfo,
   type ChatMessage,
 } from './room-store.js';
 
 // Re-export for tests / external consumers.
-export { gcExpiredRooms, createRoom, touchRoom, removeViewer, findViewerInRoom };
+export { gcExpiredRooms, createRoom, touchRoom, removeViewer, findViewerInRoom, verifyHostClaim, randomSecret };
 export type { Room, ViewerInfo, ChatMessage };
 
 /** Fire-and-forget room event write for admin stats (never breaks signaling). */
@@ -361,7 +363,7 @@ io.on('connection', (socket) => {
 
   // ─── HOST EVENTS ────────────────────────────────────────
 
-  onSafe(socket, 'host:create-room', ({ pin, roomId: requestedRoomId }: { pin: string; roomId?: string }) => {
+  onSafe(socket, 'host:create-room', ({ pin, roomId: requestedRoomId, hostSecret }: { pin: string; roomId?: string; hostSecret?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
@@ -384,9 +386,11 @@ io.on('connection', (socket) => {
     if (requestedRoomId) {
       const existingRoom = rooms.get(requestedRoomId);
       if (existingRoom) {
-        // PIN must match the room's stored hash to authorize the reclaim.
-        if (!pinEquals(existingRoom.pin, pin)) {
-          socket.emit('room:error', { message: 'PIN incorrecto para reclaim.' });
+        // The claimant must prove they created the room: PIN + host secret.
+        // Viewers know both roomId (share URL) and PIN, so the PIN alone
+        // cannot distinguish the real host from a malicious viewer.
+        if (!verifyHostClaim(existingRoom, pin, hostSecret)) {
+          socket.emit('room:error', { message: 'PIN o clave de host incorrectos para reclaim.' });
           return;
         }
         // Free the old host mapping (the previous socket.id is gone).
@@ -434,7 +438,7 @@ io.on('connection', (socket) => {
     rooms.set(roomId, room);
     hostToRoom.set(socket.id, roomId);
     socket.join(roomId);
-    socket.emit('room:created', { roomId, reclaimed: false });
+    socket.emit('room:created', { roomId, reclaimed: false, hostSecret: room.hostSecret });
     fastify.log.info(`Room created: ${roomId}`);
 
     // Record room creation for admin stats.

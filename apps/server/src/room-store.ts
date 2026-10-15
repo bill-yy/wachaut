@@ -7,6 +7,9 @@
  * on that state.
  */
 
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { pinEquals } from './security.js';
+
 export interface ViewerInfo {
   socketId: string;
   name: string;
@@ -25,6 +28,13 @@ export interface Room {
   id: string;
   pin: string;
   hostId: string;
+  /**
+   * Secret handed ONLY to the socket that created the room (returned in
+   * room:created). Required to reclaim the host slot: viewers know both the
+   * roomId (it is in the share URL) and the PIN, so the PIN alone cannot
+   * distinguish the real host from a malicious viewer.
+   */
+  hostSecret: string;
   viewers: Map<string, ViewerInfo>;
   createdAt: Date;
   /** Timestamp of the last meaningful activity in the room. Drives the idle TTL. */
@@ -82,12 +92,14 @@ export function createRoom(
   id: string,
   pinHashed: string,
   hostId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  hostSecret: string = randomSecret()
 ): Room {
   return {
     id,
     pin: pinHashed,
     hostId,
+    hostSecret,
     viewers: new Map(),
     createdAt: now,
     lastActivityAt: now,
@@ -95,6 +107,24 @@ export function createRoom(
     chat: [],
     isMuted: false,
   };
+}
+
+/** Cryptographically random host-claim secret (URL-safe, 192 bits). */
+export function randomSecret(): string {
+  return randomBytes(24).toString('base64url');
+}
+
+/**
+ * Authorization for claiming/reclaiming the host slot of an existing room:
+ * the claimant must present BOTH the room PIN and the host secret that was
+ * returned only to the creator. Constant-time comparisons.
+ */
+export function verifyHostClaim(room: Room, pin: string, hostSecret?: string): boolean {
+  if (!hostSecret) return false;
+  const a = Buffer.from(hostSecret);
+  const b = Buffer.from(room.hostSecret);
+  const secretOk = a.length === b.length && timingSafeEqual(a, b);
+  return secretOk && pinEquals(room.pin, pin);
 }
 
 /** Mark a room as having had activity right now (or at `when`). */
