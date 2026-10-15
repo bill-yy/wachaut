@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MessageCircle, Activity, Bell, BellOff } from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import ChatPanel from './ChatPanel.svelte';
 	import EmotePicker from './EmotePicker.svelte';
 	import type { ChatMessage } from '$lib/utils/chat';
@@ -71,8 +72,8 @@
 			<button
 				onclick={onToggleNotifications}
 				class="rounded-lg p-1.5 transition-colors hover:bg-[var(--surface-2)]"
-				title={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
-				aria-label={notificationsMuted ? 'Activar notificaciones' : 'Silenciar notificaciones'}
+				title={notificationsMuted ? t('comp.unmuteNotif') : t('comp.muteNotif')}
+				aria-label={notificationsMuted ? t('comp.unmuteNotif') : t('comp.muteNotif')}
 			>
 				{#if notificationsMuted}
 					<BellOff class="h-3.5 w-3.5 text-[var(--text-subtle)]" />
@@ -84,7 +85,7 @@
 	</div>
 
 	<!-- Messages + input (ChatPanel without its own header to avoid duplication) -->
-	<ChatPanel {messages} bind:value onSend={onSend} showCounter={false} showHeader={false} placeholder="Escribe un mensaje…" />
+	<ChatPanel {messages} bind:value onSend={onSend} showCounter={false} showHeader={false} placeholder={t('comp.chatPlaceholder')} />
 
 	<!-- Reactions row -->
 	<div class="relative shrink-0 border-t border-[var(--border)] px-4 py-2">

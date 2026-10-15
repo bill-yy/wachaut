@@ -5,6 +5,7 @@
 	import { SfuClient } from '$lib/sfu-client';
 	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
 	import { captureClientError } from '$lib/error-report';
+	import { t, srv, i18n } from '$lib/i18n/index.svelte';
 	import { hasRated } from '$lib/feedback';
 	import RatingCard from '$lib/components/RatingCard.svelte';
 	import {
@@ -198,13 +199,13 @@
 		username = cleanedUsername;
 
 		if (cleanedUsername.length < 2) {
-			errorMessage = 'Ingresa un nombre de al menos 2 caracteres';
+			errorMessage = t('comp.vauthNameShort');
 			status = 'error';
 			return;
 		}
 
 		if (!pin || pin.length < 4) {
-			errorMessage = 'Ingresa un PIN válido';
+			errorMessage = t('vroom.invalidPin');
 			status = 'error';
 			return;
 		}
@@ -228,13 +229,13 @@
 		});
 
 		socket.on('room:auth-failed', (data: any) => {
-			errorMessage = data?.message || 'PIN incorrecto';
+			errorMessage = srv(data?.message) || t('comp.vauthWrongPin');
 			status = 'error';
 			cleanupSocket();
 		});
 
 		socket.on('room:error', (data: any) => {
-			errorMessage = data?.message || 'Error en la sala';
+			errorMessage = srv(data?.message) || t('vroom.genericError');
 			status = 'error';
 			cleanupSocket();
 		});
@@ -255,7 +256,7 @@
 			if (data?.messages) {
 				chatMessages = data.messages.map((msg: any) => ({
 					id: msg.id || Date.now() + Math.random(),
-					sender: msg.sender || 'Anónimo',
+					sender: msg.sender || t('vroom.anon'),
 					text: msg.text,
 					timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
 				}));
@@ -267,7 +268,7 @@
 				...chatMessages,
 				{
 					id: msg.id || Date.now(),
-					sender: msg.sender || 'Anónimo',
+					sender: msg.sender || t('vroom.anon'),
 					text: msg.text,
 					timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
 				},
@@ -293,7 +294,7 @@
 		socket.on('host:unmuted', () => { hostMuted = false; });
 
 		socket.on('viewer:kicked', (data: any) => {
-			errorMessage = data?.reason || 'Has sido expulsado de la sala';
+			errorMessage = srv(data?.reason) || t('vroom.kicked');
 			status = 'error';
 			cleanupSocket();
 		});
@@ -304,14 +305,14 @@
 			// auto-resumes when the host comes back (host:reconnected event).
 			// Only escalate to error if we don't hear back within the grace
 			// window plus a safety margin.
-			errorMessage = 'El anfitrión se está reconectando…';
+			errorMessage = t('vroom.hostReconnecting');
 			status = 'reconnecting';
 			if (hostReconnectTimer) clearTimeout(hostReconnectTimer);
 			// HOST_RECONNECT_GRACE_MS on the server is 30s; give a 45s ceiling
 			// here so the viewer doesn't give up before the server does.
 			hostReconnectTimer = setTimeout(() => {
 				if (status === 'reconnecting') {
-					errorMessage = 'El anfitrión se desconectó';
+					errorMessage = t('vroom.hostLost');
 					status = 'error';
 					sfuClient?.disconnect();
 					sfuClient = null;
@@ -382,10 +383,10 @@
 	function scheduleReconnect() {
 		if (shouldGiveUpReconnect(reconnectAttempt)) {
 			status = 'error';
-			errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
+			errorMessage = t('vroom.reconnectFail');
 			// The viewer exhausted all 8 reconnect attempts — a real
 			// reliability signal for the error tracker.
-			captureClientError(new Error('viewer gave up reconnecting after 8 attempts'), {
+			captureClientError(new Error(t('vroom.giveup')), {
 				component: 'viewer.reconnect-giveup',
 				roomId,
 				severity: 'warning',
@@ -470,7 +471,7 @@
 			: `${window.location.origin}/room/${roomId}`;
 		try {
 			if (navigator.share) {
-				await navigator.share({ title: 'Wachaut — Únete a mi pantalla', url });
+				await navigator.share({ title: i18n.locale === 'en' ? t('vroom.titleEn') : t('vroom.title'), url });
 			} else {
 				const ok = await copyText(url);
 				if (ok) toast.success('Enlace copiado');
@@ -513,7 +514,7 @@
 			// This error object was previously discarded — the single biggest
 			// blind spot for viewer-side failures.
 			captureClientError(err, { component: 'viewer.connectSfu', roomId });
-			errorMessage = 'No se pudo conectar la transmisión. La calidad puede verse afectada.';
+			errorMessage = t('vroom.sfuFail');
 			if (errorClearTimer) clearTimeout(errorClearTimer);
 			errorClearTimer = setTimeout(() => { errorMessage = ''; }, 8000);
 		}
@@ -697,13 +698,13 @@
 				<!-- Broadcast ended: dedicated screen with a rating prompt -->
 				<div class="flex flex-col items-center justify-center gap-6 py-10" style="min-height: 60vh;">
 					<div class="text-center">
-						<h1 class="mb-2 text-2xl font-bold text-[var(--text)]">La retransmisión ha terminado</h1>
-						<p class="text-sm text-[var(--text-muted)]">Gracias por acompañarnos.</p>
+						<h1 class="mb-2 text-2xl font-bold text-[var(--text)]">{t('vroom.ended')}</h1>
+						<p class="text-sm text-[var(--text-muted)]">{t('vroom.endedThanks')}</p>
 					</div>
 					{#if !hasRated(roomId)}
 						<RatingCard roomId={roomId} role="viewer" onDone={() => {}} />
 					{/if}
-					<a href="/" class="btn-secondary">← Volver al inicio</a>
+					<a href="/" class="btn-secondary">{t('vroom.backHome')}</a>
 				</div>
 			{:else}
 				<ViewerStatus

@@ -6,6 +6,7 @@
    */
   import Button from '$lib/components/Button.svelte';
   import { sendFeedback } from '$lib/feedback';
+  import { t } from '$lib/i18n/index.svelte';
   import { toast } from '$lib/stores/toast.svelte';
   import { Star } from 'lucide-svelte';
 
@@ -18,53 +19,54 @@
 
   let { roomId, role, onDone }: Props = $props();
 
-  const QUESTION_LABELS: Record<string, { question: string; options: { value: string; label: string }[] }> = {
+  // Question definitions: SFU enum value → dict key of the label.
+  const QUESTION_LABELS: Record<string, { questionKey: string; options: { value: string; labelKey: string }[] }> = {
     video: {
-      question: '¿Cómo se vio el vídeo?',
+      questionKey: 'rating.qVideo',
       options: [
-        { value: 'fluida', label: 'Fluida' },
-        { value: 'cortes', label: 'Con algunos cortes' },
-        { value: 'entrecortada', label: 'Muy entrecortada' },
+        { value: 'fluida', labelKey: 'rating.qVideo1' },
+        { value: 'cortes', labelKey: 'rating.qVideo2' },
+        { value: 'entrecortada', labelKey: 'rating.qVideo3' },
       ],
     },
     entrada: {
-      question: '¿Pudiste entrar bien?',
+      questionKey: 'rating.qEntry',
       options: [
-        { value: 'sin_problemas', label: 'Sin problemas' },
-        { value: 'tardo', label: 'Tardé en conectar' },
-        { value: 'no_conecte', label: 'No conecté a la primera' },
+        { value: 'sin_problemas', labelKey: 'rating.qEntry1' },
+        { value: 'tardo', labelKey: 'rating.qEntry2' },
+        { value: 'no_conecte', labelKey: 'rating.qEntry3' },
       ],
     },
     recomendaria: {
-      question: '¿Recomendarías Wachaut?',
+      questionKey: 'rating.qRecommend',
       options: [
-        { value: 'si', label: 'Sí' },
-        { value: 'tal_vez', label: 'Tal vez' },
-        { value: 'no', label: 'No' },
+        { value: 'si', labelKey: 'rating.yes' },
+        { value: 'tal_vez', labelKey: 'rating.maybe' },
+        { value: 'no', labelKey: 'rating.no' },
       ],
     },
     emision: {
-      question: '¿Cómo fue emitir?',
+      questionKey: 'rating.qBroadcast',
       options: [
-        { value: 'facil', label: 'Fácil' },
-        { value: 'dificultades', label: 'Con dificultades' },
-        { value: 'frustrante', label: 'Frustrante' },
+        { value: 'facil', labelKey: 'rating.qBroadcast1' },
+        { value: 'dificultades', labelKey: 'rating.qBroadcast2' },
+        { value: 'frustrante', labelKey: 'rating.qBroadcast3' },
       ],
     },
     estabilidad: {
-      question: '¿Cómo fue tu conexión?',
+      questionKey: 'rating.qStability',
       options: [
-        { value: 'estable', label: 'Estable' },
-        { value: 'algunos_cortes', label: 'Algunos cortes' },
-        { value: 'cortes_constantes', label: 'Cortes constantes' },
+        { value: 'estable', labelKey: 'rating.qStability1' },
+        { value: 'algunos_cortes', labelKey: 'rating.qStability2' },
+        { value: 'cortes_constantes', labelKey: 'rating.qStability3' },
       ],
     },
     volveria: {
-      question: '¿Volverías a emitir?',
+      questionKey: 'rating.qReturn',
       options: [
-        { value: 'si', label: 'Sí' },
-        { value: 'tal_vez', label: 'Tal vez' },
-        { value: 'no', label: 'No' },
+        { value: 'si', labelKey: 'rating.yes' },
+        { value: 'tal_vez', labelKey: 'rating.maybe' },
+        { value: 'no', labelKey: 'rating.no' },
       ],
     },
   };
@@ -94,13 +96,13 @@
 
   async function submit() {
     if (rating < 1) {
-      toast.warning('Elige de 1 a 5 estrellas');
+      toast.warning(t('rating.pickStars'));
       return;
     }
     sending = true;
     const ok = await sendFeedback({ roomId, role, rating, answers, comment: comment.trim() || undefined });
     sending = false;
-    if (ok) toast.success('¡Gracias por tu valoración!');
+    if (ok) toast.success(t('rating.thanks'));
     done = true;
     onDone();
   }
@@ -113,10 +115,10 @@
 
 <div class="glass mx-auto w-full max-w-md rounded-2xl p-6 text-center" role="region" aria-label="Valoración de la retransmisión">
   {#if done}
-    <p class="py-6 text-sm text-[var(--text-muted)]">¡Gracias por usar Wachaut!</p>
+    <p class="py-6 text-sm text-[var(--text-muted)]">{t('rating.thanksBody')}</p>
   {:else}
-    <h3 class="mb-1 text-lg font-bold text-[var(--text)]">¿Qué tal fue la retransmisión?</h3>
-    <p class="mb-4 text-xs text-[var(--text-muted)]">Tu respuesta es anónima y nos ayuda a mejorar (30 segundos).</p>
+    <h3 class="mb-1 text-lg font-bold text-[var(--text)]">{t('rating.title')}</h3>
+    <p class="mb-4 text-xs text-[var(--text-muted)]">{t('rating.subtitle')}</p>
 
     <!-- Stars -->
     <div class="mb-5 flex justify-center gap-1" role="radiogroup" aria-label="Puntuación de 1 a 5 estrellas">
@@ -129,7 +131,7 @@
           class="rounded p-1 transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
           role="radio"
           aria-checked={rating === n}
-          aria-label="{n} {n === 1 ? 'estrella' : 'estrellas'}"
+          aria-label="{n} {n === 1 ? t('rating.starLabel') : t('rating.starsLabel')}"
         >
           <Star
             size={28}
@@ -144,7 +146,7 @@
     <div class="space-y-3 text-left">
       {#each questions as q (q.key)}
         <div>
-          <p class="mb-1.5 text-xs font-medium text-[var(--text)]">{q.question}</p>
+          <p class="mb-1.5 text-xs font-medium text-[var(--text)]">{t(q.questionKey as any)}</p>
           <div class="flex flex-wrap gap-1.5">
             {#each q.options as opt (opt.value)}
               <button
@@ -155,7 +157,7 @@
                   : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)]/40'}"
                 aria-pressed={answers[q.key] === opt.value}
               >
-                {opt.label}
+                {t(opt.labelKey as any)}
               </button>
             {/each}
           </div>
@@ -163,21 +165,21 @@
       {/each}
 
       <div>
-        <label for="rating-comment" class="mb-1.5 block text-xs font-medium text-[var(--text)]">¿Algo más? (opcional)</label>
+        <label for="rating-comment" class="mb-1.5 block text-xs font-medium text-[var(--text)]">{t('rating.comment')}</label>
         <textarea
           id="rating-comment"
           bind:value={comment}
           maxlength="500"
           rows="2"
           class="input-field resize-none text-sm"
-          placeholder="Comentario libre…"
+          placeholder={t('rating.commentPlaceholder')}
         ></textarea>
       </div>
     </div>
 
     <div class="mt-5 flex justify-center gap-2">
-      <Button variant="ghost" onclick={skip}>Omitir</Button>
-      <Button loading={sending} disabled={rating < 1} onclick={() => void submit()}>Enviar</Button>
+      <Button variant="ghost" onclick={skip}>{t('rating.skip')}</Button>
+      <Button loading={sending} disabled={rating < 1} onclick={() => void submit()}>{t('rating.submit')}</Button>
     </div>
   {/if}
 </div>

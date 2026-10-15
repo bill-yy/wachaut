@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import { MessageCircle, Send, Terminal, Shield } from 'lucide-svelte';
 	import type { ChatMessage } from '$lib/utils/chat';
 	import { SENDER_HOST, SENDER_SYSTEM, formatChatTime } from '$lib/utils/chat';
@@ -27,7 +28,7 @@
 		maxLength = 500,
 		showCounter = true,
 		showHeader = true,
-		placeholder = 'Escribe un mensaje o /comando…',
+		placeholder = t('comp.chatPlaceholder'),
 		onSend,
 	}: Props = $props();
 

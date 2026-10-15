@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Lock, User } from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import Button from './Button.svelte';
 
 	interface Props {
@@ -49,18 +50,18 @@
 					<Lock class="h-7 w-7 text-[var(--brand)]" />
 				</div>
 			</div>
-			<h2 class="text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">Unirse a la sala</h2>
-			<p class="mt-1 text-sm text-[var(--text-muted)]">Ingresa tu nombre y el PIN de acceso</p>
+			<h2 class="text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">{t('comp.vauthTitle')}</h2>
+			<p class="mt-1 text-sm text-[var(--text-muted)]">{t('comp.vauthSubtitle')}</p>
 		</div>
 
 		<!-- Username -->
-		<label class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]" for="va-username">Nombre</label>
+		<label class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]" for="va-username">{t('comp.vauthName')}</label>
 		<div class="relative mb-4">
 			<User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-subtle)]" />
 			<input
 				id="va-username"
 				type="text"
-				placeholder="tu-nombre"
+				placeholder={t('comp.vauthNamePlaceholder')}
 				value={username}
 				oninput={onUsernameInput}
 				onkeydown={onKeydown}
@@ -71,7 +72,7 @@
 		</div>
 
 		<!-- PIN -->
-		<label class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]" for="va-pin">PIN</label>
+		<label class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]" for="va-pin">{t('comp.vauthPin')}</label>
 		<input
 			id="va-pin"
 			type="text"
@@ -90,7 +91,7 @@
 			disabled={!canConnect}
 			class="gradient-brand mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-all hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:brightness-100"
 		>
-			Conectar
+			{t('comp.vauthJoin')}
 		</button>
 	</div>
 </div>

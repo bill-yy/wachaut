@@ -4,6 +4,7 @@
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
   import { captureClientError } from '$lib/error-report';
+  import { t, srv } from '$lib/i18n/index.svelte';
   import { hasRated } from '$lib/feedback';
   import RatingCard from '$lib/components/RatingCard.svelte';
   import {
@@ -135,15 +136,15 @@
         if (newState === 'poor') {
           // Severe packet loss — cut bitrate to 40% to stop the bleeding.
           sfuClient?.setMaxBitrate(Math.round(targetBitrate * 0.4));
-          showAutoAdaptNotification('Conexión inestable. Calidad ajustada automáticamente.');
+          showAutoAdaptNotification(t('room.adaptDown'));
         } else if (newState === 'good' && lastHealthState !== 'good') {
           // Connection recovered — restore full quality.
           sfuClient?.setMaxBitrate(targetBitrate);
-          showAutoAdaptNotification('Conexión restablecida. Calidad óptima restaurada.');
+          showAutoAdaptNotification(t('room.adaptUp'));
         } else if (newState === 'degraded') {
           // Moderate loss — reduce to 70% to ease congestion.
           sfuClient?.setMaxBitrate(Math.round(targetBitrate * 0.7));
-          showAutoAdaptNotification('Conexión débil. Calidad ajustada.');
+          showAutoAdaptNotification(t('room.adaptWeak'));
         }
       }
       lastHealthState = newState;
@@ -229,14 +230,14 @@
   let qualityPreset = $state('normal');
   let showSettings = $state(false);
   const presets = $state<Record<string, QualityPreset>>({
-    low: { label: 'Liviano', resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_500_000, desc: 'Ideal para conexiones lentas' },
-    normal: { label: 'Normal', resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_000_000, desc: 'Uso general' },
-    high: { label: 'Alta calidad', resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 6_000_000, desc: 'Gaming y diseño' }
+    low: { label: t('room.presetLow'), resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_500_000, desc: t('room.presetLowDesc') },
+    normal: { label: t('room.presetNormal'), resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_000_000, desc: t('room.presetNormalDesc') },
+    high: { label: t('room.presetHigh'), resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 6_000_000, desc: t('room.presetHighDesc') }
   });
 
   // Safe label lookup that handles the 'custom' preset (not in the presets map).
   function presetLabel(key: string): string {
-    return key === 'custom' ? 'Personalizado' : presets[key]?.label ?? '—';
+    return key === 'custom' ? t('room.presetCustom') : presets[key]?.label ?? '—';
   }
 
   // Audio toggle for screen share
@@ -380,16 +381,16 @@
 
     switch (command) {
       case '/help': {
-        addSystemMessage('Comandos disponibles: /help, /stats, /clear, /kick <username>');
+        addSystemMessage(t('room.cmdHelp'));
         return true;
       }
       case '/stats': {
         const stats = {
           viewers: viewerCount,
-          connected: connected ? 'Sí' : 'No',
-          sharing: isSharing ? 'Sí' : 'No',
-          muted: isMuted ? 'Sí' : 'No',
-          sfu: sfuClient ? 'Conectado' : 'Desconectado',
+          connected: connected ? t('room.yes') : t('room.no'),
+          sharing: isSharing ? t('room.yes') : t('room.no'),
+          muted: isMuted ? t('room.yes') : t('room.no'),
+          sfu: sfuClient ? t('room.connected') : t('room.disconnected'),
           quality: presetLabel(qualityPreset)
         };
         addSystemMessage(`Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, Calidad=${stats.quality}`);
@@ -397,12 +398,12 @@
       }
       case '/clear': {
         chatMessages = [];
-        addSystemMessage('Chat limpiado.');
+        addSystemMessage(t('room.cmdCleared'));
         return true;
       }
       case '/kick': {
         if (!args[0]) {
-          addSystemMessage('Uso: /kick <username>');
+          addSystemMessage(t('room.cmdKickUsage'));
           return true;
         }
         const viewerId = args[0];
@@ -446,14 +447,14 @@
     loadingTimeout = setTimeout(() => {
       if (loading) {
         loading = false;
-        error = 'No se pudo crear la sala. Inténtalo de nuevo.';
+        error = t('room.createFail');
         setTimeout(() => { error = ''; }, 5000);
       }
     }, 10000);
 
     socket.on('connect_error', () => {
       if (loadingTimeout) clearTimeout(loadingTimeout);
-      error = 'No se pudo conectar al servidor. Verifica tu conexión.';
+      error = t('room.connectFail');
       loading = false;
       setTimeout(() => { error = ''; }, 5000);
     });
@@ -464,7 +465,7 @@
     socket.on('room:error', (data: any) => {
       if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
       loading = false;
-      const message = data?.message || 'Error al preparar la sala.';
+      const message = srv(data?.message) || t('room.prepareFail');
       toast.error(message);
       // Surface it inline too — toasts are easy to miss on a full-screen spinner.
       error = message;
@@ -477,7 +478,7 @@
 
       if (wasConnected) {
         // Reconnection after a drop — reclaim the room and notify the user.
-        toast.success('Conexión restablecida');
+        toast.success(t('room.reconnected'));
       }
 
       // Always send the current roomId so the server can reclaim it instead
@@ -516,10 +517,10 @@
                 // we re-call produce() with a fresh send transport.
                 try { sfuClient?.stopProducing(); } catch {}
                 sfuClient?.produce(localStream, { maxBitrate: currentMaxBitrate })
-                  .then(() => toast.success('Retransmisión restablecida'))
+                  .then(() => toast.success(t('room.restreamOk')))
                   .catch((err: unknown) => {
                     console.error('[sfu] re-produce failed:', err);
-                    toast.error('No se pudo restablecer la retransmisión.');
+                    toast.error(t('room.restreamFail'));
                   });
               }
             });
@@ -536,11 +537,11 @@
     socket.on('disconnect', () => {
       connected = false;
       // Notify the host that they've lost connection (Socket.IO auto-reconnects).
-      if (isSharing) toast.warning('Conexión perdida. Reintentando…');
+      if (isSharing) toast.warning(t('room.lostReconnecting'));
     });
 
     socket.on('error', (err: any) => {
-      error = typeof err === 'string' ? err : err?.message || 'Error de conexión';
+      error = typeof err === 'string' ? srv(err) : err?.message || t('room.connError');
       setTimeout(() => { error = ''; }, 5000);
     });
 
@@ -600,7 +601,7 @@
     });
 
     socket.on('host:kick-failed', (data: any) => {
-      addSystemMessage(data?.message || 'No se pudo expulsar al espectador.');
+      addSystemMessage(srv(data?.message) || t('room.kickFail'));
     });
   }
 
@@ -665,9 +666,9 @@
       // capture failures (bugs).
       captureClientError(e, { component: `host.startSharing.${e?.name || 'unknown'}`, roomId });
       if (e?.name === 'NotAllowedError') {
-        toast.error('Permiso denegado para compartir pantalla.');
+        toast.error(t('room.permissionDenied'));
       } else {
-        toast.error('No se pudo iniciar la compartición de pantalla.');
+        toast.error(t('room.shareFail'));
       }
     }
   }
@@ -775,9 +776,9 @@
       copiedInvite = true;
       if (copyFeedbackTimeout) clearTimeout(copyFeedbackTimeout);
       copyFeedbackTimeout = setTimeout(() => { copiedInvite = false; }, 2000);
-      toast.success('¡Invitación copiada!');
+      toast.success(t('room.inviteCopied'));
     } else {
-      toast.error('No se pudo copiar al portapapeles');
+      toast.error(t('room.copyFail'));
     }
   }
 
