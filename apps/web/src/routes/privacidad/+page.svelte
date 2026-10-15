@@ -6,7 +6,7 @@
 <svelte:head>
 	<title>Privacidad — Wachaut</title>
 	<meta name="description" content="La privacidad de Wachaut: sin registro, sin almacenamiento de tu pantalla, estadísticas anónimas. Todo lo que hacemos y no hacemos con tus datos." />
-	<link rel="canonical" href="https://wachaut.com/privacidad" />
+	<link rel="canonical" href="https://wachaut.com/privacidad/" />
 </svelte:head>
 
 <div class="relative min-h-screen bg-app">

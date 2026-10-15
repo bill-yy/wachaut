@@ -32,20 +32,23 @@ ENV VITE_SFU_URL=${VITE_SFU_URL}
 RUN pnpm --filter @wachaut/web build
 RUN pnpm --filter @wachaut/server build
 
-# ── Web (static files served by `serve`) ────────────────────────────
+# ── Web (static files served by the custom router) ──────────────────
+# server.mjs serves prerendered pages with real HTML for crawlers and
+# only falls back to the SPA shell for /room and /admin (client-only).
 FROM node:22-slim AS web
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tini && \
     rm -rf /var/lib/apt/lists/*
-RUN npm install -g serve
+COPY --from=builder /app/apps/web/server.mjs ./server.mjs
 COPY --from=builder /app/apps/web/build ./web/build
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser
 USER appuser
 EXPOSE 3000
 ENV NODE_ENV=production
+ENV PORT=3000
 ENTRYPOINT ["tini", "--"]
-CMD ["serve", "web/build", "-l", "3000", "-s"]
+CMD ["node", "server.mjs"]
 
 # ── Server (Node API + Socket.IO + Admin) ────────────────────────────
 FROM node:22-slim AS server

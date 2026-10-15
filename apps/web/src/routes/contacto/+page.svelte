@@ -33,7 +33,7 @@
 <svelte:head>
 	<title>Contacto — Wachaut</title>
 	<meta name="description" content="Escríbenos: ideas, problemas o propuestas. Tu mensaje llega directamente a nuestro equipo." />
-	<link rel="canonical" href="https://wachaut.com/contacto" />
+	<link rel="canonical" href="https://wachaut.com/contacto/" />
 </svelte:head>
 
 <div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
