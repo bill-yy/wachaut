@@ -50,6 +50,19 @@ function hashIp(ip: string): string {
   return createHash('sha256').update(`${IP_HASH_SALT}:${ip}`).digest('hex').slice(0, 16);
 }
 
+// ── Text hygiene ─────────────────────────────────────────────────────
+
+/**
+ * Reject text carrying the Unicode replacement character (U+FFFD): it means
+ * the client sent non-UTF-8 bytes (e.g. a Windows console in cp1252) and the
+ * original characters were already lost at JSON parse time. Browsers always
+ * send proper UTF-8, so real users never hit this — it keeps mojibake out
+ * of the panel instead of storing unreadable garbage.
+ */
+export function hasMojibake(...texts: (string | undefined | null)[]): boolean {
+  return texts.some((t) => !!t && t.includes('\uFFFD'));
+}
+
 // ── Feedback question definitions (single source of truth) ───────────
 // Keys and values are fixed enums so the admin aggregation is exact and
 // the client renders whatever the role map contains.
@@ -91,6 +104,9 @@ export function registerFeedbackRoutes(app: FastifyInstance): void {
     const { name, email, message, page } = req.body as {
       name?: string; email?: string; message: string; page?: string;
     };
+    if (hasMojibake(name, email, message)) {
+      return reply.code(400).send({ ok: false, error: 'El texto llegó con codificación inválida. Recarga la página e inténtalo de nuevo.' });
+    }
     db.prepare('INSERT INTO contact_messages (name, email, message, page, ip_hash, country) VALUES (?, ?, ?, ?, ?, ?)')
       .run(name?.trim() || null, email?.trim().toLowerCase() || null, message.trim(), page || null, hashIp(req.ip), lookupCountry(req.ip));
     return { ok: true };
@@ -126,6 +142,10 @@ export function registerFeedbackRoutes(app: FastifyInstance): void {
       roomId: string; role: 'host' | 'viewer'; rating: number;
       answers?: Record<string, string>; comment?: string; vid?: string;
     };
+
+    if (hasMojibake(body.comment)) {
+      return reply.code(400).send({ ok: false, error: 'Comentario con codificación inválida' });
+    }
 
     // Answers: every key must belong to the role's question set with a
     // valid enum value (the schema alone can't check per-role).
@@ -163,8 +183,8 @@ export function registerFeedbackRoutes(app: FastifyInstance): void {
  */
 export function queryFeedback(days: number): any {
   const rows = db.prepare(
-    "SELECT ts, room_id, role, rating, answers, comment, country FROM feedback WHERE ts >= datetime('now', ?) ORDER BY ts DESC"
-  ).all(`-${days} days`) as { ts: string; room_id: string; role: string; rating: number; answers: string; comment: string | null; country: string | null }[];
+    "SELECT id, ts, room_id, role, rating, answers, comment, country FROM feedback WHERE ts >= datetime('now', ?) ORDER BY ts DESC"
+  ).all(`-${days} days`) as { id: number; ts: string; room_id: string; role: string; rating: number; answers: string; comment: string | null; country: string | null }[];
 
   const distribution = [0, 0, 0, 0, 0];
   let sum = 0;
@@ -205,6 +225,6 @@ export function queryFeedback(days: number): any {
     distribution,
     roles,
     questions,
-    recent: rows.slice(0, 50),
+    recent: rows.slice(0, 50).map((r) => ({ ...r, answers: r.answers || '{}' })),
   };
 }

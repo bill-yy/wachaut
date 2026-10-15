@@ -659,6 +659,19 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     return queryFeedback(days);
   });
 
+  app.delete('/api/admin/feedback/:id', {
+    preHandler: requireAuth,
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { id } = req.params as { id: number };
+    const row = db.prepare('SELECT id, room_id, rating FROM feedback WHERE id = ?').get(id);
+    if (!row) return reply.code(404).send({ error: 'Feedback not found' });
+    db.prepare('DELETE FROM feedback WHERE id = ?').run(id);
+    auditLog(user.userId, user.username, `feedback_delete:${id}:${(row as any).rating}★`, req.ip, lookupCountry(req.ip));
+    return { success: true };
+  });
+
   // ── GET /users ───────────────────────────────────────────────────
   app.get('/api/admin/users', { preHandler: requireAuth }, async () => {
     return { users: listUsers() };

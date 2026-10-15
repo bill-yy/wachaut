@@ -6,7 +6,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import {
-    getContact, markContactRead, deleteContactMessage, getFeedback,
+    getContact, markContactRead, deleteContactMessage, getFeedback, deleteFeedback,
     type AdminContactPage, type AdminFeedback,
   } from '$lib/admin';
   import { adminSession } from '$lib/admin-session.svelte';
@@ -30,6 +30,7 @@
   let refreshing = $state(false);
 
   let confirmDelete = $state<number | null>(null);
+  let confirmDeleteFeedback = $state<number | null>(null);
   let deleteBusy = $state(false);
 
   onMount(() => {
@@ -94,6 +95,21 @@
       toast.success('Mensaje eliminado');
       confirmDelete = null;
       await load(0);
+    } catch (err: any) {
+      toast.error(err?.message || 'Error');
+    } finally {
+      deleteBusy = false;
+    }
+  }
+
+  async function runDeleteFeedback() {
+    if (confirmDeleteFeedback == null) return;
+    deleteBusy = true;
+    try {
+      await deleteFeedback(confirmDeleteFeedback);
+      toast.success('Valoración eliminada');
+      confirmDeleteFeedback = null;
+      await refreshFeedback();
     } catch (err: any) {
       toast.error(err?.message || 'Error');
     } finally {
@@ -295,7 +311,7 @@
     <Card class="mt-4 p-4">
       <h3 class="mb-3 text-sm font-bold text-[var(--text)]">Últimas valoraciones</h3>
       <div class="max-h-72 space-y-1.5 overflow-y-auto">
-        {#each feedback.recent as r (r.ts + r.room_id + r.rating)}
+        {#each feedback.recent as r (r.id)}
           <div class="flex items-start justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2.5 text-xs">
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
@@ -315,6 +331,9 @@
                 </p>
               {/if}
             </div>
+            <Button variant="ghost" size="sm" onclick={() => (confirmDeleteFeedback = r.id)} aria-label="Eliminar valoración">
+              <Trash2 size={14} aria-hidden="true" />
+            </Button>
           </div>
         {/each}
       </div>
@@ -322,13 +341,25 @@
   {/if}
 {/if}
 
-<!-- Delete confirmation -->
+<!-- Delete confirmations -->
 <Modal open={confirmDelete != null} label="Eliminar mensaje" title="Eliminar mensaje" onClose={() => { if (!deleteBusy) confirmDelete = null; }}>
   <div class="space-y-4">
     <p class="text-sm text-[var(--text-muted)]">El mensaje se eliminará permanentemente. ¿Seguro?</p>
     <div class="flex justify-end gap-2">
       <Button variant="ghost" onclick={() => (confirmDelete = null)} disabled={deleteBusy}>Cancelar</Button>
       <Button variant="danger" loading={deleteBusy} onclick={() => void runDelete()}>Eliminar</Button>
+    </div>
+  </div>
+</Modal>
+
+<Modal open={confirmDeleteFeedback != null} label="Eliminar valoración" title="Eliminar valoración" onClose={() => { if (!deleteBusy) confirmDeleteFeedback = null; }}>
+  <div class="space-y-4">
+    <p class="text-sm text-[var(--text-muted)]">
+      La valoración se eliminará permanentemente y dejará de contar en las medias. ¿Seguro?
+    </p>
+    <div class="flex justify-end gap-2">
+      <Button variant="ghost" onclick={() => (confirmDeleteFeedback = null)} disabled={deleteBusy}>Cancelar</Button>
+      <Button variant="danger" loading={deleteBusy} onclick={() => void runDeleteFeedback()}>Eliminar</Button>
     </div>
   </div>
 </Modal>

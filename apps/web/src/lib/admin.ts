@@ -376,9 +376,13 @@ export interface AdminFeedback {
   distribution: number[]; // index 0 => 1 star … index 4 => 5 stars
   roles: { host: number; viewer: number };
   questions: Record<'viewer' | 'host', { question: string; options: { value: string; count: number }[] }[]>;
-  recent: { ts: string; room_id: string | null; role: 'host' | 'viewer'; rating: number; answers: string; comment: string | null; country: string | null }[];
+  recent: { id: number; ts: string; room_id: string | null; role: 'host' | 'viewer'; rating: number; answers: string; comment: string | null; country: string | null }[];
 }
 
 export function getFeedback(days = 7): Promise<AdminFeedback> {
   return request<AdminFeedback>(`/feedback?days=${days}`);
+}
+
+export function deleteFeedback(id: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/feedback/${id}`, { method: 'DELETE' });
 }

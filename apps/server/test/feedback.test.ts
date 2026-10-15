@@ -65,6 +65,22 @@ test('contact: validation rejects bad payloads', async () => {
   }
 });
 
+test('contact + feedback: reject mojibake (U+FFFD) text instead of storing garbage', async () => {
+  // A client that sent non-UTF-8 bytes produces the replacement char at
+  // parse time (information already lost) — reject with a clear 400.
+  const contact = await app.inject({
+    method: 'POST', url: '/api/contact',
+    payload: { message: 'Mensaje de verificaci\uFFFDn del formulario' },
+  });
+  assert.equal(contact.statusCode, 400);
+
+  const feedback = await app.inject({
+    method: 'POST', url: '/api/feedback',
+    payload: { roomId: 'room-moji-0001', role: 'viewer', rating: 5, comment: 'Todo perfect\uFFFD' },
+  });
+  assert.equal(feedback.statusCode, 400);
+});
+
 test('contact: rate limited past 5 per minute per IP', async () => {
   let last = 200;
   for (let i = 0; i < 8 && last !== 429; i++) {
@@ -187,6 +203,29 @@ test('feedback: admin aggregation (average, distribution, per-question counts)',
   const hostEmision = body.questions.host.find((q: any) => q.question.includes('emitiendo'));
   assert.equal(hostEmision.options.find((o: any) => o.value === 'facil').count, 1);
   assert.ok(body.recent.length === 3);
+  assert.ok(body.recent.every((r: any) => typeof r.id === 'number'), 'recent rows carry their id for deletion');
+});
+
+test('feedback: admin can delete an individual rating (audited)', async () => {
+  const auth = { authorization: `Bearer ${token}` };
+  db.prepare('DELETE FROM admin_audit_log').run();
+
+  const before = await app.inject({ method: 'GET', url: '/api/admin/feedback?days=7', headers: auth });
+  const firstId = before.json().recent[0].id;
+  const countBefore = before.json().count;
+
+  const del = await app.inject({ method: 'DELETE', url: `/api/admin/feedback/${firstId}`, headers: auth });
+  assert.equal(del.statusCode, 200);
+
+  const after = await app.inject({ method: 'GET', url: '/api/admin/feedback?days=7', headers: auth });
+  assert.equal(after.json().count, countBefore - 1, 'aggregates reflect the deletion');
+  assert.ok(!after.json().recent.some((r: any) => r.id === firstId));
+
+  const audited = db.prepare("SELECT COUNT(*) as n FROM admin_audit_log WHERE action LIKE 'feedback_delete:%'").get() as any;
+  assert.ok(audited.n >= 1, 'feedback deletion is audited');
+
+  const missing = await app.inject({ method: 'DELETE', url: '/api/admin/feedback/99999', headers: auth });
+  assert.equal(missing.statusCode, 404);
 });
 
 // ── Teardown ─────────────────────────────────────────────────────────
