@@ -129,6 +129,12 @@
 	<link rel="alternate" hreflang="es" href="https://wachaut.com/" />
 	<link rel="alternate" hreflang="en" href="https://wachaut.com/en/" />
 	<link rel="alternate" hreflang="x-default" href="https://wachaut.com/" />
+	<meta property="og:title" content={L['landing.title']} />
+	<meta property="og:description" content={L['landing.description']} />
+	<meta property="og:url" content="https://wachaut.com{locale === 'es' ? '/' : '/en/'}" />
+	<meta property="og:locale" content={locale === 'es' ? 'es_ES' : 'en_US'} />
+	<meta name="twitter:title" content={L['landing.title']} />
+	<meta name="twitter:description" content={L['landing.description']} />
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
@@ -280,6 +286,7 @@
 			<Brand size="sm" />
 			<div class="flex items-center gap-4">
 				<p class="text-xs text-[var(--text-subtle)]">{L['landing.footerTagline']} · {new Date().getFullYear()}</p>
+				<a href={locale === 'es' ? '/blog/' : '/en/blog/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerBlog']}</a>
 				<a href={locale === 'es' ? '/contacto/' : '/en/contacto/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerContact']}</a>
 				<a href={locale === 'es' ? '/privacidad/' : '/en/privacidad/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerPrivacy']}</a>
 			</div>

@@ -37,4 +37,50 @@
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
+  <url>
+    <loc>https://wachaut.com/blog/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wachaut.com/en/blog/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wachaut.com/blog/compartir-pantalla-online-gratis/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/free-online-screen-sharing/"/>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wachaut.com/blog/free-online-screen-sharing/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/free-online-screen-sharing/"/>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

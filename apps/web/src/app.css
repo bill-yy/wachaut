@@ -197,6 +197,11 @@
   .btn-ghost:hover { background-color: var(--surface-2); color: var(--text); }
   .btn-ghost:active { transform: scale(0.98); }
 
+  /* ── Article typography (blog pages use ArticleLayout) ── */
+  .prose-wachaut h2 {
+    font-family: var(--font-display);
+  }
+
   .btn-danger {
     @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
     background-color: color-mix(in srgb, var(--danger) 12%, transparent);

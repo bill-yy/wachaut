@@ -40,6 +40,7 @@ const es = {
 	'landing.footerTagline': 'Comparte tu pantalla con amigos',
 	'landing.footerContact': 'Contacto',
 	'landing.footerPrivacy': 'Privacidad',
+	'landing.footerBlog': 'Blog',
 	'landing.onboardingLabel': 'Bienvenida a Wachaut',
 	'landing.onboardingStep': 'Paso',
 	'landing.onboardingOf': 'de',
@@ -199,6 +200,17 @@ const es = {
 	'vroom.title': 'Wachaut — Únete a mi pantalla',
 	'vroom.titleEn': 'Wachaut — Join my screen',
 
+	// ── Blog / contenido SEO ─────────────────────────────────────────
+	'blog.hub': 'Blog',
+	'blog.byline': 'Por el equipo de Wachaut',
+	'blog.ctaTitle': 'Pruébalo ahora mismo',
+	'blog.ctaBody': 'Sin registro, sin instalar nada: abre sala, comparte el enlace y listo.',
+	'blog.ctaButton': 'Compartir mi pantalla',
+	'blog.hubTitle': 'Blog de Wachaut',
+	'blog.hubDescription': 'Guías sobre compartir pantalla, colaborar a distancia y sacarle partido a tu navegador.',
+	'blog.hubIntro': 'Guías prácticas para compartir pantalla y encontrar la herramienta adecuada en cada caso.',
+	'blog.back': '← Inicio',
+
 	// ── Errors del servidor (mapeo de mensajes conocidos) ────────────
 	'srv.maintenance': 'Servidor en mantenimiento. Vuelve a intentarlo en unos minutos.',
 	'srv.tooMany': 'Demasiadas peticiones.',
@@ -251,6 +263,7 @@ const en: Dict = {
 	'landing.footerTagline': 'Share your screen with friends',
 	'landing.footerContact': 'Contact',
 	'landing.footerPrivacy': 'Privacy',
+	'landing.footerBlog': 'Blog',
 	'landing.onboardingLabel': 'Welcome to Wachaut',
 	'landing.onboardingStep': 'Step',
 	'landing.onboardingOf': 'of',
@@ -409,6 +422,17 @@ const en: Dict = {
 	'vroom.anon': 'Anonymous',
 	'vroom.title': 'Wachaut — Join my screen',
 	'vroom.titleEn': 'Wachaut — Join my screen',
+
+	// ── Blog / SEO content ───────────────────────────────────────────
+	'blog.hub': 'Blog',
+	'blog.byline': 'By the Wachaut team',
+	'blog.ctaTitle': 'Try it right now',
+	'blog.ctaBody': 'No sign-up, nothing to install: open a room, share the link and you are live.',
+	'blog.ctaButton': 'Share my screen',
+	'blog.hubTitle': 'Wachaut Blog',
+	'blog.hubDescription': 'Guides on screen sharing, remote collaboration and getting more out of your browser.',
+	'blog.hubIntro': 'Practical guides on screen sharing and choosing the right tool for each case.',
+	'blog.back': '← Home',
 
 	// ── Server errors (known-message mapping) ────────────────────────
 	'srv.maintenance': 'Server under maintenance. Please try again in a few minutes.',

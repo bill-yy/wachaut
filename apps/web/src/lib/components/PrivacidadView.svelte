@@ -87,6 +87,12 @@
 	<link rel="canonical" href="https://wachaut.com{locale === 'es' ? '/privacidad/' : '/en/privacidad/'}" />
 	<link rel="alternate" hreflang="es" href="https://wachaut.com/privacidad/" />
 	<link rel="alternate" hreflang="en" href="https://wachaut.com/en/privacidad/" />
+	<meta property="og:title" content={L['privacidad.title']} />
+	<meta property="og:description" content={L['privacidad.description']} />
+	<meta property="og:url" content="https://wachaut.com{locale === 'es' ? '/privacidad/' : '/en/privacidad/'}" />
+	<meta property="og:locale" content={locale === 'es' ? 'es_ES' : 'en_US'} />
+	<meta name="twitter:title" content={L['privacidad.title']} />
+	<meta name="twitter:description" content={L['privacidad.description']} />
 </svelte:head>
 
 <div class="relative min-h-screen bg-app">

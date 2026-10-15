@@ -42,6 +42,12 @@
 	<link rel="canonical" href="https://wachaut.com{locale === 'es' ? '/contacto/' : '/en/contacto/'}" />
 	<link rel="alternate" hreflang="es" href="https://wachaut.com/contacto/" />
 	<link rel="alternate" hreflang="en" href="https://wachaut.com/en/contacto/" />
+	<meta property="og:title" content={L['contacto.title']} />
+	<meta property="og:description" content={L['contacto.description']} />
+	<meta property="og:url" content="https://wachaut.com{locale === 'es' ? '/contacto/' : '/en/contacto/'}" />
+	<meta property="og:locale" content={locale === 'es' ? 'es_ES' : 'en_US'} />
+	<meta name="twitter:title" content={L['contacto.title']} />
+	<meta name="twitter:description" content={L['contacto.description']} />
 </svelte:head>
 
 <div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
