@@ -12,7 +12,7 @@
   import { logout } from '$lib/admin';
   import Brand from '$lib/components/Brand.svelte';
   import Badge from '$lib/components/Badge.svelte';
-  import { LayoutDashboard, Users, LogOut, ShieldAlert } from 'lucide-svelte';
+  import { LayoutDashboard, Users, LogOut, ShieldAlert, ChartLine } from 'lucide-svelte';
 
   let { children }: { children: Snippet } = $props();
 
@@ -52,6 +52,14 @@
             >
               <LayoutDashboard size={16} aria-hidden="true" />
               <span class="hidden sm:inline">Dashboard</span>
+            </a>
+            <a
+              href="/admin/analytics"
+              class="btn-ghost flex items-center gap-1.5 text-sm"
+              aria-current={pathname.startsWith('/admin/analytics') ? 'page' : undefined}
+            >
+              <ChartLine size={16} aria-hidden="true" />
+              <span class="hidden sm:inline">Analítica</span>
             </a>
             <a
               href="/admin/users"

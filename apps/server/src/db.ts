@@ -69,8 +69,35 @@ db.exec(`
     countries     TEXT DEFAULT '{}'      -- JSON: { "ES": 42, "FR": 12, ... }
   );
 
+  CREATE TABLE IF NOT EXISTS pageviews (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts             TEXT NOT NULL DEFAULT (datetime('now')),
+    visitor_id     TEXT,
+    session_id     TEXT,
+    path           TEXT,
+    referrer       TEXT,
+    referrer_host  TEXT,
+    utm_source     TEXT,
+    utm_medium     TEXT,
+    utm_campaign   TEXT,
+    utm_term       TEXT,
+    utm_content    TEXT,
+    country        TEXT,
+    device         TEXT,
+    lang           TEXT,
+    ip_hash        TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_room_events_timestamp ON room_events(timestamp);
   CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON admin_audit_log(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_ts ON pageviews(ts);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_referrer_host ON pageviews(referrer_host);
 `);
 
 // ── Migrations (idempotent column/table additions) ─────────────────────
@@ -80,7 +107,9 @@ db.exec(`
 // applied.
 
 function hasColumn(table: string, column: string): boolean {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  // pragma_table_info() is a table-valued function, so the table name can be
+  // a bound parameter (no string interpolation into SQL).
+  const rows = db.prepare('SELECT name FROM pragma_table_info(?)').all(table) as { name: string }[];
   return rows.some((r) => r.name === column);
 }
 
@@ -113,6 +142,19 @@ db.exec(`
 // retires credentials created from ADMIN_BOOTSTRAP_PASSWORD or the CLI.
 if (ranTokenVersionMigration) {
   db.prepare('UPDATE admin_users SET must_change_password = 1').run();
+}
+
+// ── Persisted settings ───────────────────────────────────────────────
+// Generic key/value store for flags that must survive restarts (currently
+// the maintenance mode flag).
+
+export function getSetting(key: string): string | null {
+  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export function setSetting(key: string, value: string): void {
+  db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
 }
 
 export { db };

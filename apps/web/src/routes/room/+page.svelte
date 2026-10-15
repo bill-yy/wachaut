@@ -454,6 +454,19 @@
       setTimeout(() => { error = ''; }, 5000);
     });
 
+    // Server rejections (server full, one room per host, maintenance mode…).
+    // Without this the host page just sat on the loading spinner until the
+    // 10s timeout kicked in with a generic message.
+    socket.on('room:error', (data: any) => {
+      if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
+      loading = false;
+      const message = data?.message || 'Error al preparar la sala.';
+      toast.error(message);
+      // Surface it inline too — toasts are easy to miss on a full-screen spinner.
+      error = message;
+      setTimeout(() => { if (error === message) error = ''; }, 6000);
+    });
+
     socket.on('connect', () => {
       const wasConnected = connected;
       connected = true;
@@ -846,6 +859,21 @@
       </div>
       <h2 class="mb-2 text-xl font-semibold text-[var(--text)]">Preparando sala…</h2>
       <p class="text-sm text-[var(--text-muted)]">Creando sala segura para tu transmisión</p>
+      {#if error}
+        <p class="mt-4 text-sm text-[var(--danger)]" role="alert">{error}</p>
+      {/if}
+    </div>
+  </div>
+{:else if error}
+  <div class="flex min-h-screen items-center justify-center px-4">
+    <div class="card-static max-w-md p-8 text-center">
+      <AlertTriangle class="mx-auto mb-4 h-10 w-10 text-[var(--danger)]" aria-hidden="true" />
+      <h2 class="mb-2 text-lg font-semibold text-[var(--text)]">No se pudo abrir la sala</h2>
+      <p class="mb-6 text-sm text-[var(--text-muted)]" role="alert">{error}</p>
+      <a href="/" class="btn-secondary inline-flex items-center gap-2">
+        <ArrowLeft class="h-4 w-4" aria-hidden="true" />
+        Volver al inicio
+      </a>
     </div>
   </div>
 {:else}

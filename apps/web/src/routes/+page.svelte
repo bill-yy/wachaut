@@ -25,16 +25,17 @@
 	let isCreating = $state(false);
 	let showOnboarding = $state(false);
 	let onboardingStep = $state(0);
-	let serviceOnline = $state(true);
+	// 'ok' | 'maintenance' | 'down' — from the server's public status route.
+	let serviceStatus = $state<'ok' | 'maintenance' | 'down'>('ok');
 
 	async function checkServiceStatus() {
 		try {
-			const wsUrl = import.meta.env.VITE_WS_URL || 'wss://api-wachaut.billytech.es';
-			const httpUrl = wsUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
-			const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(3000) });
-			serviceOnline = res.ok;
+			const res = await fetch('/api/status', { signal: AbortSignal.timeout(3000) });
+			if (!res.ok) throw new Error('bad status');
+			const data = await res.json();
+			serviceStatus = data.maintenance ? 'maintenance' : 'ok';
 		} catch {
-			serviceOnline = false;
+			serviceStatus = 'down';
 		}
 	}
 
@@ -146,14 +147,16 @@
 
 <div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
 	<!-- Nav -->
-	<nav class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
-		<Brand size="md" />
-		{#if serviceOnline}
-			<Pill tone="success" pulse><span class="hidden sm:inline">Servicio activo</span><span class="sm:hidden">Activo</span></Pill>
-		{:else}
-			<Pill tone="danger"><span class="hidden sm:inline">Servicio no disponible</span><span class="sm:hidden">Caído</span></Pill>
-		{/if}
-	</nav>
+		<nav class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5">
+			<Brand size="md" />
+			{#if serviceStatus === 'ok'}
+				<Pill tone="success" pulse><span class="hidden sm:inline">Servicio activo</span><span class="sm:hidden">Activo</span></Pill>
+			{:else if serviceStatus === 'maintenance'}
+				<Pill tone="warning"><span class="hidden sm:inline">En mantenimiento</span><span class="sm:hidden">Mantenimiento</span></Pill>
+			{:else}
+				<Pill tone="danger"><span class="hidden sm:inline">Servicio no disponible</span><span class="sm:hidden">Caído</span></Pill>
+			{/if}
+		</nav>
 
 	<!-- Hero -->
 	<main class="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-4 py-12 lg:flex-row lg:items-center lg:gap-16 lg:text-left">

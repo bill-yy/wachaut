@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Brand from '$lib/components/Brand.svelte';
-	import { Shield, Lock, Eye, Server, Cookie, Mailbox } from 'lucide-svelte';
+	import { Shield, Lock, Eye, Server, Cookie, Mailbox, BarChart3 } from 'lucide-svelte';
 </script>
 
 <svelte:head>
@@ -83,14 +83,38 @@
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">Lo que no hacemos</h2>
 				</div>
-				<ul class="space-y-3 text-sm text-[var(--text-muted)]">
-					<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No guardamos tu pantalla ni tu audio en ningún servidor.</span></li>
-					<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No usamos cookies de seguimiento ni publicidad.</span></li>
-					<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No vendemos ni compartimos datos con terceros.</span></li>
-					<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No te pedimos que te registres ni des tus datos personales.</span></li>
-					<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No usamos analíticas ni píxeles de seguimiento.</span></li>
-				</ul>
-			</div>
+					<ul class="space-y-3 text-sm text-[var(--text-muted)]">
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No guardamos tu pantalla ni tu audio en ningún servidor.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No usamos cookies de seguimiento, publicidad ni rastreadores de terceros.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No vendemos ni compartimos datos con terceros.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No te pedimos que te registres ni des tus datos personales.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--danger)]">✕</span><span>No hacemos perfilado ni seguimiento entre webs.</span></li>
+					</ul>
+				</div>
+
+				<!-- Estadísticas anónimas -->
+				<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+					<div class="mb-3 flex items-center gap-3">
+						<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
+							<BarChart3 class="h-5 w-5 text-[var(--text-muted)]" />
+						</span>
+						<h2 class="text-lg font-bold text-[var(--text)]">Estadísticas de uso anónimas</h2>
+					</div>
+					<p class="mb-3 text-sm leading-relaxed text-[var(--text-muted)]">
+						Para saber cuánta gente usa Wachaut y desde dónde llega (por ejemplo, qué nos trae visitantes
+						de Google o de una campaña), medimos visitas de forma anónima y agregada:
+					</p>
+					<ul class="space-y-2 text-sm text-[var(--text-muted)]">
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--brand)]">•</span><span>Páginas visitadas, web de origen (referrer), país aproximado, tipo de dispositivo e idioma.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--brand)]">•</span><span>Parámetros de campaña (UTM) presentes en el enlace, si los hay.</span></li>
+						<li class="flex gap-3"><span class="mt-0.5 text-[var(--brand)]">•</span><span>Un identificador aleatorio generado en tu navegador — no vinculado a ninguna cuenta ni dato personal (no existen).</span></li>
+					</ul>
+					<p class="mt-3 text-sm leading-relaxed text-[var(--text-muted)]">
+						<strong class="text-[var(--text)]">Qué no guardamos:</strong> tu IP en claro (solo un hash con sal,
+						irreversible), nada que permita identificarte, y ningún dato de terceros. Estos registros se
+						eliminan a los 120 días.
+					</p>
+				</div>
 
 			<!-- localStorage -->
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">

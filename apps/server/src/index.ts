@@ -9,6 +9,7 @@ import { db } from './db.js';
 import { bootstrapAdmin } from './admin/auth.js';
 import { registerAdminRoutes, isMaintenanceMode, cleanupLoginAttempts, type ServerState } from './admin/routes.js';
 import { rollupTrafficStats } from './stats.js';
+import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
 import {
   pinHash,
   pinEquals,
@@ -53,6 +54,9 @@ const fastify = Fastify({
   // Trust the proxy (Traefik) so req.ip and socket.handshake.address reflect
   // the real client IP from X-Forwarded-For, not the proxy's IP.
   trustProxy: true,
+  // Strict schema validation: unknown body properties must be a 400, not
+  // silently stripped (Ajv's removeAdditional default would drop them).
+  ajv: { customOptions: { removeAdditional: false, allErrors: true } },
 });
 
 // Enable CORS
@@ -189,6 +193,9 @@ setInterval(() => {
   // Cleanup admin login rate limit entries (slow memory leak otherwise —
   // entries keyed by attacker-controlled IPs were never deleted).
   cleanupLoginAttempts(nowMs);
+  // Cleanup analytics rate limit + prune pageviews past the retention window.
+  cleanupTrackRateLimits(nowMs);
+  purgeOldPageviews();
   // Refresh today's traffic_stats row from room_events (idempotent upsert).
   rollupTrafficStats(now);
 
@@ -292,6 +299,13 @@ io.on('connection', (socket) => {
   socket.on('host:create-room', ({ pin, roomId: requestedRoomId }: { pin: string; roomId?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
+      return;
+    }
+
+    // Maintenance mode: no new rooms (existing rooms keep draining until
+    // they close on their own — nobody is cut off mid-broadcast).
+    if (isMaintenanceMode()) {
+      socket.emit('room:error', { message: 'Servidor en mantenimiento. Vuelve a intentarlo en unos minutos.' });
       return;
     }
 
@@ -436,6 +450,12 @@ io.on('connection', (socket) => {
   socket.on('viewer:join', ({ roomId, pin, username }: { roomId: string; pin: string; username?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
+      return;
+    }
+
+    // Maintenance mode: no new viewers either (hosts already in a room stay).
+    if (isMaintenanceMode()) {
+      socket.emit('room:error', { message: 'Servidor en mantenimiento. Vuelve a intentarlo en unos minutos.' });
       return;
     }
 
@@ -632,6 +652,9 @@ await fastify.register(async (adminScope) => {
   await adminScope.register(rateLimit, { global: true, max: 120, timeWindow: '1 minute' });
   registerAdminRoutes(adminScope, adminState);
 });
+
+// Public analytics routes (own rate limit, outside the admin scope).
+registerAnalyticsRoutes(fastify, isMaintenanceMode, () => rooms.size);
 
 // Start server
 const PORT = parseInt(process.env.PORT || '3001');

@@ -29,7 +29,8 @@ import {
 } from './auth.js';
 import { verifyTotp, generateTotpSecret, totpUri } from './totp.js';
 import { findViewerInRoom, removeViewer } from '../room-store.js';
-import { db } from '../db.js';
+import { queryAnalytics } from '../analytics.js';
+import { db, getSetting, setSetting } from '../db.js';
 
 // ── Rate limiting for login attempts (in-memory, per IP) ─────────────
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -59,11 +60,18 @@ export function cleanupLoginAttempts(nowMs: number = Date.now()): void {
   }
 }
 
-// ── Maintenance mode (global flag) ───────────────────────────────────
-let maintenanceMode = false;
+// ── Maintenance mode ─────────────────────────────────────────────────
+// In-memory flag for O(1) checks, mirrored into app_settings so it survives
+// restarts (loaded on first import).
+let maintenanceMode = getSetting('maintenance') === '1';
 
 export function isMaintenanceMode(): boolean {
   return maintenanceMode;
+}
+
+export function setMaintenanceMode(enabled: boolean): void {
+  maintenanceMode = enabled;
+  setSetting('maintenance', enabled ? '1' : '0');
 }
 
 // ── Country lookup ───────────────────────────────────────────────────
@@ -410,9 +418,24 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       return forbidden(req, reply, 'toggle maintenance mode');
     }
     const { enabled } = req.body as { enabled: boolean };
-    maintenanceMode = enabled;
+    setMaintenanceMode(enabled);
     auditLog(user.userId, user.username, enabled ? 'maintenance_on' : 'maintenance_off', req.ip, lookupCountry(req.ip));
     return { maintenance: maintenanceMode };
+  });
+
+  // ── GET /analytics — traffic analytics (SEO/SEM) ──────────────────
+  app.get('/api/admin/analytics', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: { days: { type: 'integer', minimum: 1, maximum: 90, default: 7 } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest) => {
+    const { days } = req.query as { days: number };
+    return queryAnalytics(days);
   });
 
   // ── GET /users ───────────────────────────────────────────────────

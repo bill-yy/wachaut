@@ -142,6 +142,29 @@ export function getStats(): Promise<AdminStats> {
   return request<AdminStats>('/stats');
 }
 
+// ── Analytics (SEO/SEM) ──────────────────────────────────────────────
+
+export interface AdminAnalytics {
+  today: {
+    visitors: number;
+    sessions: number;
+    pageviews: number;
+    rooms: number;
+    viewers: number;
+    delta: Record<'visitors' | 'sessions' | 'pageviews' | 'rooms' | 'viewers', number | null>;
+  };
+  series: { date: string; visitors: number; sessions: number; pageviews: number; rooms: number; viewers: number }[];
+  referrers: { host: string; sessions: number; visitors: number }[];
+  pages: { path: string; views: number; visitors: number }[];
+  campaigns: { source: string; medium: string | null; campaign: string | null; sessions: number; visitors: number }[];
+  countries: { country: string; visitors: number }[];
+  devices: { device: string; sessions: number }[];
+}
+
+export function getAnalytics(days = 7): Promise<AdminAnalytics> {
+  return request<AdminAnalytics>(`/analytics?days=${days}`);
+}
+
 // ── Security + audit ─────────────────────────────────────────────────
 
 export interface AdminSecurity {
