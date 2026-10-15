@@ -5,6 +5,8 @@
 	import { SfuClient } from '$lib/sfu-client';
 	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
 	import { captureClientError } from '$lib/error-report';
+	import { hasRated } from '$lib/feedback';
+	import RatingCard from '$lib/components/RatingCard.svelte';
 	import {
 		playHostMuted,
 		playChatMessage,
@@ -30,7 +32,7 @@
 	const roomId = $derived(page.params.roomId);
 
 	// --- Connection state ---
-	type Status = 'idle' | 'connecting' | 'auth' | 'waiting' | 'live' | 'error' | 'disconnected' | 'reconnecting';
+	type Status = 'idle' | 'connecting' | 'auth' | 'waiting' | 'live' | 'ended' | 'error' | 'disconnected' | 'reconnecting';
 	let status = $state<Status>('idle');
 	let errorMessage = $state('');
 	let pin = $state('');
@@ -332,8 +334,10 @@
 
 		socket.on('room:closed', () => {
 			if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
-			errorMessage = 'La sala se cerró';
-			status = 'error';
+			// The broadcast ended — dedicated screen with a rating prompt
+			// instead of the generic error state.
+			status = 'ended';
+			errorMessage = '';
 			sfuClient?.disconnect();
 			sfuClient = null;
 			stopStatsPolling();
@@ -683,6 +687,18 @@
 			{#if status === 'idle'}
 				<div class="flex items-center justify-center" style="min-height: 60vh;">
 					<ViewerAuth bind:username bind:pin onConnect={connect} />
+				</div>
+			{:else if status === 'ended'}
+				<!-- Broadcast ended: dedicated screen with a rating prompt -->
+				<div class="flex flex-col items-center justify-center gap-6 py-10" style="min-height: 60vh;">
+					<div class="text-center">
+						<h1 class="mb-2 text-2xl font-bold text-[var(--text)]">La retransmisión ha terminado</h1>
+						<p class="text-sm text-[var(--text-muted)]">Gracias por acompañarnos.</p>
+					</div>
+					{#if !hasRated(roomId)}
+						<RatingCard roomId={roomId} role="viewer" onDone={() => {}} />
+					{/if}
+					<a href="/" class="btn-secondary">← Volver al inicio</a>
 				</div>
 			{:else}
 				<ViewerStatus

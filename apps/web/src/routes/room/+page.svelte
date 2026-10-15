@@ -4,6 +4,8 @@
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
   import { captureClientError } from '$lib/error-report';
+  import { hasRated } from '$lib/feedback';
+  import RatingCard from '$lib/components/RatingCard.svelte';
   import {
     playViewerJoin,
     playViewerLeave,
@@ -775,10 +777,23 @@
   }
 
   // ─── Navigation ─────────────────────────────────────────────────────
+  // Terminate the broadcast: tear everything down, then ask for a quick
+  // rating (once per room) before leaving.
+  let showRating = $state(false);
+
   function leaveRoom() {
     stopSharing();
     clearHostSession();
     if (socket) socket.disconnect();
+    if (roomId && !hasRated(roomId)) {
+      showRating = true; // finishLeave() runs on submit/skip
+      return;
+    }
+    finishLeave();
+  }
+
+  function finishLeave() {
+    showRating = false;
     goto('/');
   }
 
@@ -931,6 +946,20 @@
       Salir
     </button>
   </div>
+</Modal>
+
+<!-- Rating modal (shown once after ending the broadcast) -->
+<Modal
+  open={showRating}
+  title="¿Qué tal fue la retransmisión?"
+  label="Valorar la retransmisión"
+  size="md"
+  closeOnBackdrop={false}
+  onClose={finishLeave}
+>
+  {#if roomId}
+    <RatingCard roomId={roomId} role="host" onDone={finishLeave} />
+  {/if}
 </Modal>
 
 <!-- Main Container -->

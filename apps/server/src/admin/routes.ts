@@ -30,6 +30,7 @@ import {
 import { verifyTotp, generateTotpSecret, totpUri } from './totp.js';
 import { findViewerInRoom, removeViewer } from '../room-store.js';
 import { queryAnalytics } from '../analytics.js';
+import { queryFeedback } from '../feedback.js';
 import { db, getSetting, setSetting } from '../db.js';
 
 // ── Rate limiting for login attempts (in-memory, per IP) ─────────────
@@ -238,6 +239,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
 
     const openErrors = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE status != 'resolved'").get() as { n: number }).n;
     const errors24h = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE last_seen >= datetime('now', '-1 day')").get() as { n: number }).n;
+    const contactUnread = (db.prepare('SELECT COUNT(*) as n FROM contact_messages WHERE read = 0').get() as { n: number }).n;
 
     return {
       rooms: roomCount,
@@ -248,6 +250,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       uptime: process.uptime(),
       memory: Math.round(process.memoryUsage().rss / 1024 / 1024), // MB
       errors: { open: openErrors, last24h: errors24h },
+      contact: { unread: contactUnread },
     };
   });
 
@@ -579,6 +582,81 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       },
       events,
     };
+  });
+
+  // ── Contact messages: list / mark read / delete ────────────────────
+
+  app.get('/api/admin/contact', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+          offset: { type: 'integer', minimum: 0, default: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest) => {
+    const { limit, offset } = req.query as { limit: number; offset: number };
+    const total = (db.prepare('SELECT COUNT(*) as n FROM contact_messages').get() as { n: number }).n;
+    const unread = (db.prepare('SELECT COUNT(*) as n FROM contact_messages WHERE read = 0').get() as { n: number }).n;
+    const messages = db.prepare(
+      'SELECT id, ts, name, email, message, page, country, read FROM contact_messages ORDER BY ts DESC LIMIT ? OFFSET ?'
+    ).all(limit, offset);
+    return { total, unread, messages };
+  });
+
+  app.post('/api/admin/contact/:id/read', {
+    preHandler: requireAuth,
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+      body: {
+        type: 'object',
+        required: ['read'],
+        properties: { read: { type: 'boolean' } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { id } = req.params as { id: number };
+    const { read } = req.body as { read: boolean };
+    const target = db.prepare('SELECT id FROM contact_messages WHERE id = ?').get(id);
+    if (!target) return reply.code(404).send({ error: 'Message not found' });
+    db.prepare('UPDATE contact_messages SET read = ? WHERE id = ?').run(read ? 1 : 0, id);
+    auditLog(user.userId, user.username, `contact_read:${id}:${read ? 1 : 0}`, req.ip, lookupCountry(req.ip));
+    return { success: true };
+  });
+
+  app.delete('/api/admin/contact/:id', {
+    preHandler: requireAuth,
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { id } = req.params as { id: number };
+    const target = db.prepare('SELECT id FROM contact_messages WHERE id = ?').get(id);
+    if (!target) return reply.code(404).send({ error: 'Message not found' });
+    db.prepare('DELETE FROM contact_messages WHERE id = ?').run(id);
+    auditLog(user.userId, user.username, `contact_delete:${id}`, req.ip, lookupCountry(req.ip));
+    return { success: true };
+  });
+
+  // ── Feedback: aggregated ratings + recent ─────────────────────────
+
+  app.get('/api/admin/feedback', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: { days: { type: 'integer', minimum: 1, maximum: 90, default: 7 } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest) => {
+    const { days } = req.query as { days: number };
+    return queryFeedback(days);
   });
 
   // ── GET /users ───────────────────────────────────────────────────

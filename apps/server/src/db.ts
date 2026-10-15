@@ -133,6 +133,31 @@ db.exec(`
     viewers_affected INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS contact_messages (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       TEXT NOT NULL DEFAULT (datetime('now')),
+    name     TEXT,
+    email    TEXT,
+    message  TEXT NOT NULL,
+    page     TEXT,
+    ip_hash  TEXT,
+    country  TEXT,
+    read     INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         TEXT NOT NULL DEFAULT (datetime('now')),
+    room_id    TEXT,
+    role       TEXT NOT NULL,         -- 'host' | 'viewer'
+    rating     INTEGER NOT NULL,      -- 1..5 stars
+    answers    TEXT DEFAULT '{}',     -- JSON: {questionKey: enumValue}
+    comment    TEXT,
+    visitor_id TEXT,
+    ip_hash    TEXT,
+    country    TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_room_events_timestamp ON room_events(timestamp);
   CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON admin_audit_log(timestamp);
   CREATE INDEX IF NOT EXISTS idx_pageviews_ts ON pageviews(ts);
@@ -142,6 +167,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_error_events_ts ON error_events(ts);
   CREATE INDEX IF NOT EXISTS idx_error_events_group ON error_events(group_id);
   CREATE INDEX IF NOT EXISTS idx_connection_events_ts ON connection_events(ts);
+  CREATE INDEX IF NOT EXISTS idx_contact_ts ON contact_messages(ts);
+  CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback(ts);
 `);
 
 // ── Migrations (idempotent column/table additions) ─────────────────────

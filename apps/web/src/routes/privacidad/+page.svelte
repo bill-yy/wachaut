@@ -153,12 +153,11 @@
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">Contacto</h2>
 				</div>
-				<p class="text-sm text-[var(--text-muted)]">
-					¿Preguntas sobre privacidad? Escríbenos a
-					<a href="mailto:hola@wachaut.billytech.es" class="text-[var(--brand)] underline-offset-2 hover:underline">
-						hola@wachaut.billytech.es
-					</a>
-				</p>
+    <p class="text-sm leading-relaxed text-[var(--text-muted)]">
+        ¿Preguntas sobre privacidad o cualquier otra cosa? Escríbenos desde nuestro
+        <a href="/contacto" class="text-[var(--brand)] underline-offset-2 hover:underline">formulario de contacto</a>
+        — tu mensaje llega directamente a nuestro equipo.
+    </p>
 			</div>
 		</div>
 

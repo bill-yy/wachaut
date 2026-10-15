@@ -10,6 +10,7 @@ import { bootstrapAdmin } from './admin/auth.js';
 import { registerAdminRoutes, isMaintenanceMode, cleanupLoginAttempts, type ServerState } from './admin/routes.js';
 import { rollupTrafficStats } from './stats.js';
 import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
+import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
 import {
   registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
@@ -219,6 +220,7 @@ setInterval(() => {
     // past their retention windows.
     cleanupTrackRateLimits(nowMs);
     cleanupErrorRateLimits(nowMs);
+    cleanupFeedbackRateLimits(nowMs);
     purgeOldPageviews();
     purgeOldErrors();
     // Refresh today's traffic_stats row from room_events (idempotent upsert).
@@ -725,6 +727,9 @@ registerAnalyticsRoutes(fastify, isMaintenanceMode, () => rooms.size);
 
 // Public error beacon (web) + secret-authenticated server/sfu reports.
 registerErrorRoutes(fastify);
+
+// Public contact form + post-broadcast feedback.
+registerFeedbackRoutes(fastify);
 
 // Drain the SFU's in-memory error ring into the central store. Called from
 // the 5-min sweeper — if the SFU is unreachable the buffer simply waits.

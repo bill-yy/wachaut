@@ -268,8 +268,9 @@
 		<div class="mx-auto flex max-w-5xl flex-col items-center gap-3 sm:flex-row sm:justify-between">
 			<Brand size="sm" />
 			<div class="flex items-center gap-4">
-				<p class="text-xs text-[var(--text-subtle)]">Comparte tu pantalla con amigos · {new Date().getFullYear()}</p>
-				<a href="/privacidad" class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">Privacidad</a>
+            <p class="text-xs text-[var(--text-subtle)]">Comparte tu pantalla con amigos · {new Date().getFullYear()}</p>
+            <a href="/contacto" class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">Contacto</a>
+            <a href="/privacidad" class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">Privacidad</a>
 			</div>
 		</div>
 	</footer>

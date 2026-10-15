@@ -106,6 +106,7 @@ export interface AdminMetrics {
   uptime: number;
   memory: number;
   errors: { open: number; last24h: number };
+  contact: { unread: number };
 }
 
 export function getMetrics(): Promise<AdminMetrics> {
@@ -344,4 +345,40 @@ export interface AdminConnections {
 
 export function getConnections(days = 7): Promise<AdminConnections> {
   return request<AdminConnections>(`/connections?days=${days}`);
+}
+
+// ── Contact + feedback ───────────────────────────────────────────────
+
+export interface AdminContactPage {
+  total: number;
+  unread: number;
+  messages: { id: number; ts: string; name: string | null; email: string | null; message: string; page: string | null; country: string | null; read: number }[];
+}
+
+export function getContact(limit = 50, offset = 0): Promise<AdminContactPage> {
+  return request<AdminContactPage>(`/contact?limit=${limit}&offset=${offset}`);
+}
+
+export function markContactRead(id: number, read: boolean): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/contact/${id}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ read }),
+  });
+}
+
+export function deleteContactMessage(id: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/contact/${id}`, { method: 'DELETE' });
+}
+
+export interface AdminFeedback {
+  count: number;
+  average: number | null;
+  distribution: number[]; // index 0 => 1 star … index 4 => 5 stars
+  roles: { host: number; viewer: number };
+  questions: Record<'viewer' | 'host', { question: string; options: { value: string; count: number }[] }[]>;
+  recent: { ts: string; room_id: string | null; role: 'host' | 'viewer'; rating: number; answers: string; comment: string | null; country: string | null }[];
+}
+
+export function getFeedback(days = 7): Promise<AdminFeedback> {
+  return request<AdminFeedback>(`/feedback?days=${days}`);
 }
