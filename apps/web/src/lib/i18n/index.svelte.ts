@@ -29,9 +29,16 @@ export function setLocale(locale: Locale): void {
   try { localStorage.setItem(LANG_KEY, locale); } catch { /* private mode */ }
 }
 
-/** Translate a key in the active locale (falls back to Spanish, then the key). */
-export function t(key: DictKey): string {
-  return dict[i18n.locale][key] ?? dict.es[key] ?? key;
+/** Translate a key in the active locale (falls back to Spanish, then the key).
+ *  `{name}` placeholders in the value are replaced with `params`. */
+export function t(key: DictKey, params?: Record<string, string | number>): string {
+  let text = dict[i18n.locale][key] ?? dict.es[key] ?? key;
+  if (params) {
+    for (const [name, value] of Object.entries(params)) {
+      text = text.replaceAll(`{${name}}`, String(value));
+    }
+  }
+  return text;
 }
 
 /**

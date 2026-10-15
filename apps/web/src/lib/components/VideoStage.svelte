@@ -9,6 +9,7 @@
 		StopCircle,
 		Radio,
 	} from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import { formatDuration } from '$lib/utils/format';
 
 	interface Props {
@@ -90,10 +91,10 @@
 
 			<!-- Heading -->
 			<h3 class="mb-2 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
-				Listo para compartir
+				{t('room.readyToShare')}
 			</h3>
 			<p class="mb-6 max-w-xs text-center text-sm text-[var(--text-muted)]">
-				Pulsa el botón para mostrar tu pantalla a tus espectadores
+				{t('room.readyToShareBody')}
 			</p>
 
 			<!-- Waiting indicator -->
@@ -102,7 +103,7 @@
 					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--brand)] opacity-75"></span>
 					<span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--brand)]"></span>
 				</span>
-				<span class="text-xs font-medium text-[var(--text-subtle)]">Esperando para transmitir</span>
+				<span class="text-xs font-medium text-[var(--text-subtle)]">{t('room.waitingToBroadcast')}</span>
 			</div>
 		</div>
 	{/if}
@@ -116,8 +117,8 @@
 			<button
 				onclick={onToggleMute}
 				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
-				title={muted ? 'Activar audio' : 'Silenciar audio'}
-				aria-label={muted ? 'Activar audio' : 'Silenciar audio'}
+				title={muted ? t('room.unmuteAudio') : t('room.muteAudio')}
+				aria-label={muted ? t('room.unmuteAudio') : t('room.muteAudio')}
 			>
 				{#if muted}
 					<VolumeX class="h-5 w-5 text-[var(--danger)]" />
@@ -129,8 +130,8 @@
 			<button
 				onclick={onToggleFullscreen}
 				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
-				title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-				aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+				title={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
+				aria-label={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
 			>
 				{#if fullscreen}
 					<Minimize class="h-5 w-5 text-white" />
@@ -143,8 +144,8 @@
 				<button
 					onclick={onStopRecording}
 					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-all hover:bg-[var(--danger)] active:scale-95"
-					title="Detener grabación"
-					aria-label="Detener grabación"
+					title={t('room.stopRecording')}
+					aria-label={t('room.stopRecording')}
 				>
 					<span class="h-2.5 w-2.5 rounded-full bg-white" style="animation: pulseRecord 1s ease-in-out infinite;"></span>
 					<span class="font-mono text-xs font-semibold text-white">{formatDuration(recordingDuration)}</span>
@@ -165,8 +166,8 @@
 			<button
 				onclick={onStopSharing}
 				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-all hover:bg-[var(--danger)] active:scale-95"
-				title="Detener compartición"
-				aria-label="Detener compartición"
+				title={t('room.stopSharing')}
+				aria-label={t('room.stopSharing')}
 			>
 				<StopCircle class="h-5 w-5 text-white" />
 			</button>

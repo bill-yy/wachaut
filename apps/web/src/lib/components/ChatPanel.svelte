@@ -75,7 +75,7 @@
 		bind:this={container}
 		class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3"
 		aria-live="polite"
-		aria-label="Mensajes de chat"
+		aria-label={t('comp.chatAria')}
 	>
 		{#if messages.length === 0}
 			<div class="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -85,8 +85,8 @@
 						<MessageCircle class="h-6 w-6 text-[var(--text-subtle)]" />
 					</div>
 				</div>
-				<p class="text-sm font-medium text-[var(--text-muted)]">Aún no hay mensajes</p>
-				<p class="mt-1 text-xs text-[var(--text-subtle)]">Los mensajes aparecerán aquí</p>
+				<p class="text-sm font-medium text-[var(--text-muted)]">{t('comp.chatNoMessages')}</p>
+				<p class="mt-1 text-xs text-[var(--text-subtle)]">{t('comp.chatMessagesHere')}</p>
 			</div>
 		{:else}
 			{#each messages.slice(-200) as msg, i (msg.id ?? `${msg.sender}-${msg.timestamp.getTime()}-${i}`)}
@@ -137,14 +137,14 @@
 				onkeydown={onKeydown}
 				{placeholder}
 				maxlength={maxLength}
-				aria-label="Mensaje de chat"
+				aria-label={t('comp.chatAria')}
 				class="input-field flex-1 !py-2.5"
 			/>
 			<button
 				onclick={onSend}
 				disabled={!value.trim()}
 				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl gradient-brand text-white transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
-				aria-label="Enviar mensaje"
+				aria-label={t('comp.chatSend')}
 			>
 				<Send class="h-4 w-4" />
 			</button>

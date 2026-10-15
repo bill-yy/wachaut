@@ -393,7 +393,7 @@
           sfu: sfuClient ? t('room.connected') : t('room.disconnected'),
           quality: presetLabel(qualityPreset)
         };
-        addSystemMessage(`Espectadores=${stats.viewers}, Conectado=${stats.connected}, Compartiendo=${stats.sharing}, Silenciado=${stats.muted}, Calidad=${stats.quality}`);
+        addSystemMessage(t('room.cmdStats', { viewers: stats.viewers, connected: stats.connected, sharing: stats.sharing, muted: stats.muted, quality: stats.quality }));
         return true;
       }
       case '/clear': {
@@ -409,7 +409,7 @@
         const viewerId = args[0];
         if (!socket) return true;
         socket.emit('host:kick', { roomId, viewerId });
-        addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
+        addSystemMessage(t('room.cmdKickSent', { viewerId }));
         return true;
       }
       default:
@@ -709,7 +709,7 @@
   let lastNotifiedPreset = qualityPreset;
   $effect(() => {
     if (qualityPreset !== lastNotifiedPreset && isSharing) {
-      showAutoAdaptNotification(`Calidad cambiada a ${presetLabel(qualityPreset)}. Aplicará al reiniciar la compartición.`);
+      showAutoAdaptNotification(t('room.presetChanged', { preset: presetLabel(qualityPreset) }));
     }
     lastNotifiedPreset = qualityPreset;
   });
@@ -765,7 +765,7 @@
     socket.emit('host:kick', { roomId, viewerId });
     // Remove locally + refresh from server.
     viewersList = viewersList.filter(v => v.viewerId !== viewerId);
-    addSystemMessage(`Solicitud de expulsión enviada para ${viewerId}`);
+    addSystemMessage(t('room.cmdKickSent', { viewerId }));
     requestViewersList();
   }
 
@@ -868,17 +868,17 @@
       </div>
     </div>
     <h1 class="mb-3 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
-      Compartir pantalla no disponible
+      {t('room.unsupportedTitle')}
     </h1>
     <p class="mb-2 max-w-sm text-sm text-[var(--text-muted)]">
-      Tu navegador o dispositivo no soporta la compartición de pantalla.
+      {t('room.unsupportedBody')}
     </p>
     <p class="mb-8 max-w-sm text-sm text-[var(--text-subtle)]">
-      Abre Wachaut en un ordenador con Chrome, Firefox, Edge o Safari para compartir tu pantalla.
+      {t('room.unsupportedAdvice')}
     </p>
     <a href="/" class="btn-secondary gap-2">
       <ArrowLeft class="h-4 w-4" />
-      Volver al inicio
+      {t('room.backHome')}
     </a>
   </div>
 {:else if loading}
@@ -888,8 +888,8 @@
         <Spinner size="lg" />
         <Eye class="absolute h-7 w-7 text-[var(--text-muted)]" />
       </div>
-      <h2 class="mb-2 text-xl font-semibold text-[var(--text)]">Preparando sala…</h2>
-      <p class="text-sm text-[var(--text-muted)]">Creando sala segura para tu transmisión</p>
+      <h2 class="mb-2 text-xl font-semibold text-[var(--text)]">{t('room.preparingRoom')}</h2>
+      <p class="text-sm text-[var(--text-muted)]">{t('room.preparingRoomBody')}</p>
       {#if error}
         <p class="mt-4 text-sm text-[var(--danger)]" role="alert">{error}</p>
       {/if}
@@ -899,7 +899,7 @@
   <div class="flex min-h-screen items-center justify-center px-4">
     <div class="card-static max-w-md p-8 text-center">
       <AlertTriangle class="mx-auto mb-4 h-10 w-10 text-[var(--danger)]" aria-hidden="true" />
-      <h2 class="mb-2 text-lg font-semibold text-[var(--text)]">No se pudo abrir la sala</h2>
+      <h2 class="mb-2 text-lg font-semibold text-[var(--text)]">{t('room.openRoomFail')}</h2>
       <p class="mb-6 text-sm text-[var(--text-muted)]" role="alert">{error}</p>
       <a href="/" class="btn-secondary inline-flex items-center gap-2">
         <ArrowLeft class="h-4 w-4" aria-hidden="true" />
@@ -934,13 +934,13 @@
 />
 
 <!-- Leave confirmation modal -->
-<Modal open={showLeaveModal} title="¿Salir de la sala?" label="Confirmar salida" size="sm" onClose={() => (showLeaveModal = false)}>
+<Modal open={showLeaveModal} title={t('room.leaveTitle')} label={t('room.leaveLabel')} size="sm" onClose={() => (showLeaveModal = false)}>
   <div class="mb-5 flex items-center gap-3">
     <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--danger)]/12">
       <AlertTriangle class="h-5 w-5 text-[var(--danger)]" />
     </span>
     <p class="text-sm text-[var(--text-muted)]">
-      Se cerrará la conexión con todos los espectadores y la sala será eliminada permanentemente.
+      {t('room.leaveBody')}
     </p>
   </div>
   <div class="flex gap-3">
@@ -948,13 +948,13 @@
       onclick={() => (showLeaveModal = false)}
       class="btn-secondary flex-1"
     >
-      Cancelar
+      {t('room.cancel')}
     </button>
     <button
       onclick={leaveRoom}
       class="btn-danger flex-1"
     >
-      Salir
+      {t('room.leave')}
     </button>
   </div>
 </Modal>
@@ -962,8 +962,8 @@
 <!-- Rating modal (shown once after ending the broadcast) -->
 <Modal
   open={showRating}
-  title="¿Qué tal fue la retransmisión?"
-  label="Valorar la retransmisión"
+  title={t('rating.title')}
+  label={t('rating.label')}
   size="md"
   closeOnBackdrop={false}
   onClose={finishLeave}
@@ -1017,7 +1017,7 @@
       <button
         class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
         onclick={() => (showChat = false)}
-        aria-label="Cerrar panel"
+        aria-label={t('room.closePanel')}
         tabindex="-1"
       ></button>
     {/if}

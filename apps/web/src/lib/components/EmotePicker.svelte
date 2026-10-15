@@ -1,7 +1,17 @@
 <script lang="ts">
 	import { SmilePlus } from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import { clickOutside } from '$lib/actions';
 	import { EMOTE_CATEGORIES } from '$lib/utils/emotes';
+	import type { DictKey } from '$lib/i18n/dict';
+
+	// Static labels live in utils/emotes.ts (shared); translate the known ones.
+	const CATEGORY_KEYS: Record<string, DictKey> = {
+		Reacciones: 'comp.emoteReactions',
+		Gestos: 'comp.emoteGestures',
+		Objetos: 'comp.emoteObjects',
+		Comida: 'comp.emoteFood',
+	};
 
 	interface Props {
 		/** Favorite emojis shown in the quick row (MRU). */
@@ -26,7 +36,7 @@
 			<button
 				onclick={() => onSend(emoji)}
 				class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-all hover:bg-[var(--border)] active:scale-90"
-				aria-label="Enviar reacción {emoji}"
+				aria-label={t('comp.sendReaction', { emoji })}
 			>
 				{emoji}
 			</button>
@@ -36,7 +46,7 @@
 			class="flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:bg-[var(--border)] active:scale-90 {open
 				? 'bg-[var(--border)] text-[var(--text)]'
 				: 'bg-[var(--surface-2)] text-[var(--text-subtle)]'}"
-			aria-label="Más emojis"
+			aria-label={t('comp.moreEmojis')}
 			aria-expanded={open}
 		>
 			<SmilePlus class="h-5 w-5" />
@@ -51,14 +61,14 @@
 			{#each EMOTE_CATEGORIES as category (category.label)}
 				<div class="mb-2 last:mb-0">
 					<p class="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
-						{category.label}
+						{CATEGORY_KEYS[category.label] ? t(CATEGORY_KEYS[category.label]) : category.label}
 					</p>
 					<div class="grid grid-cols-5 gap-1">
 						{#each category.emojis as emoji (emoji)}
 							<button
 								onclick={() => onSend(emoji)}
 								class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-all duration-150 hover:bg-[var(--border)] active:scale-90"
-								aria-label="Enviar {emoji}"
+								aria-label={t('comp.sendEmoji', { emoji })}
 							>
 								{emoji}
 							</button>

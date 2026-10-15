@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Volume2, Volume1, VolumeX, Maximize, Minimize, Share2, PictureInPicture2 } from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import type { FloatingReaction } from '$lib/types/room';
 
 	interface Props {
@@ -79,7 +80,7 @@
 	bind:this={containerEl}
 	class="group relative h-full w-full shrink-0 bg-black md:shrink md:flex-1"
 	role="region"
-	aria-label="Video en vivo"
+	aria-label={t('vroom.liveVideo')}
 >
 	<video
 		bind:this={videoEl}
@@ -89,7 +90,7 @@
 		onclick={onVideoClick}
 		use:pipEvents
 		class="h-full w-full cursor-pointer object-contain"
-		title="Haz clic para activar audio"
+		title={t('vroom.clickToUnmute')}
 	></video>
 
 	<!-- Top-left overlays -->
@@ -124,8 +125,8 @@
 			<button
 				onclick={onToggleMute}
 				class="flex h-11 w-11 items-center justify-center rounded-xl text-white transition-all hover:bg-white/15 active:scale-95"
-				title={muted ? 'Activar sonido' : 'Silenciar'}
-				aria-label={muted ? 'Activar sonido' : 'Silenciar'}
+				title={muted ? t('room.unmuteSound') : t('room.muteSound')}
+				aria-label={muted ? t('room.unmuteSound') : t('room.muteSound')}
 			>
 				{#if muted || volume === 0}
 					<VolumeX class="h-5 w-5" />
@@ -145,8 +146,8 @@
 					value={volume}
 					oninput={(e) => onVolumeChange(Number((e.target as HTMLInputElement).value))}
 					class="volume-slider flex-1"
-					title="Volumen: {volume}%"
-					aria-label="Volumen"
+					title={t('vroom.volume', { volume })}
+					aria-label={t('vroom.volumeLabel')}
 				/>
 				<span class="w-8 text-right font-mono text-[10px] text-white/60">{volume}%</span>
 			</div>
@@ -157,8 +158,8 @@
 			<button
 				onclick={onShare}
 				class="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95"
-				title="Compartir enlace"
-				aria-label="Compartir enlace"
+				title={t('vroom.shareLink')}
+				aria-label={t('vroom.shareLink')}
 			>
 				<Share2 class="h-4 w-4" />
 			</button>
@@ -167,8 +168,8 @@
 			<button
 				onclick={togglePip}
 				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all active:scale-95 {isPip ? 'bg-[var(--brand)]/20 text-[var(--brand)]' : 'text-white/70 hover:bg-white/15 hover:text-white'}"
-				title={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
-				aria-label={isPip ? 'Salir de Picture-in-Picture' : 'Picture-in-Picture'}
+				title={isPip ? t('vroom.exitPip') : t('vroom.pip')}
+				aria-label={isPip ? t('vroom.exitPip') : t('vroom.pip')}
 			>
 				<PictureInPicture2 class="h-4 w-4" />
 			</button>
@@ -177,8 +178,8 @@
 			<button
 				onclick={onToggleFullscreen}
 				class="flex h-11 w-11 items-center justify-center rounded-xl text-white/70 transition-all hover:bg-white/15 hover:text-white active:scale-95"
-				title={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-				aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+				title={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
+				aria-label={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
 			>
 				{#if fullscreen}
 					<Minimize class="h-5 w-5" />
@@ -191,8 +192,8 @@
 			<button
 				onclick={onShowShortcuts}
 				class="flex h-11 w-11 items-center justify-center rounded-xl font-mono text-xs text-white/50 transition-all hover:bg-white/15 hover:text-white/80 active:scale-95"
-				title="Atajos de teclado"
-				aria-label="Atajos de teclado"
+				title={t('vroom.shortcuts')}
+				aria-label={t('vroom.shortcuts')}
 			>
 				?
 			</button>

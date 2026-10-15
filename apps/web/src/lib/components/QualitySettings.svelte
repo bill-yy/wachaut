@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '$lib/i18n/index.svelte';
 	import { Volume2, VolumeX, Settings, Check, SlidersHorizontal, Type, Zap } from 'lucide-svelte';
 
 	export interface QualityPreset {
@@ -73,14 +74,14 @@
 			{:else}
 				<VolumeX class="h-4 w-4 text-[var(--text-subtle)]" />
 			{/if}
-			<span class="text-sm font-medium text-[var(--text)]">Incluir audio</span>
+			<span class="text-sm font-medium text-[var(--text)]">{t('room.includeAudio')}</span>
 		</div>
 		<button
 			onclick={() => (includeAudio = !includeAudio)}
 			class="relative h-6 w-10 rounded-full transition-colors duration-200 {includeAudio ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={includeAudio}
-			aria-label="Incluir audio"
+			aria-label={t('room.includeAudio')}
 		>
 			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {includeAudio ? 'translate-x-4' : 'translate-x-0'}"></span>
 		</button>
@@ -94,14 +95,14 @@
 			{:else}
 				<Zap class="h-4 w-4 text-[var(--text-muted)]" />
 			{/if}
-			<span class="text-sm font-medium text-[var(--text)]">Nitidez de texto</span>
+			<span class="text-sm font-medium text-[var(--text)]">{t('room.textSharpness')}</span>
 		</div>
 		<button
 			onclick={() => (contentHint = contentHint === 'detail' ? 'motion' : 'detail')}
 			class="relative h-6 w-10 rounded-full transition-colors duration-200 {contentHint === 'detail' ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={contentHint === 'detail'}
-			aria-label="Priorizar nitidez de texto"
+			aria-label={t('room.textSharpnessAria')}
 		>
 			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {contentHint === 'detail' ? 'translate-x-4' : 'translate-x-0'}"></span>
 		</button>
@@ -111,14 +112,14 @@
 	<div class="flex items-center justify-between p-2">
 		<div class="flex items-center gap-2">
 			<Settings class="h-4 w-4 text-[var(--text-muted)]" />
-			<span class="text-sm font-medium text-[var(--text)]">Adaptación automática</span>
+			<span class="text-sm font-medium text-[var(--text)]">{t('room.autoAdapt')}</span>
 		</div>
 		<button
 			onclick={() => (autoAdapt = !autoAdapt)}
 			class="relative h-6 w-10 rounded-full transition-colors duration-200 {autoAdapt ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={autoAdapt}
-			aria-label="Adaptación automática de calidad"
+			aria-label={t('room.autoAdaptAria')}
 		>
 			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {autoAdapt ? 'translate-x-4' : 'translate-x-0'}"></span>
 		</button>
@@ -163,8 +164,8 @@
 	>
 		<SlidersHorizontal class="h-4 w-4 text-[var(--brand)]" />
 		<div class="flex-1">
-			<span class="text-sm font-semibold text-[var(--text)]">Personalizado</span>
-			<p class="text-xs text-[var(--text-muted)]">Ajusta resolución, FPS y bitrate</p>
+			<span class="text-sm font-semibold text-[var(--text)]">{t('room.presetCustom')}</span>
+			<p class="text-xs text-[var(--text-muted)]">{t('room.presetCustomDesc')}</p>
 		</div>
 		{#if selected === 'custom'}
 			<span class="flex h-4 w-4 items-center justify-center rounded-full gradient-brand">
@@ -179,7 +180,7 @@
 			<!-- Resolution -->
 			<div>
 				<div class="mb-1.5 flex items-center justify-between">
-					<label for="q-res" class="text-xs font-medium text-[var(--text-muted)]">Resolución</label>
+					<label for="q-res" class="text-xs font-medium text-[var(--text-muted)]">{t('room.resolution')}</label>
 					<span class="font-mono text-xs font-bold text-[var(--brand)]">{resLabels[customRes] ?? '1080p'}</span>
 				</div>
 				<input
@@ -191,7 +192,7 @@
 					value={resIndex()}
 					oninput={onResSlider}
 					class="q-slider w-full"
-					aria-label="Resolución"
+					aria-label={t('room.resolution')}
 				/>
 			</div>
 
@@ -217,7 +218,7 @@
 			<!-- Bitrate -->
 			<div>
 				<div class="mb-1.5 flex items-center justify-between">
-					<label for="q-bitrate" class="text-xs font-medium text-[var(--text-muted)]">Bitrate</label>
+					<label for="q-bitrate" class="text-xs font-medium text-[var(--text-muted)]">{t('room.bitrate')}</label>
 					<span class="font-mono text-xs font-bold text-[var(--brand)]">{formatBitrate(customBitrate)}</span>
 				</div>
 				<input
@@ -228,7 +229,7 @@
 					step="500000"
 					bind:value={customBitrate}
 					class="q-slider w-full"
-					aria-label="Bitrate"
+					aria-label={t('room.bitrate')}
 				/>
 				<div class="mt-0.5 flex justify-between text-[10px] text-[var(--text-subtle)]">
 					<span>0.5 Mbps</span>

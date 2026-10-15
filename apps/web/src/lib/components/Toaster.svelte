@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
+	import { t as translate } from '$lib/i18n/index.svelte';
 	import { flip } from 'svelte/animate';
 	import { toast, type ToastKind } from '$lib/stores/toast.svelte';
 	import { prefersReducedMotion } from '$lib/utils/motion';
@@ -42,7 +43,7 @@
 			<p class="flex-1 text-sm text-[var(--text)]">{t.message}</p>
 			<button
 				class="shrink-0 rounded-md p-0.5 text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
-				aria-label="Cerrar notificación"
+				aria-label={translate('comp.closeToast')}
 				onclick={() => toast.dismiss(t.id)}
 			>
 				<X class="h-4 w-4" />

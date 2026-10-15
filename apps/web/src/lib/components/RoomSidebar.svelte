@@ -3,6 +3,7 @@
 	import Button from './Button.svelte';
 	import EmotePicker from './EmotePicker.svelte';
 	import QualitySettings, { type QualityPreset } from './QualitySettings.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import { Check, Link2, Settings, Share2, StopCircle, ArrowLeft, ChevronDown } from 'lucide-svelte';
 
 	interface Props {
@@ -81,7 +82,7 @@
 		<!-- PIN: prominent card with brand glow (display only) -->
 		<div class="relative overflow-hidden rounded-xl border border-[var(--brand)]/20 bg-[var(--surface-2)] p-3.5">
 			<div class="absolute -right-8 -top-8 h-20 w-20 rounded-full opacity-20 blur-2xl gradient-brand"></div>
-			<span class="relative text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">PIN de acceso</span>
+			<span class="relative text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">{t('room.pinLabel')}</span>
 			<p class="relative font-mono text-2xl font-bold tracking-[0.15em] text-[var(--brand)] sm:text-3xl sm:tracking-[0.25em]">{pin}</p>
 		</div>
 
@@ -92,11 +93,11 @@
 		>
 			{#if copiedInvite}
 				<Check class="h-3.5 w-3.5 shrink-0 text-[var(--success)]" />
-				<span class="text-[var(--success)]">¡Invitación copiada!</span>
+				<span class="text-[var(--success)]">{t('room.inviteCopied')}</span>
 			{:else}
 				<Link2 class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
-				<span>Copiar invitación</span>
-				<span class="ml-auto text-[10px] text-[var(--text-subtle)]">incluye PIN</span>
+				<span>{t('room.copyInvite')}</span>
+				<span class="ml-auto text-[10px] text-[var(--text-subtle)]">{t('room.includesPin')}</span>
 			{/if}
 		</button>
 	</div>
@@ -110,8 +111,8 @@
 				class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-all hover:bg-[var(--border)] active:scale-95"
 			>
 				<Settings class="h-3.5 w-3.5" />
-				Calidad
-				<span class="ml-auto text-[var(--text-subtle)]">{qualityPreset === 'custom' ? 'Personalizado' : presets[qualityPreset]?.label ?? '—'}</span>
+				{t('room.quality')}
+				<span class="ml-auto text-[var(--text-subtle)]">{qualityPreset === 'custom' ? t('room.presetCustom') : presets[qualityPreset]?.label ?? '—'}</span>
 				<ChevronDown class={`h-3.5 w-3.5 text-[var(--text-subtle)] transition-transform ${showSettings ? 'rotate-180' : ''}`} />
 			</button>
 
@@ -134,12 +135,12 @@
 				class="gradient-brand flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-all hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
 			>
 				<Share2 class="h-4 w-4" />
-				Compartir pantalla
+				{t('room.shareButton')}
 			</button>
 		{:else}
 			<Button variant="danger" onclick={onStop} class="w-full" size="lg">
 				<StopCircle class="h-4 w-4" />
-				Detener transmisión
+				{t('room.stopShare')}
 			</Button>
 
 			<!-- Emotes (only when sharing) -->
@@ -156,7 +157,7 @@
 
 		<Button variant="ghost" onclick={onLeave} size="sm" class="w-full !text-[var(--text-subtle)]">
 			<ArrowLeft class="h-3.5 w-3.5" />
-			Cerrar sala
+			{t('room.closeRoom')}
 		</Button>
 	</div>
 

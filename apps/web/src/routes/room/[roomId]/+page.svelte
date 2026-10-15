@@ -136,16 +136,16 @@
 			const parts = text.split(/\s+/);
 			const command = parts[0].toLowerCase();
 			if (command === '/help') {
-				addSystemMessage('Comandos: /help, /stats, /clear');
+				addSystemMessage(t('room.cmdHelpShort'));
 				chatInput = '';
 				return;
 			} else if (command === '/stats') {
-				addSystemMessage(`Estado: ${status} | Resolución: ${connectionStats.resolution || 'N/A'} | FPS: ${connectionStats.fps || 'N/A'} | Bitrate: ${connectionStats.bitrate || 'N/A'}`);
+				addSystemMessage(t('room.cmdStatsViewer', { status, resolution: connectionStats.resolution || 'N/A', fps: connectionStats.fps || 'N/A', bitrate: connectionStats.bitrate || 'N/A' }));
 				chatInput = '';
 				return;
 			} else if (command === '/clear') {
 				chatMessages = [];
-				addSystemMessage('Chat limpiado.');
+				addSystemMessage(t('room.cmdCleared'));
 				chatInput = '';
 				return;
 			}
@@ -474,7 +474,7 @@
 				await navigator.share({ title: i18n.locale === 'en' ? t('vroom.titleEn') : t('vroom.title'), url });
 			} else {
 				const ok = await copyText(url);
-				if (ok) toast.success('Enlace copiado');
+				if (ok) toast.success(t('room.linkCopied'));
 			}
 		} catch {
 			/* user cancelled share */
@@ -760,8 +760,8 @@
 			<button
 				onclick={toggleChat}
 				class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand"
-				title={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
-				aria-label={chatOpen ? 'Cerrar chat' : 'Abrir chat'}
+				title={chatOpen ? t('room.closeChat') : t('room.openChat')}
+				aria-label={chatOpen ? t('room.closeChat') : t('room.openChat')}
 			>
 				<MessageCircle class="h-6 w-6" />
 				{#if unreadCount > 0}
