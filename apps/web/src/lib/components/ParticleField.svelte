@@ -232,7 +232,9 @@
 	});
 
 	onDestroy(() => {
-		cancelAnimationFrame(animationFrame);
+		// cancelAnimationFrame does not exist during SSR (Node), where
+		// onDestroy runs synchronously at render time.
+		if (typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(animationFrame);
 		if (motionTimer) clearInterval(motionTimer);
 	});
 </script>

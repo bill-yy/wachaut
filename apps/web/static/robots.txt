@@ -1,0 +1,7 @@
+# Wachaut — room URLs are private ephemeral broadcast links, never indexed.
+User-agent: *
+Allow: /
+Disallow: /room
+Disallow: /admin
+
+Sitemap: https://wachaut.com/sitemap.xml

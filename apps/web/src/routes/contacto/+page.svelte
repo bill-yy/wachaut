@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { sendContact } from '$lib/feedback';
-  import Brand from '$lib/components/Brand.svelte';
-  import Button from '$lib/components/Button.svelte';
-  import Input from '$lib/components/Input.svelte';
-  import { toast } from '$lib/stores/toast.svelte';
-  import { Mailbox, Send, Check } from 'lucide-svelte';
+	import { sendContact } from '$lib/feedback';
+	import Brand from '$lib/components/Brand.svelte';
+	import Button from '$lib/components/Button.svelte';
+	import Input from '$lib/components/Input.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
+	import { Mailbox, Send, Check } from 'lucide-svelte';
 
   let name = $state('');
   let email = $state('');
@@ -29,6 +29,12 @@
     }
   }
 </script>
+
+<svelte:head>
+	<title>Contacto — Wachaut</title>
+	<meta name="description" content="Escríbenos: ideas, problemas o propuestas. Tu mensaje llega directamente a nuestro equipo." />
+	<link rel="canonical" href="https://wachaut.com/contacto" />
+</svelte:head>
 
 <div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
   <nav class="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-5">

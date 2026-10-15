@@ -123,11 +123,26 @@
 </script>
 
 <svelte:head>
-	<title>Wachaut — Comparte tu pantalla al instante</title>
+	<title>Wachaut — Comparte tu pantalla online al instante, sin registro</title>
 	<meta
 		name="description"
 		content="Comparte tu pantalla con amigos sin registro. Crea una sala, comparte el enlace y listo. Audio incluido. Chrome, Firefox, Edge y Safari."
 	/>
+	<link rel="canonical" href="https://wachaut.com/" />
+	<script type="application/ld+json">
+		{
+			"@context": "https://schema.org",
+			"@type": "WebApplication",
+			"name": "Wachaut",
+			"url": "https://wachaut.com/",
+			"applicationCategory": "CommunicationApplication",
+			"operatingSystem": "Web",
+			"description": "Comparte tu pantalla con amigos al instante. Sin registro, sin descargas, audio incluido y funciona en cualquier navegador.",
+			"inLanguage": "es",
+			"offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+			"featureList": "Compartir pantalla, audio incluido, chat en vivo, sin registro, sin descargas"
+		}
+	</script>
 </svelte:head>
 
 <div class="pointer-events-none fixed inset-0 z-0" aria-hidden="true">

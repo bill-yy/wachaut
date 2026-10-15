@@ -668,6 +668,11 @@
 	});
 </script>
 
+<svelte:head>
+	<!-- Ephemeral private broadcast pages must never be indexed. -->
+	<meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="min-h-screen bg-app">
