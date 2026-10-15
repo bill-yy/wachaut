@@ -236,6 +236,9 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       if (res.ok) sfuHealth = await res.json();
     } catch { /* SFU unreachable */ }
 
+    const openErrors = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE status != 'resolved'").get() as { n: number }).n;
+    const errors24h = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE last_seen >= datetime('now', '-1 day')").get() as { n: number }).n;
+
     return {
       rooms: roomCount,
       viewers: totalViewers,
@@ -244,6 +247,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       maintenance: maintenanceMode,
       uptime: process.uptime(),
       memory: Math.round(process.memoryUsage().rss / 1024 / 1024), // MB
+      errors: { open: openErrors, last24h: errors24h },
     };
   });
 
@@ -436,6 +440,145 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   }, async (req: FastifyRequest) => {
     const { days } = req.query as { days: number };
     return queryAnalytics(days);
+  });
+
+  // ── Errors: list / detail / status / delete ────────────────────────
+
+  app.get('/api/admin/errors', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['open', 'acknowledged', 'resolved'] },
+          source: { type: 'string', enum: ['web', 'server', 'sfu'] },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+          offset: { type: 'integer', minimum: 0, default: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest) => {
+    const { status, source, limit, offset } = req.query as { status?: string; source?: string; limit: number; offset: number };
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (status) { where.push('status = ?'); params.push(status); }
+    if (source) { where.push('source = ?'); params.push(source); }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const total = (db.prepare(`SELECT COUNT(*) as n FROM error_groups ${whereSql}`).get(...params) as { n: number }).n;
+    const groups = db.prepare(
+      `SELECT id, source, component, title, severity, status, count, first_seen, last_seen, sample_stack, meta
+       FROM error_groups ${whereSql} ORDER BY last_seen DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset);
+    return { total, groups };
+  });
+
+  app.get('/api/admin/errors/:id', {
+    preHandler: requireAuth,
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: number };
+    const group = db.prepare('SELECT * FROM error_groups WHERE id = ?').get(id);
+    if (!group) return reply.code(404).send({ error: 'Error group not found' });
+    const events = db.prepare(
+      'SELECT ts, page, room_id, visitor_id, country, message FROM error_events WHERE group_id = ? ORDER BY ts DESC LIMIT 20'
+    ).all(id);
+    return { group, events };
+  });
+
+  app.post('/api/admin/errors/:id/status', {
+    preHandler: requireAuth,
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+      body: {
+        type: 'object',
+        required: ['status'],
+        properties: { status: { type: 'string', enum: ['open', 'acknowledged', 'resolved'] } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { id } = req.params as { id: number };
+    const { status: newStatus } = req.body as { status: 'open' | 'acknowledged' | 'resolved' };
+    const group = db.prepare('SELECT id, title FROM error_groups WHERE id = ?').get(id) as { id: number; title: string } | undefined;
+    if (!group) return reply.code(404).send({ error: 'Error group not found' });
+    db.prepare('UPDATE error_groups SET status = ? WHERE id = ?').run(newStatus, id);
+    auditLog(user.userId, user.username, `error_status:${id}:${newStatus}`, req.ip, lookupCountry(req.ip));
+    return { success: true };
+  });
+
+  app.delete('/api/admin/errors/:id', {
+    preHandler: requireAuth,
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { id } = req.params as { id: number };
+    const group = db.prepare('SELECT id, title FROM error_groups WHERE id = ?').get(id) as { id: number; title: string } | undefined;
+    if (!group) return reply.code(404).send({ error: 'Error group not found' });
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM error_events WHERE group_id = ?').run(id);
+      db.prepare('DELETE FROM error_groups WHERE id = ?').run(id);
+    });
+    tx();
+    auditLog(user.userId, user.username, `error_delete:${id}:${group.title.slice(0, 40)}`, req.ip, lookupCountry(req.ip));
+    return { success: true };
+  });
+
+  // ── Connections: reliability telemetry (broadcast drops) ──────────
+
+  app.get('/api/admin/connections', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: { days: { type: 'integer', minimum: 1, maximum: 30, default: 7 } },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest) => {
+    const { days } = req.query as { days: number };
+
+    const hostDrops = db.prepare(
+      "SELECT COUNT(*) as n, SUM(recovered) as recovered, AVG(recovery_ms) as avg_recovery FROM connection_events WHERE role = 'host' AND ts >= datetime('now', ?)"
+    ).get(`-${days} days`) as { n: number; recovered: number | null; avg_recovery: number | null };
+
+    const viewerDrops = db.prepare(
+      "SELECT cause, COUNT(*) as n FROM connection_events WHERE role = 'viewer' AND ts >= datetime('now', ?) GROUP BY cause"
+    ).all(`-${days} days`) as { cause: string; n: number }[];
+
+    // Viewer recovery (derived): a network drop followed by a join of the
+    // same room within 5 minutes.
+    const viewerRecovered = (db.prepare(`
+      SELECT COUNT(*) as n FROM connection_events c
+      WHERE c.role = 'viewer' AND c.cause = 'network'
+        AND c.ts >= datetime('now', ?)
+        AND EXISTS (
+          SELECT 1 FROM room_events r
+          WHERE r.event_type = 'viewer_joined' AND r.room_id = c.room_id
+            AND r.timestamp > c.ts AND r.timestamp <= datetime(c.ts, '+5 minutes')
+        )
+    `).get(`-${days} days`) as { n: number }).n;
+
+    const events = db.prepare(`
+      SELECT ts, room_id, role, cause, detail, duration_ms, recovered, recovery_ms, viewers_affected
+      FROM connection_events ORDER BY ts DESC LIMIT 50
+    `).all();
+
+    const causeMap: Record<string, number> = {};
+    for (const row of viewerDrops) causeMap[row.cause] = row.n;
+
+    return {
+      kpis: {
+        hostDrops: hostDrops.n || 0,
+        hostRecoveredPct: hostDrops.n ? Math.round(((hostDrops.recovered || 0) / hostDrops.n) * 100) : null,
+        avgRecoveryMs: hostDrops.avg_recovery != null ? Math.round(hostDrops.avg_recovery) : null,
+        viewerNetworkDrops: causeMap.network || 0,
+        viewerCleanLeaves: causeMap.clean || 0,
+        viewerRecovered,
+      },
+      events,
+    };
   });
 
   // ── GET /users ───────────────────────────────────────────────────

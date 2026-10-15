@@ -60,6 +60,13 @@ Acceso en el subdominio admin (`wadmin.*`) vía `/admin`. Flujo de seguridad:
   recuperación de un solo uso.
 - **Moderación**: cerrar salas y expulsar espectadores desde el dashboard.
 - **Auditoría completa** paginada (login, 403, 429, usuarios, 2FA, moderación…).
+- **Errores y conexiones**: pestaña con los errores agrupados por huella
+  (web/server/SFU) con flujo abierto → reconocido → resuelto (reaparecer
+  reabre automáticamente), y telemetría de pérdidas de conexión en
+  retransmisiones (causa red/salida limpia, duración, recuperación del host
+  con latencia, viewers afectados). El beacon público `POST /api/errors`
+  está limitado por IP; los orígenes server/SFU se autentican con
+  `ERRORS_SECRET`.
 
 Gestión por CLI dentro del contenedor del server:
 

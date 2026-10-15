@@ -40,6 +40,11 @@ function ensureIds(): { vid: string; sid: string } {
   return { vid, sid };
 }
 
+/** Public accessor so the error reporter can correlate errors with analytics. */
+export function getAnalyticsIds(): { vid: string; sid: string } {
+  return ensureIds();
+}
+
 interface Utm {
   source?: string;
   medium?: string;

@@ -8,6 +8,7 @@
  */
 
 import { adminSession, persistSession, clearSession, type AdminUserSession } from './admin-session.svelte';
+import { captureClientError } from './error-report';
 
 const API_BASE = '/api/admin';
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -47,6 +48,14 @@ async function request<T>(path: string, options: RequestInit & { auth401?: 'clea
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    // 4xx (403 role gates, 400 validation…) is expected noise — only real
+    // server failures (5xx) are worth tracking.
+    if (res.status >= 500) {
+      captureClientError(new Error(`Admin API ${res.status}: ${data?.error || path}`), {
+        component: 'admin.api',
+        severity: 'warning',
+      });
+    }
     throw new ApiError(data.error || `HTTP ${res.status}`, res.status, data);
   }
   return res.json();
@@ -96,6 +105,7 @@ export interface AdminMetrics {
   maintenance: boolean;
   uptime: number;
   memory: number;
+  errors: { open: number; last24h: number };
 }
 
 export function getMetrics(): Promise<AdminMetrics> {
@@ -263,3 +273,75 @@ export function totpDisable(password: string, code?: string, userId?: number): P
 }
 
 export const MIN_PASSWORD_LENGTH = 10;
+
+// ── Errors + reliability ─────────────────────────────────────────────
+
+export type ErrorStatus = 'open' | 'acknowledged' | 'resolved';
+
+export interface AdminErrorGroup {
+  id: number;
+  source: 'web' | 'server' | 'sfu';
+  component: string;
+  title: string;
+  severity: 'error' | 'warning';
+  status: ErrorStatus;
+  count: number;
+  first_seen: string;
+  last_seen: string;
+  sample_stack: string | null;
+  meta: string;
+}
+
+export interface AdminErrorsPage {
+  total: number;
+  groups: AdminErrorGroup[];
+}
+
+export function getErrors(opts: { status?: ErrorStatus; source?: string; limit?: number; offset?: number } = {}): Promise<AdminErrorsPage> {
+  const params = new URLSearchParams();
+  if (opts.status) params.set('status', opts.status);
+  if (opts.source) params.set('source', opts.source);
+  params.set('limit', String(opts.limit ?? 50));
+  params.set('offset', String(opts.offset ?? 0));
+  return request<AdminErrorsPage>(`/errors?${params.toString()}`);
+}
+
+export interface AdminErrorDetail {
+  group: AdminErrorGroup & { sample_stack: string | null };
+  events: { ts: string; page: string | null; room_id: string | null; visitor_id: string | null; country: string | null; message: string }[];
+}
+
+export function getErrorDetail(id: number): Promise<AdminErrorDetail> {
+  return request<AdminErrorDetail>(`/errors/${id}`);
+}
+
+export function setErrorStatus(id: number, status: ErrorStatus): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/errors/${id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function deleteErrorGroup(id: number): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/errors/${id}`, { method: 'DELETE' });
+}
+
+export interface AdminConnections {
+  kpis: {
+    hostDrops: number;
+    hostRecoveredPct: number | null;
+    avgRecoveryMs: number | null;
+    viewerNetworkDrops: number;
+    viewerCleanLeaves: number;
+    viewerRecovered: number;
+  };
+  events: {
+    ts: string; room_id: string | null; role: 'host' | 'viewer'; cause: string;
+    detail: string | null; duration_ms: number | null; recovered: number;
+    recovery_ms: number | null; viewers_affected: number | null;
+  }[];
+}
+
+export function getConnections(days = 7): Promise<AdminConnections> {
+  return request<AdminConnections>(`/connections?days=${days}`);
+}

@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
+  import { captureClientError } from '$lib/error-report';
   import {
     playViewerJoin,
     playViewerLeave,
@@ -652,6 +653,10 @@
       }
       isSharing = false;
       isMuted = false;
+      // Report with the error name in the component so permission denials
+      // (browser-level, expected sometimes) group separately from real
+      // capture failures (bugs).
+      captureClientError(e, { component: `host.startSharing.${e?.name || 'unknown'}`, roomId });
       if (e?.name === 'NotAllowedError') {
         toast.error('Permiso denegado para compartir pantalla.');
       } else {

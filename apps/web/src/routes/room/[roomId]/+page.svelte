@@ -4,6 +4,7 @@
 	import { io } from 'socket.io-client';
 	import { SfuClient } from '$lib/sfu-client';
 	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
+	import { captureClientError } from '$lib/error-report';
 	import {
 		playHostMuted,
 		playChatMessage,
@@ -378,6 +379,13 @@
 		if (shouldGiveUpReconnect(reconnectAttempt)) {
 			status = 'error';
 			errorMessage = 'No se pudo reconectar. Intenta de nuevo.';
+			// The viewer exhausted all 8 reconnect attempts — a real
+			// reliability signal for the error tracker.
+			captureClientError(new Error('viewer gave up reconnecting after 8 attempts'), {
+				component: 'viewer.reconnect-giveup',
+				roomId,
+				severity: 'warning',
+			});
 			reconnectAttempt = 0;
 			return;
 		}
@@ -497,7 +505,10 @@
 
 			await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
 			await sfuClient.consume();
-		} catch {
+		} catch (err) {
+			// This error object was previously discarded — the single biggest
+			// blind spot for viewer-side failures.
+			captureClientError(err, { component: 'viewer.connectSfu', roomId });
 			errorMessage = 'No se pudo conectar la transmisión. La calidad puede verse afectada.';
 			if (errorClearTimer) clearTimeout(errorClearTimer);
 			errorClearTimer = setTimeout(() => { errorMessage = ''; }, 8000);

@@ -6,10 +6,13 @@
 	import { page as pageState } from '$app/state';
 	import Toaster from '$lib/components/Toaster.svelte';
 	import { trackPageView, maintenance } from '$lib/tracker.svelte';
+	import { installGlobalErrorHandlers } from '$lib/error-report';
 
 	let { children }: { children: Snippet } = $props();
 
 	onMount(() => {
+		// Uncaught exceptions / unhandled rejections → error tracker (panel).
+		installGlobalErrorHandlers();
 		// Admin subdomain (wadmin.*) showing a non-admin route → send to the
 		// login page. Hostname prefix check covers every environment.
 		if (window.location.hostname.startsWith('wadmin.')) {

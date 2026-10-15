@@ -9,7 +9,12 @@ import { db } from './db.js';
 import { bootstrapAdmin } from './admin/auth.js';
 import { registerAdminRoutes, isMaintenanceMode, cleanupLoginAttempts, type ServerState } from './admin/routes.js';
 import { rollupTrafficStats } from './stats.js';
+import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
+import {
+  registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
+  cleanupErrorRateLimits, purgeOldErrors,
+} from './errors.js';
 import {
   pinHash,
   pinEquals,
@@ -40,8 +45,13 @@ function logRoomEvent(eventType: string, roomId: string, viewerCount = 0, ip?: s
     db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, ?)').run(
       eventType, roomId, ip ?? null, ip ? (geoip.lookup(ip)?.country || null) : null, viewerCount
     );
-  } catch { /* non-critical */ }
+  } catch (err) {
+    captureError(err, { source: 'server', component: 'db.roomEvent', severity: 'warning' });
+  }
 }
+
+// ── Connection telemetry (drops during broadcasts) ────────────────────
+// Implementation in connection-telemetry.ts (unit-testable).
 
 // Single source of truth for allowed origins (env-configurable).
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billytech.es')
@@ -57,6 +67,16 @@ const fastify = Fastify({
   // Strict schema validation: unknown body properties must be a 400, not
   // silently stripped (Ajv's removeAdditional default would drop them).
   ajv: { customOptions: { removeAdditional: false, allErrors: true } },
+});
+
+// Capture every unhandled route error (real 500s — validation 4xx excluded).
+fastify.setErrorHandler((err: Error & { statusCode?: number }, req, reply) => {
+  req.log.error(err);
+  const status = err.statusCode ?? 500;
+  if (status >= 500) {
+    captureError(err, { source: 'server', component: 'http', page: req.url.split('?')[0] });
+  }
+  return reply.code(status).send({ error: status < 500 ? err.message : 'Internal server error' });
 });
 
 // Enable CORS
@@ -165,45 +185,55 @@ function findViewer(room: Room, viewerRef: string): ViewerInfo | undefined {
 // viewers chatting/reacting) never expire because touchRoom() keeps
 // lastActivityAt fresh.
 setInterval(() => {
-  // Snapshot viewer counts first — gcExpiredRooms deletes the rooms, so the
-  // count would read 0 if we looked it up after the reap.
-  const viewerCounts = new Map<string, number>();
-  for (const [roomId, room] of rooms) viewerCounts.set(roomId, room.viewers.size);
+  try {
+    // Snapshot viewer counts first — gcExpiredRooms deletes the rooms, so the
+    // count would read 0 if we looked it up after the reap.
+    const viewerCounts = new Map<string, number>();
+    for (const [roomId, room] of rooms) viewerCounts.set(roomId, room.viewers.size);
 
-  const now = new Date();
-  const reaped = gcExpiredRooms({ rooms, viewerToRoom, hostToRoom }, now, ROOM_IDLE_TTL_MS);
-  for (const roomId of reaped) {
-    io.to(roomId).emit('room:closed');
-    logRoomEvent('closed', roomId, viewerCounts.get(roomId) ?? 0);
-  }
-
-  // Cleanup rate limit entries
-  const nowMs = Date.now();
-  for (const [key, entry] of eventCounts) {
-    if (nowMs > entry.resetAt) {
-      eventCounts.delete(key);
+    const now = new Date();
+    const reaped = gcExpiredRooms({ rooms, viewerToRoom, hostToRoom }, now, ROOM_IDLE_TTL_MS);
+    for (const roomId of reaped) {
+      io.to(roomId).emit('room:closed');
+      clearPendingHostDrop(roomId);
+      logRoomEvent('closed', roomId, viewerCounts.get(roomId) ?? 0);
     }
-  }
-  // Cleanup join attempt rate limits
-  for (const [key, entry] of joinAttempts) {
-    if (nowMs > entry.resetAt) {
-      joinAttempts.delete(key);
-    }
-  }
-  // Cleanup admin login rate limit entries (slow memory leak otherwise —
-  // entries keyed by attacker-controlled IPs were never deleted).
-  cleanupLoginAttempts(nowMs);
-  // Cleanup analytics rate limit + prune pageviews past the retention window.
-  cleanupTrackRateLimits(nowMs);
-  purgeOldPageviews();
-  // Refresh today's traffic_stats row from room_events (idempotent upsert).
-  rollupTrafficStats(now);
 
-  // Cleanup stale connection counts (defensive — the disconnect handler
-  // already decrements, but if a socket leaked we'd otherwise hold the IP
-  // forever and block that IP/CGNAT from reconnecting after a mass drop).
-  for (const [ip, count] of connectionCounts) {
-    if (count <= 0) connectionCounts.delete(ip);
+    // Cleanup rate limit entries
+    const nowMs = Date.now();
+    for (const [key, entry] of eventCounts) {
+      if (nowMs > entry.resetAt) {
+        eventCounts.delete(key);
+      }
+    }
+    // Cleanup join attempt rate limits
+    for (const [key, entry] of joinAttempts) {
+      if (nowMs > entry.resetAt) {
+        joinAttempts.delete(key);
+      }
+    }
+    // Cleanup admin login rate limit entries (slow memory leak otherwise —
+    // entries keyed by attacker-controlled IPs were never deleted).
+    cleanupLoginAttempts(nowMs);
+    // Cleanup analytics + error-beacon rate limits, prune pageviews/errors
+    // past their retention windows.
+    cleanupTrackRateLimits(nowMs);
+    cleanupErrorRateLimits(nowMs);
+    purgeOldPageviews();
+    purgeOldErrors();
+    // Refresh today's traffic_stats row from room_events (idempotent upsert).
+    rollupTrafficStats(now);
+    // Pull captured SFU errors into the central error store.
+    drainSfuErrorsNow();
+
+    // Cleanup stale connection counts (defensive — the disconnect handler
+    // already decrements, but if a socket leaked we'd otherwise hold the IP
+    // forever and block that IP/CGNAT from reconnecting after a mass drop).
+    for (const [ip, count] of connectionCounts) {
+      if (count <= 0) connectionCounts.delete(ip);
+    }
+  } catch (err) {
+    captureError(err, { source: 'server', component: 'sweeper' });
   }
 }, 5 * 60 * 1000);
 
@@ -237,23 +267,48 @@ io.use((socket, next) => {
   next();
 });
 
+/**
+ * Crash-proof socket handler registration: a throw inside a synchronous
+ * EventEmitter listener is an uncaughtException (process death). Capture it,
+ * tell the client, keep serving.
+ */
+function onSafe(socket: any, event: string, handler: (...args: any[]) => void): void {
+  socket.on(event, (...args: any[]) => {
+    try {
+      handler(...args);
+    } catch (err) {
+      captureError(err, { source: 'server', component: `socket.${event}` });
+      try { socket.emit('room:error', { message: 'Error interno. Inténtalo de nuevo en unos segundos.' }); } catch { /* socket may be gone */ }
+    }
+  });
+}
+
 io.on('connection', (socket) => {
   const ip = realIp(socket);
   fastify.log.info(`Client connected: ${socket.id} from ${ip}`);
 
-  socket.on('disconnect', () => {
+  onSafe(socket, 'disconnect', (reason: string) => {
     // Connection-count decrement is handled by the once('disconnect') in io.use.
 
     // Cleanup rate limit
     eventCounts.delete(socket.id);
 
-    fastify.log.info(`Client disconnected: ${socket.id}`);
+    fastify.log.info(`Client disconnected: ${socket.id} (${reason})`);
 
     // O(1) host lookup via reverse map.
     const hostRoomId = hostToRoom.get(socket.id);
     if (hostRoomId) {
       const room = rooms.get(hostRoomId);
       if (room) {
+        // Reliability telemetry: record the host drop (broadcast length +
+        // viewers affected). Marked recovered if the host reclaims in time.
+        recordDisconnect({
+          roomId: hostRoomId,
+          role: 'host',
+          reason,
+          durationMs: Date.now() - room.createdAt.getTime(),
+          viewersAffected: room.viewers.size,
+        });
         // Notify viewers that the host dropped — they enter a "reconnecting"
         // state instead of being kicked immediately. If the host reclaims
         // within HOST_RECONNECT_GRACE_MS we emit host:reconnected.
@@ -265,6 +320,7 @@ io.on('connection', (socket) => {
             io.to(hostRoomId).emit('room:closed');
             rooms.delete(hostRoomId);
             hostToRoom.delete(socket.id);
+            clearPendingHostDrop(hostRoomId); // grace expired — drop stays unrecovered
             logRoomEvent('closed', hostRoomId, currentRoom.viewers.size);
             for (const [viewerId] of currentRoom.viewers) {
               viewerToRoom.delete(viewerId);
@@ -288,6 +344,13 @@ io.on('connection', (socket) => {
         const room = rooms.get(viewerRoomId);
         if (room) {
           io.to(room.hostId).emit('viewer:left', { viewerId: socket.id, username: viewer.name });
+          // Reliability telemetry: how long this viewer was in the room.
+          recordDisconnect({
+            roomId: viewerRoomId,
+            role: 'viewer',
+            reason,
+            durationMs: Date.now() - viewer.joinedAt,
+          });
           logRoomEvent('viewer_left', viewerRoomId, room.viewers.size, ip);
         }
       }
@@ -296,7 +359,7 @@ io.on('connection', (socket) => {
 
   // ─── HOST EVENTS ────────────────────────────────────────
 
-  socket.on('host:create-room', ({ pin, roomId: requestedRoomId }: { pin: string; roomId?: string }) => {
+  onSafe(socket, 'host:create-room', ({ pin, roomId: requestedRoomId }: { pin: string; roomId?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
@@ -338,6 +401,8 @@ io.on('connection', (socket) => {
         }
         touchRoom(existingRoom);
         socket.emit('room:created', { roomId: requestedRoomId, reclaimed: true });
+        // Reliability telemetry: the host drop ended in a successful reclaim.
+        recordHostRecovery(requestedRoomId);
         // Tell viewers the host is back so they can exit the "reconnecting" state.
         socket.to(requestedRoomId).emit('host:reconnected');
         fastify.log.info(`Room reclaimed by host: ${requestedRoomId} (socket ${socket.id})`);
@@ -374,7 +439,7 @@ io.on('connection', (socket) => {
     logRoomEvent('created', roomId, 0, realIp(socket));
   });
 
-  socket.on('host:stop-sharing', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:stop-sharing', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       room.isSharing = false;
@@ -383,7 +448,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('host:close-room', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:close-room', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       if (room.hostDisconnectTimer) {
@@ -393,6 +458,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
       hostToRoom.delete(socket.id);
+      clearPendingHostDrop(roomId); // intentional close — nothing to recover
       logRoomEvent('closed', roomId, room.viewers.size);
       for (const [viewerId] of room.viewers) {
         viewerToRoom.delete(viewerId);
@@ -400,7 +466,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('host:mute', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:mute', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       room.isMuted = true;
@@ -408,7 +474,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('host:unmute', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:unmute', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       room.isMuted = false;
@@ -416,7 +482,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('host:kick', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
+  onSafe(socket, 'host:kick', ({ roomId, viewerId }: { roomId: string; viewerId: string }) => {
     const room = rooms.get(roomId);
     if (!room || room.hostId !== socket.id) return;
     const viewer = findViewerInRoom(room, viewerId);
@@ -432,7 +498,7 @@ io.on('connection', (socket) => {
     logRoomEvent('viewer_left', roomId, room.viewers.size);
   });
 
-  socket.on('host:request-viewers', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:request-viewers', ({ roomId }: { roomId: string }) => {
     const room = rooms.get(roomId);
     if (!room || room.hostId !== socket.id) return;
 
@@ -447,7 +513,7 @@ io.on('connection', (socket) => {
 
   // ─── VIEWER EVENTS ──────────────────────────────────────
 
-  socket.on('viewer:join', ({ roomId, pin, username }: { roomId: string; pin: string; username?: string }) => {
+  onSafe(socket, 'viewer:join', ({ roomId, pin, username }: { roomId: string; pin: string; username?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
@@ -533,7 +599,7 @@ io.on('connection', (socket) => {
 
   // ─── CHAT EVENTS ────────────────────────────────────────
 
-  socket.on('chat:message', ({ text }: { text: unknown }) => {
+  onSafe(socket, 'chat:message', ({ text }: { text: unknown }) => {
     if (!checkRateLimit(socket.id, MAX_REACTIONS_PER_MINUTE)) return;
 
     // Validate and sanitize the payload before broadcasting.
@@ -579,7 +645,7 @@ io.on('connection', (socket) => {
 
   // ─── REACTIONS EVENTS ───────────────────────────────────
 
-  socket.on('reaction:send', ({ emoji }: { emoji: unknown }) => {
+  onSafe(socket, 'reaction:send', ({ emoji }: { emoji: unknown }) => {
     if (!checkRateLimit(socket.id, MAX_REACTIONS_PER_MINUTE)) return;
 
     // Validate emoji against the allowlist before broadcasting.
@@ -630,8 +696,9 @@ fastify.get('/ready', async (req, reply) => {
       const httpUrl = sfuUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
       const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(2000) });
       sfuReachable = res.ok;
-    } catch {
+    } catch (err) {
       sfuReachable = false;
+      captureError(err, { source: 'server', component: 'sfuHealth', severity: 'warning' });
     }
   }
   // Return 503 when the SFU is unreachable so Traefik can failover.
@@ -655,6 +722,22 @@ await fastify.register(async (adminScope) => {
 
 // Public analytics routes (own rate limit, outside the admin scope).
 registerAnalyticsRoutes(fastify, isMaintenanceMode, () => rooms.size);
+
+// Public error beacon (web) + secret-authenticated server/sfu reports.
+registerErrorRoutes(fastify);
+
+// Drain the SFU's in-memory error ring into the central store. Called from
+// the 5-min sweeper — if the SFU is unreachable the buffer simply waits.
+const sfuInternalUrl = (process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '')
+  .replace(/^ws/, 'http').replace(/\?.*$/, '');
+const sfuDrainSecret = process.env.ERRORS_SECRET || '';
+function drainSfuErrorsNow(): void {
+  void drainSfuErrors(sfuInternalUrl, sfuDrainSecret);
+}
+
+// Process-level safety net: an uncaught exception is captured (sync write)
+// and the container restarts clean instead of dying in an unknown state.
+registerProcessErrorHandlers();
 
 // Start server
 const PORT = parseInt(process.env.PORT || '3001');

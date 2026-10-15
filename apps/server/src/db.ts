@@ -93,11 +93,55 @@ db.exec(`
     value TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS error_groups (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    fingerprint  TEXT NOT NULL UNIQUE,
+    source       TEXT NOT NULL,             -- 'web' | 'server' | 'sfu'
+    component    TEXT,
+    title        TEXT NOT NULL,
+    severity     TEXT NOT NULL DEFAULT 'error',  -- 'error' | 'warning'
+    status       TEXT NOT NULL DEFAULT 'open',   -- 'open' | 'acknowledged' | 'resolved'
+    count        INTEGER NOT NULL DEFAULT 0,
+    first_seen   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen    TEXT NOT NULL DEFAULT (datetime('now')),
+    sample_stack TEXT,
+    meta         TEXT DEFAULT '{}'
+  );
+
+  CREATE TABLE IF NOT EXISTS error_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id   INTEGER NOT NULL,
+    ts         TEXT NOT NULL DEFAULT (datetime('now')),
+    page       TEXT,
+    room_id    TEXT,
+    visitor_id TEXT,
+    ip_hash    TEXT,
+    country    TEXT,
+    message    TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS connection_events (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts               TEXT NOT NULL DEFAULT (datetime('now')),
+    room_id          TEXT,
+    role             TEXT NOT NULL,   -- 'host' | 'viewer'
+    cause            TEXT NOT NULL,   -- 'network' | 'clean' | 'server'
+    detail           TEXT,            -- raw Socket.IO disconnect reason
+    duration_ms      INTEGER,         -- time in room (viewer) / broadcast length until drop (host)
+    recovered        INTEGER NOT NULL DEFAULT 0,
+    recovery_ms      INTEGER,         -- host reclaim latency
+    viewers_affected INTEGER
+  );
+
   CREATE INDEX IF NOT EXISTS idx_room_events_timestamp ON room_events(timestamp);
   CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON admin_audit_log(timestamp);
   CREATE INDEX IF NOT EXISTS idx_pageviews_ts ON pageviews(ts);
   CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path);
   CREATE INDEX IF NOT EXISTS idx_pageviews_referrer_host ON pageviews(referrer_host);
+  CREATE INDEX IF NOT EXISTS idx_error_groups_status ON error_groups(status);
+  CREATE INDEX IF NOT EXISTS idx_error_events_ts ON error_events(ts);
+  CREATE INDEX IF NOT EXISTS idx_error_events_group ON error_events(group_id);
+  CREATE INDEX IF NOT EXISTS idx_connection_events_ts ON connection_events(ts);
 `);
 
 // ── Migrations (idempotent column/table additions) ─────────────────────

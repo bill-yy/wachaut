@@ -8,6 +8,7 @@
 
 import { io, type Socket } from "socket.io-client";
 import { devlog, devwarn } from "./utils/devlog";
+import { captureClientError } from "./error-report";
 
 // Lazy-loaded mediasoup-client module (assigned on first use).
 let mediasoupModule: typeof import("mediasoup-client") | null = null;
@@ -73,6 +74,15 @@ export class SfuClient {
 
   #emit(event: string, ...args: any[]) {
     this.#listeners.get(event)?.forEach((fn) => fn(...args));
+  }
+
+  /** Report an SFU-level failure to the error tracker with room context. */
+  #report(err: unknown, component: string, severity: "error" | "warning" = "error") {
+    captureClientError(err, {
+      component: `sfu.${component}`,
+      roomId: this.#joinParams?.roomId,
+      severity,
+    });
   }
 
   async joinRoom(
@@ -175,6 +185,7 @@ export class SfuClient {
 
       this.#socket.on("connect_error", (err) => {
         console.error("[sfu] socket error:", err);
+        this.#report(err, "socket-connect");
         // Only reject the initial join promise; on later reconnect attempts
         // socket.io will keep retrying and emit `connect` again.
         if (firstJoin) reject(err);
@@ -218,6 +229,7 @@ export class SfuClient {
             (res: any) => {
               if (res?.error) {
                 console.error("[sfu] send transport connect error:", res.error);
+                this.#report(new Error(String(res.error)), "send-transport-connect");
                 errback(new Error(res.error));
               } else {
                 devlog("[sfu] send transport connected OK");
@@ -253,6 +265,7 @@ export class SfuClient {
         });
         if (response.error) {
           console.error("[sfu] Produce error from server:", response.error);
+          this.#report(new Error(String(response.error)), "produce");
           errback(new Error(response.error));
           return;
         }
@@ -311,10 +324,12 @@ export class SfuClient {
         devlog(`[sfu] ${label} ICE state:`, state);
         if (state === "failed") {
           console.error(`[sfu] ${label} ICE FAILED — forcing restartIce`);
+          this.#report(new Error(`ICE failed (${label} transport)`), "ice-failed", "warning");
           try {
             pc.restartIce();
           } catch (e) {
             console.error(`[sfu] ${label} restartIce error:`, e);
+            this.#report(e, `ice-restart-${label}`);
           }
           disconnectedSince = null;
         } else if (state === "disconnected") {
@@ -363,6 +378,7 @@ export class SfuClient {
     this.#turnRefreshTimer = setInterval(() => {
       this.#refreshTurnCredentials().catch((err) => {
         console.error("[sfu] TURN refresh failed:", err);
+        this.#report(err, "turn-refresh", "warning");
       });
     }, SfuClient.TURN_REFRESH_INTERVAL_MS);
   }
@@ -443,6 +459,7 @@ export class SfuClient {
             (res: any) => {
               if (res?.error) {
                 console.error("[sfu] recv transport connect error:", res.error);
+                this.#report(new Error(String(res.error)), "recv-transport-connect");
                 errback(new Error(res.error));
               } else {
                 devlog("[sfu] recv transport connected OK");
@@ -542,6 +559,7 @@ export class SfuClient {
       this.#socket!.emit("create-transport", { direction }, (res: any) => {
         if (res?.error) {
           console.error("[sfu] create-transport error:", res.error);
+          this.#report(new Error(String(res.error)), `create-transport-${direction}`);
           reject(new Error(res.error));
         } else {
           devlog(

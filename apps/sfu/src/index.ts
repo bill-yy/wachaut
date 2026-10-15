@@ -50,6 +50,33 @@ const HOST_RECONNECT_GRACE_MS = parseInt(process.env.HOST_RECONNECT_GRACE_MS || 
 // leak the corresponding router + transports indefinitely. A room is only
 // reaped here if it has had no peers at all for this long.
 const ROOM_IDLE_TTL_MS = parseInt(process.env.ROOM_IDLE_TTL_MS || String(4 * 60 * 60 * 1000));
+
+// Error capture: failures are kept in a bounded in-memory ring buffer that
+// the signaling server drains via GET /internal/errors (header-token
+// protected) — the SFU itself never makes outbound HTTP calls.
+const ERROR_RING_MAX = 100;
+const errorRing: { component: string; message: string; stack?: string; roomId?: string; ts: number }[] = [];
+const INTERNAL_TOKEN = process.env.ERRORS_SECRET || '';
+
+/**
+ * Capture an SFU failure: keep the console.error (container logs) and push
+ * it to the ring buffer for the signaling server to collect.
+ */
+function captureSfuError(err: unknown, component: string, roomId?: string): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[sfu] ${component}:`, err instanceof Error ? err : message);
+  try {
+    errorRing.push({
+      component,
+      message,
+      stack: err instanceof Error ? err.stack?.slice(0, 4000) : undefined,
+      roomId,
+      ts: Date.now(),
+    });
+    if (errorRing.length > ERROR_RING_MAX) errorRing.splice(0, errorRing.length - ERROR_RING_MAX);
+  } catch { /* capture must never break the SFU */ }
+}
+
 const WEBRTC_LISTENIPS = [
   {
     protocol: 'udp' as const,
@@ -64,6 +91,7 @@ interface Peer {
   socketId: string;
   displayName: string;
   role: 'host' | 'viewer';
+  roomId?: string;
   sendTransport?: mediasoup.types.WebRtcTransport;
   recvTransport?: mediasoup.types.WebRtcTransport;
   producers: mediasoup.types.Producer[];
@@ -195,6 +223,7 @@ async function createWorkers(): Promise<void> {
 
     worker.on('died', () => {
       console.error(`[sfu] Worker ${worker.pid} DIED! Attempting recovery...`);
+      captureSfuError(new Error(`mediasoup worker died (pid ${worker.pid})`), 'worker.died');
       // Replace the dead worker in the array. Routers on the dead worker are
       // lost — affected rooms will experience dropped media and must re-negotiate.
       // This keeps the instance alive instead of a full process crash.
@@ -204,6 +233,7 @@ async function createWorkers(): Promise<void> {
           .then((newWorker) => {
             newWorker.on('died', () => {
               console.error(`[sfu] Replacement worker ${newWorker.pid} DIED! Exiting.`);
+              captureSfuError(new Error(`replacement worker died (pid ${newWorker.pid}) — exiting`), 'worker.died');
               process.exit(1);
             });
             workers[idx] = newWorker;
@@ -211,6 +241,7 @@ async function createWorkers(): Promise<void> {
           })
           .catch((err) => {
             console.error(`[sfu] Worker recovery failed, exiting:`, err);
+            captureSfuError(err, 'worker.recovery-failed');
             process.exit(1);
           });
       }
@@ -251,6 +282,21 @@ fastify.get('/health', { logLevel: 'error' }, async () => ({
   rooms: rooms.size,
   totalPeers: Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0),
 }));
+
+/**
+ * Internal: the signaling server drains captured SFU errors from here every
+ * few minutes (they land in the admin panel's error store). Returns and
+ * clears the ring buffer. Protected by a shared-secret header when
+ * ERRORS_SECRET is set — refuse to expose it unauthenticated.
+ */
+fastify.get('/internal/errors', { logLevel: 'error' }, async (req: any, reply: any) => {
+  if (!INTERNAL_TOKEN) return reply.code(503).send({ error: 'error reporting disabled' });
+  if (req.headers['x-errors-secret'] !== INTERNAL_TOKEN) {
+    return reply.code(403).send({ error: 'invalid secret' });
+  }
+  const drained = errorRing.splice(0, errorRing.length);
+  return { errors: drained };
+});
 
 /**
  * Issue short-lived TURN credentials using the coturn shared-secret mechanism
@@ -399,6 +445,7 @@ io.on('connection', (socket) => {
           socketId: socket.id,
           displayName,
           role,
+          roomId,
           producers: [],
           consumers: new Map(),
         };
@@ -453,7 +500,7 @@ io.on('connection', (socket) => {
 
       console.log(`[sfu] ${displayName} joined room ${roomId} (${room.peers.size} peers, ${existingProducers.length} existing producers)${hostReclaiming ? ' [RECLAIM]' : ''}`);
     } catch (err: any) {
-      console.error(`[sfu] join-room error:`, err?.message || err);
+      captureSfuError(err, 'join-room', roomId);
       callback?.({ error: err?.message || 'Failed to join room' });
     }
   });
@@ -504,8 +551,9 @@ io.on('connection', (socket) => {
           // client can re-gather. This is the server-side half of recovering
           // from a transient network failure during long broadcasts.
           console.error(`[sfu] DTLS FAILED for ${peer?.displayName} — restarting ICE`);
+          captureSfuError(new Error(`DTLS failed — ${peer?.displayName || 'unknown'} (${peer?.role || '?'})`), 'transport.dtls', peer?.roomId);
           try { transport.restartIce(); } catch (err: any) {
-            console.error(`[sfu] restartIce failed for transport ${transport.id}:`, err?.message || err);
+            captureSfuError(err, 'transport.restartIce', peer?.roomId);
           }
         }
         if (state === 'closed') {
@@ -575,7 +623,7 @@ io.on('connection', (socket) => {
         }
       }
     } catch (err: any) {
-      console.error(`[sfu] create-transport error:`, err?.message || err);
+      captureSfuError(err, 'create-transport', socketToRoom.get(socket.id));
       callback?.({ error: err?.message || 'Failed to create transport' });
     }
   });
@@ -598,7 +646,7 @@ io.on('connection', (socket) => {
       console.log(`[sfu] Transport ${transportId} connected for ${peer.displayName}`);
       callback?.({ ok: true });
     } catch (err: any) {
-      console.error(`[sfu] Transport connect error for ${peer.displayName}:`, err.message);
+      captureSfuError(err, 'connect-transport', peer.roomId);
       callback?.({ error: err.message });
     }
   });
@@ -638,7 +686,7 @@ io.on('connection', (socket) => {
 
       callback?.({ id: producer.id });
     } catch (err: any) {
-      console.error(`[sfu] produce error:`, err?.message || err);
+      captureSfuError(err, 'produce', socketToRoom.get(socket.id));
       callback?.({ error: err?.message || 'Failed to produce' });
     }
   });
@@ -678,8 +726,15 @@ io.on('connection', (socket) => {
     const peer = socketToPeer.get(socket.id);
     const consumer = peer?.consumers.get(consumerId);
     if (consumer) {
-      await consumer.resume();
-      console.log(`[sfu] Consumer ${consumerId} resumed for ${peer?.displayName}`);
+      // An unprotected rejection here was an unhandledRejection = process crash.
+      try {
+        await consumer.resume();
+        console.log(`[sfu] Consumer ${consumerId} resumed for ${peer?.displayName}`);
+      } catch (err) {
+        captureSfuError(err, 'resume-consumer', peer?.roomId);
+        callback?.({ error: 'Failed to resume consumer' });
+        return;
+      }
     }
     callback?.({ ok: true });
   });
@@ -863,8 +918,21 @@ async function main(): Promise<void> {
 // Tests import generateTurnCredentials / gcExpiredSfuRooms without wanting
 // Fastify + mediasoup workers to spin up.
 if (process.env.NODE_ENV !== 'test') {
+  // Process-level safety net: capture into the ring buffer (drained by the
+  // signaling server) before dying — otherwise these leave no trace.
+  process.on('uncaughtException', (err) => {
+    console.error('[sfu] uncaughtException — exiting:', err);
+    captureSfuError(err, 'process.uncaughtException');
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[sfu] unhandledRejection:', reason);
+    captureSfuError(reason, 'process.unhandledRejection');
+  });
+
   main().catch((err) => {
     console.error('[sfu] Fatal:', err);
+    captureSfuError(err, 'boot');
     process.exit(1);
   });
 }
