@@ -65,9 +65,12 @@ createServer((req, res) => {
       sendFile(res, dirIndex);
       return;
     }
-    // SPA routes get the landing shell (which carries the app bundles).
+    // SPA routes get the adapter's fallback shell (empty body + app bundles).
+    // NOT the prerendered landing: serving landing HTML at /admin or /room
+    // causes a hydration mismatch (client expects the admin/room route) which
+    // breaks rendering — the shell hydrates cleanly into any route.
     if (isSpaRoute(pathname)) {
-      sendFile(res, join(ROOT, 'index.html'));
+      sendFile(res, join(ROOT, '404.html'));
       return;
     }
     // Unknown → soft-404 page (404 status so crawlers drop it).
