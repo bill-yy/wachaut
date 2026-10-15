@@ -16,7 +16,7 @@ import { join, normalize, extname } from 'node:path';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('./build/', import.meta.url));
+const ROOT = fileURLToPath(new URL('./web/build/', import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000');
 
 const MIME = {
