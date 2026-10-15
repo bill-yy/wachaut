@@ -76,4 +76,4 @@ createServer((req, res) => {
     res.writeHead(500);
     res.end('Internal error');
   }
-}).listen(PORT, () => console.log(`web static server on :${PORT}`));
+}).listen(PORT, '0.0.0.0', () => console.log(`web static server on 0.0.0.0:${PORT}`));
