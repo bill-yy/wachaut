@@ -212,8 +212,11 @@
   .btn-danger:active { transform: scale(0.98); }
 
   /* ── Inputs / cards / surfaces ── */
+  /* 16px on phones: iOS Safari auto-zooms the viewport when focusing an
+     input rendered below 16px — a zoom forces every composited layer
+     (incl. any remaining blurs) to re-rasterize and can kill the tab. */
   .input-field {
-    @apply w-full rounded-xl px-4 py-3.5 text-sm transition-all;
+    @apply w-full rounded-xl px-4 py-3.5 text-[16px] transition-all sm:text-sm;
     background-color: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);
@@ -241,6 +244,16 @@
     background-color: color-mix(in srgb, var(--surface) 70%, transparent);
     backdrop-filter: blur(16px) saturate(140%);
     border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  /* Phones: live backdrop-filter blur is a known iOS WebKit compositor killer
+     when several layers stack (jetsam kills the tab when the keyboard opens).
+     The translucent surface alone keeps the look at this size. */
+  @media (max-width: 767px) {
+    .glass {
+      background-color: color-mix(in srgb, var(--surface) 88%, transparent);
+      backdrop-filter: none;
+    }
   }
 
   /* ── Brand gradients & text (amber gold scale) ── */

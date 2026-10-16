@@ -894,7 +894,7 @@
     </a>
   </div>
 {:else if loading}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ink-950)]/95 backdrop-blur-sm">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ink-950)]/95">
     <div class="text-center">
       <div class="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
         <Spinner size="lg" />
@@ -1027,7 +1027,7 @@
     <!-- Mobile backdrop -->
     {#if showChat}
       <button
-        class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+        class="fixed inset-0 z-40 bg-black/60 md:hidden"
         onclick={() => (showChat = false)}
         aria-label={t('room.closePanel')}
         tabindex="-1"

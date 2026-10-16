@@ -40,12 +40,13 @@
 
 <div class="w-full max-w-sm">
 	<div class="glass relative overflow-hidden rounded-2xl border border-[var(--border)] p-6 shadow-2xl sm:p-8">
-		<!-- Ambient glow -->
-		<div class="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl gradient-brand"></div>
+		<!-- Ambient glow (decorative blur is hidden on phones: iOS kills tabs
+		     when several blur layers recomposite as the keyboard opens) -->
+		<div class="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl gradient-brand max-md:hidden"></div>
 
 		<div class="relative mb-6 flex flex-col items-center text-center">
 			<div class="relative mb-4">
-				<div class="absolute inset-0 rounded-2xl opacity-40 blur-xl gradient-brand"></div>
+				<div class="absolute inset-0 rounded-2xl opacity-40 blur-xl gradient-brand max-md:hidden"></div>
 				<div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
 					<Lock class="h-7 w-7 text-[var(--brand)]" />
 				</div>
@@ -56,19 +57,22 @@
 
 		<!-- Username -->
 		<label class="mb-1.5 block text-xs font-semibold text-[var(--text-muted)]" for="va-username">{t('comp.vauthName')}</label>
-		<div class="relative mb-4">
-			<User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-subtle)]" />
-			<input
-				id="va-username"
-				type="text"
-				placeholder={t('comp.vauthNamePlaceholder')}
-				value={username}
-				oninput={onUsernameInput}
-				onkeydown={onKeydown}
-				maxlength="24"
-				autocomplete="username"
-				class="w-full rounded-xl py-3 pl-10 pr-4 text-sm font-semibold transition-all bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] placeholder:text-[var(--text-subtle)] focus:border-[var(--brand)] focus:outline-none focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_18%,transparent)]"
-			/>
+			<div class="relative mb-4">
+				<User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-subtle)]" />
+				<input
+					id="va-username"
+					type="text"
+					placeholder={t('comp.vauthNamePlaceholder')}
+					value={username}
+					oninput={onUsernameInput}
+					onkeydown={onKeydown}
+					maxlength="24"
+					autocomplete="username"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					class="w-full rounded-xl py-3 pl-10 pr-4 text-[16px] font-semibold transition-all bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] placeholder:text-[var(--text-subtle)] focus:border-[var(--brand)] focus:outline-none focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_18%,transparent)] sm:text-sm"
+				/>
 		</div>
 
 		<!-- PIN -->
