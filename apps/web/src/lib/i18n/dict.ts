@@ -302,6 +302,7 @@ const es = {
 	'push.onHint': 'Toca para desactivar los avisos',
 	'push.working': 'Activando…',
 	'push.fail': 'No se pudieron activar los avisos',
+	'push.promptBug': 'El navegador no pudo mostrar el permiso. Prueba de nuevo con la pestaña en primer plano (o actívalo desde el candado 🔒 → Notificaciones).',
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'La retransmisión ha terminado',
@@ -645,6 +646,7 @@ const en: Dict = {
 	'push.onHint': 'Tap to turn alerts off',
 	'push.working': 'Enabling…',
 	'push.fail': 'Could not enable alerts',
+	'push.promptBug': "The browser couldn't show the permission prompt. Try again with the tab focused (or enable it from the padlock 🔒 → Notifications).",
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'The broadcast has ended',
