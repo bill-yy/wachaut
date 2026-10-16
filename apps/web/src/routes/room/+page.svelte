@@ -915,7 +915,7 @@
       <p class="mb-6 text-sm text-[var(--text-muted)]" role="alert">{error}</p>
       <a href="/" class="btn-secondary inline-flex items-center gap-2">
         <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-        Volver al inicio
+        {t('room.backHome')}
       </a>
     </div>
   </div>

@@ -230,7 +230,7 @@
 
 		<!-- Mockup -->
 		<div class="mt-14 w-full max-w-md lg:mt-0 lg:max-w-lg lg:flex-1" style="animation-delay: 240ms">
-			<ScreenMockup />
+			<ScreenMockup {locale} />
 		</div>
 	</main>
 

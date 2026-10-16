@@ -154,8 +154,8 @@
 				<button
 					onclick={onStartRecording}
 					class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
-					title="Grabar sesión"
-					aria-label="Grabar sesión"
+					title={t('room.recordSession')}
+					aria-label={t('room.recordSession')}
 				>
 					<Circle class="h-5 w-5 text-[var(--danger)]" />
 				</button>
