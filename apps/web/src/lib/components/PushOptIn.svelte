@@ -38,6 +38,10 @@
 			if (!keyRes.ok) throw new Error('push disabled');
 			const { publicKey } = await keyRes.json();
 			const reg = await navigator.serviceWorker.ready;
+			// Drop any previous subscription first: a stale one from another
+			// key/room makes subscribe() reject ("different applicationServerKey").
+			const existing = await reg.pushManager.getSubscription();
+			if (existing) await existing.unsubscribe().catch(() => {});
 			const sub = await reg.pushManager.subscribe({
 				userVisibleOnly: true,
 				applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
@@ -49,23 +53,41 @@
 			});
 			if (!res.ok && res.status !== 204) throw new Error('subscribe rejected');
 			state = 'on';
-		} catch (err: any) {
+		} catch {
 			state = Notification.permission === 'denied' ? 'denied' : 'idle';
-			if (Notification.permission === 'denied') return;
-			toast.error(t('push.fail'));
+			if (Notification.permission !== 'denied') toast.error(t('push.fail'));
 		}
 	}
 
 	async function enable() {
-		if (typeof Notification === 'undefined') return;
-		if (Notification.permission !== 'granted') {
-			const perm = await Notification.requestPermission();
-			if (perm !== 'granted') {
-				state = perm === 'denied' ? 'denied' : 'idle';
+		try {
+			if (typeof Notification === 'undefined') return;
+			if (Notification.permission === 'denied') {
+				state = 'denied';
 				return;
 			}
+			if (Notification.permission !== 'granted') {
+				// Chrome can REJECT this promise instead of showing the prompt
+				// (the notorious "No Listener: tabs:outgoing.message.ready" bug,
+				// usually extension/tab-focus related) — treat as retryable.
+				let perm: string;
+				try {
+					perm = await Notification.requestPermission();
+				} catch {
+					toast.warning(t('push.promptBug'));
+					return;
+				}
+				if (perm !== 'granted') {
+					state = perm === 'denied' ? 'denied' : 'idle';
+					return;
+				}
+			}
+			await subscribe();
+		} catch {
+			// Belt and braces: no unhandled rejections from the click handler.
+			state = 'idle';
+			toast.error(t('push.fail'));
 		}
-		await subscribe();
 	}
 
 	async function disable() {
