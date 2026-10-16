@@ -14,6 +14,7 @@ import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './co
 import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
 import { initPush, registerPushRoutes, notifyHostViewersJoined, dropRoomSubscriptions, cleanupPushRateLimits } from './push.js';
 import { initMailer, flushMailer } from './mailer.js';
+import { runDailyBackup } from './backup.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
 import {
   registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
@@ -24,6 +25,7 @@ import {
   pinEquals,
   sanitizeChatText,
   sanitizeUsername,
+  clientIpFromHeaders,
   VALID_EMOJIS,
   MAX_CHAT_LENGTH as SECURITY_MAX_CHAT,
   MAX_USERNAME_LENGTH as SECURITY_MAX_USERNAME,
@@ -76,6 +78,18 @@ const fastify = Fastify({
   ajv: { customOptions: { removeAdditional: false, allErrors: true } },
 });
 
+// Cloudflare-proxied requests: X-Forwarded-For can arrive without the
+// original client (or spoofed by the client). CF-Connecting-IP is set by
+// Cloudflare itself and stripped from inbound requests, so when present it
+// wins over the XFF-derived req.ip — this feeds every rate limiter, the
+// audit log and the alert emails with the true client IP.
+fastify.addHook('onRequest', async (req) => {
+  const ip = clientIpFromHeaders(req.headers, req.ip);
+  if (ip !== req.ip) {
+    Object.defineProperty(req, 'ip', { value: ip, configurable: true });
+  }
+});
+
 // Capture every unhandled route error (real 500s — validation 4xx excluded).
 fastify.setErrorHandler((err: Error & { statusCode?: number }, req, reply) => {
   req.log.error(err);
@@ -116,7 +130,10 @@ const joinAttempts = new Map<string, { count: number; resetAt: number }>(); // `
 const connectionCounts = new Map<string, number>(); // IP -> count
 const eventCounts = new Map<string, { count: number; resetAt: number }>(); // socketId -> rate info
 
-const MAX_CONNECTIONS_PER_IP = 5;
+// Connections per IP — raised from 5: groups of friends/CGNAT share an IP
+// (6 people on one WiFi watching a match is the core use case, not abuse).
+// Env-tunable so load tests can exceed it on purpose.
+const MAX_CONNECTIONS_PER_IP = parseInt(process.env.MAX_CONNECTIONS_PER_IP || '8');
 const MAX_EVENTS_PER_MINUTE = 120;
 const MAX_ROOMS_SIMULTANEOUS = 200;
 const MAX_CHAT_LENGTH = SECURITY_MAX_CHAT;
@@ -137,13 +154,9 @@ const HOST_RECONNECT_GRACE_MS = parseInt(process.env.HOST_RECONNECT_GRACE_MS || 
 
 // ── Security helpers (imported from security.ts) ────────────────────
 
-/** Resolve the real client IP behind Traefik (X-Forwarded-For). */
+/** Resolve the real client IP behind Cloudflare/Traefik for a socket. */
 function realIp(socket: { handshake: { address: string; headers: Record<string, unknown> } }): string {
-  const xff = socket.handshake.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.length > 0) {
-    return xff.split(',')[0].trim();
-  }
-  return socket.handshake.address;
+  return clientIpFromHeaders(socket.handshake.headers, socket.handshake.address);
 }
 
 function checkRateLimit(socketId: string, maxEvents: number = MAX_EVENTS_PER_MINUTE): boolean {
@@ -237,6 +250,8 @@ setInterval(() => {
     drainSfuErrorsNow();
     // Send aggregated admin alert emails (no-op when mail is not configured).
     flushMailer(nowMs);
+    // Daily DB backup: idempotent per UTC day, rotated, mailed offsite.
+    void runDailyBackup();
 
     // Cleanup stale connection counts (defensive — the disconnect handler
     // already decrements, but if a socket leaked we'd otherwise hold the IP

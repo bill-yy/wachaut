@@ -223,30 +223,54 @@ function renderBody(lines: string[], nowMs: number): string {
   ].join('\n');
 }
 
-async function sendMail(subject: string, text: string): Promise<void> {
+async function sendMail(subject: string, text: string, attachment?: { filename: string; contentB64: string }): Promise<void> {
   try {
+    const payload: Record<string, unknown> = { from: fromAddress, to: recipients, subject: `[Wachaut] ${subject}`, text };
+    if (attachment) {
+      payload.attachments = [{ filename: attachment.filename, content: attachment.contentB64 }];
+    }
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: fromAddress, to: recipients, subject: `[Wachaut] ${subject}`, text }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
       // One retry on the next flush, then give up (logged either way).
-      if (retryQueue.length < 10 && !retryQueue.some((r) => r.subject === subject)) {
+      // Attachment mails are not retried — the file may have rotated away.
+      if (!attachment && retryQueue.length < 10 && !retryQueue.some((r) => r.subject === subject)) {
         retryQueue.push({ subject, text });
       }
       log.warn(`resend send failed (HTTP ${res.status})`);
     }
   } catch (err) {
-    if (retryQueue.length < 10 && !retryQueue.some((r) => r.subject === subject)) {
+    if (!attachment && retryQueue.length < 10 && !retryQueue.some((r) => r.subject === subject)) {
       retryQueue.push({ subject, text });
     }
     log.warn(`resend unreachable: ${String(err).slice(0, 200)}`);
   }
+}
+
+/**
+ * One-off attachment email (daily DB backup). Bypasses the per-type caps —
+ * it is at most one mail per day — but still respects the global ceiling
+ * and the enabled check.
+ */
+export async function sendAdminAttachment(
+  subject: string,
+  text: string,
+  attachment: { filename: string; contentB64: string },
+  nowMs: number = Date.now(),
+): Promise<boolean> {
+  if (!mailerEnabled()) return false;
+  rolloverDay(nowMs);
+  if (globalSent >= GLOBAL_CAP) return false;
+  globalSent++;
+  await sendMail(subject, text, attachment);
+  return true;
 }
 
 /** Snapshot for /metrics and tests. */
