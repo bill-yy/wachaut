@@ -692,10 +692,12 @@
 		<!-- Non-live states -->
 		<ViewerHeader notificationsMuted={notificationsMuted} onToggleNotifications={toggleNotificationsMuted} />
 
-		<!-- Ambient background -->
+		<!-- Ambient background: the radial gradient is soft by itself — a live
+		     blur(120px) here killed iOS tabs (compositor memory) once the
+		     keyboard opened, so no filter is applied. -->
 		<div class="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
 			<div
-				class="absolute left-1/2 top-1/4 h-[420px] w-[620px] -translate-x-1/2 rounded-full opacity-30 blur-[120px]"
+				class="absolute left-1/2 top-1/4 h-[420px] w-[620px] -translate-x-1/2 rounded-full opacity-30"
 				style="background: radial-gradient(circle, var(--color-amber-500), transparent 70%);"
 			></div>
 		</div>
@@ -785,10 +787,10 @@
 				{/if}
 			</button>
 
-			<!-- Mobile backdrop -->
+			<!-- Mobile backdrop (no backdrop-filter: iOS compositor) -->
 			{#if chatOpen}
 				<button
-					class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+					class="fixed inset-0 z-40 bg-black/60 md:hidden"
 					onclick={toggleChat}
 					aria-label="Cerrar chat"
 					tabindex="-1"
