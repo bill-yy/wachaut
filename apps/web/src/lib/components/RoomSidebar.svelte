@@ -4,13 +4,16 @@
 	import EmotePicker from './EmotePicker.svelte';
 	import QualitySettings, { type QualityPreset } from './QualitySettings.svelte';
 	import { t } from '$lib/i18n/index.svelte';
-	import { Check, Link2, Settings, Share2, StopCircle, ArrowLeft, ChevronDown } from 'lucide-svelte';
+	import { Check, Link2, Settings, Share2, StopCircle, ArrowLeft, ChevronDown, Pencil } from 'lucide-svelte';
 
 	interface Props {
 		// Room info
 		pin: string;
 		roomUrl: string;
 		copiedInvite: boolean;
+		/** Public room title (share-link previews + viewer join screen). */
+		title?: string;
+		onSetTitle: (title: string) => void;
 		// Sharing state
 		sharing: boolean;
 		// Quality
@@ -40,6 +43,8 @@
 		onToggleEmotePicker: () => void;
 		onCloseEmotePicker: () => void;
 		onLeave: () => void;
+		// Host push opt-in chip (rendered under the title editor).
+		pushOptIn?: Snippet;
 		// Chat panel slot
 		children: Snippet;
 	}
@@ -48,6 +53,8 @@
 		pin,
 		roomUrl,
 		copiedInvite,
+		title = '',
+		onSetTitle,
 		sharing,
 		presets,
 		qualityPreset = $bindable(),
@@ -72,8 +79,18 @@
 		onToggleEmotePicker,
 		onCloseEmotePicker,
 		onLeave,
+		pushOptIn,
 		children,
 	}: Props = $props();
+
+	// Title editor: local draft while typing, committed on Enter/blur/save.
+	let titleDraft = $state(title);
+	let titleEditing = $state(false);
+	$effect(() => { if (!titleEditing) titleDraft = title; });
+	function commitTitle() {
+		titleEditing = false;
+		onSetTitle(titleDraft.trim());
+	}
 </script>
 
 <aside class="flex h-full w-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--surface)] md:w-80">
@@ -85,6 +102,44 @@
 			<span class="relative text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">{t('room.pinLabel')}</span>
 			<p class="relative font-mono text-2xl font-bold tracking-[0.15em] text-[var(--brand)] sm:text-3xl sm:tracking-[0.25em]">{pin}</p>
 		</div>
+
+		<!-- Room title (public — appears in share-link previews and the viewer join screen) -->
+		{#if titleEditing}
+			<div class="flex gap-1.5">
+				<input
+					type="text"
+					bind:value={titleDraft}
+					maxlength="80"
+					placeholder={t('room.titlePlaceholder')}
+					class="min-w-0 flex-1 rounded-lg border border-[var(--brand)]/40 bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-[var(--brand)] focus:outline-none"
+					onkeydown={(e) => {
+						if (e.key === 'Enter') commitTitle();
+						if (e.key === 'Escape') { titleEditing = false; titleDraft = title; }
+					}}
+					onblur={commitTitle}
+				/>
+				<button
+					onclick={commitTitle}
+					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg gradient-brand text-black transition-all hover:brightness-110 active:scale-95"
+					aria-label={t('room.titleSave')}
+				>
+					<Check class="h-3.5 w-3.5" />
+				</button>
+			</div>
+		{:else}
+			<button
+				onclick={() => { titleDraft = title || ''; titleEditing = true; }}
+				class="group flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text)] transition-all hover:bg-[var(--border)] active:scale-[0.98]"
+				title={t('room.titleHint')}
+			>
+				<Pencil class="h-3 w-3 shrink-0 text-[var(--text-subtle)] group-hover:text-[var(--brand)]" />
+				<span class="truncate">{title || t('room.titlePlaceholder')}</span>
+			</button>
+		{/if}
+
+		{#if pushOptIn}
+			{@render pushOptIn()}
+		{/if}
 
 		<!-- Single copy invitation button (URL + PIN embedded) -->
 		<button

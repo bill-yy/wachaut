@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { Server } from 'socket.io';
 import crypto from 'node:crypto';
+import { join } from 'node:path';
 import geoip from 'geoip-country';
 import { db } from './db.js';
 import { bootstrapAdmin } from './admin/auth.js';
@@ -11,6 +12,7 @@ import { registerAdminRoutes, isMaintenanceMode, cleanupLoginAttempts, type Serv
 import { rollupTrafficStats } from './stats.js';
 import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
 import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
+import { initPush, registerPushRoutes, notifyHostViewersJoined, dropRoomSubscriptions, cleanupPushRateLimits } from './push.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
 import {
   registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
@@ -33,6 +35,7 @@ import {
   findViewerInRoom,
   verifyHostClaim,
   randomSecret,
+  sanitizeTitle,
   type Room,
   type ViewerInfo,
   type ChatMessage,
@@ -199,6 +202,7 @@ setInterval(() => {
     for (const roomId of reaped) {
       io.to(roomId).emit('room:closed');
       clearPendingHostDrop(roomId);
+      dropRoomSubscriptions(roomId);
       logRoomEvent('closed', roomId, viewerCounts.get(roomId) ?? 0);
     }
 
@@ -223,6 +227,7 @@ setInterval(() => {
     cleanupTrackRateLimits(nowMs);
     cleanupErrorRateLimits(nowMs);
     cleanupFeedbackRateLimits(nowMs);
+    cleanupPushRateLimits(nowMs);
     purgeOldPageviews();
     purgeOldErrors();
     // Refresh today's traffic_stats row from room_events (idempotent upsert).
@@ -363,11 +368,13 @@ io.on('connection', (socket) => {
 
   // ─── HOST EVENTS ────────────────────────────────────────
 
-  onSafe(socket, 'host:create-room', ({ pin, roomId: requestedRoomId, hostSecret }: { pin: string; roomId?: string; hostSecret?: string }) => {
+  onSafe(socket, 'host:create-room', ({ pin, roomId: requestedRoomId, hostSecret, title }: { pin: string; roomId?: string; hostSecret?: string; title?: string }) => {
     if (!checkRateLimit(socket.id)) {
       socket.emit('room:error', { message: 'Demasiadas peticiones.' });
       return;
     }
+
+    const cleanTitle = sanitizeTitle(title);
 
     // Maintenance mode: no new rooms (existing rooms keep draining until
     // they close on their own — nobody is cut off mid-broadcast).
@@ -405,6 +412,7 @@ io.on('connection', (socket) => {
           clearTimeout(existingRoom.hostDisconnectTimer);
           existingRoom.hostDisconnectTimer = undefined;
         }
+        if (cleanTitle) existingRoom.title = cleanTitle;
         touchRoom(existingRoom);
         socket.emit('room:created', { roomId: requestedRoomId, reclaimed: true });
         // Reliability telemetry: the host drop ended in a successful reclaim.
@@ -433,7 +441,7 @@ io.on('connection', (socket) => {
     // Use the client-provided roomId if supplied (stable shareable link),
     // otherwise mint a fresh one.
     const roomId = requestedRoomId && requestedRoomId.length > 0 ? requestedRoomId : crypto.randomUUID();
-    const room = createRoom(roomId, pinHash(pin), socket.id);
+    const room = createRoom(roomId, pinHash(pin), socket.id, new Date(), undefined, cleanTitle);
 
     rooms.set(roomId, room);
     hostToRoom.set(socket.id, roomId);
@@ -443,6 +451,15 @@ io.on('connection', (socket) => {
 
     // Record room creation for admin stats.
     logRoomEvent('created', roomId, 0, realIp(socket));
+  });
+
+  onSafe(socket, 'host:set-title', ({ roomId, title }: { roomId: string; title?: string }) => {
+    const room = rooms.get(roomId);
+    if (!room || room.hostId !== socket.id) return; // host-only, silent
+    const clean = sanitizeTitle(title);
+    room.title = clean; // undefined clears the title
+    touchRoom(room);
+    socket.to(roomId).emit('room:title', { title: clean ?? null });
   });
 
   onSafe(socket, 'host:stop-sharing', ({ roomId }: { roomId: string }) => {
@@ -464,6 +481,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('room:closed');
       rooms.delete(roomId);
       hostToRoom.delete(socket.id);
+      dropRoomSubscriptions(roomId);
       clearPendingHostDrop(roomId); // intentional close — nothing to recover
       logRoomEvent('closed', roomId, room.viewers.size);
       for (const [viewerId] of room.viewers) {
@@ -588,6 +606,8 @@ io.on('connection', (socket) => {
     
     socket.emit('room:joined', { roomId, username: reservedUsername });
     socket.to(room.hostId).emit('viewer:joined', { viewerId: socket.id, username: reservedUsername });
+    // Push to the host's registered browsers (tab-closed case); no-op without subs.
+    void notifyHostViewersJoined(room.id, reservedUsername);
 
     // Record viewer join for admin stats.
     logRoomEvent('viewer_joined', roomId, room.viewers.size, realIp(socket));
@@ -690,7 +710,7 @@ fastify.get('/health', { logLevel: 'error' }, async () => {
 
 // Readiness probe: checks that Socket.IO is accepting connections.
 // Use this for Traefik/Docker load-balancer routing decisions.
-fastify.get('/ready', async (req, reply) => {
+async function readinessHandler(_req: any, reply: any) {
   // Maintenance mode: return 503 so Traefik shows the maintenance page.
   if (isMaintenanceMode()) {
     return reply.code(503).send({ ready: false, maintenance: true });
@@ -710,6 +730,47 @@ fastify.get('/ready', async (req, reply) => {
   // Return 503 when the SFU is unreachable so Traefik can failover.
   const code = sfuReachable ? 200 : 503;
   return reply.code(code).send({ ready: sfuReachable, sfu: sfuReachable ? 'reachable' : 'unreachable' });
+}
+fastify.get('/ready', readinessHandler);
+// Same probe under /api — Traefik only routes the /api prefix to this
+// service from the public domains, so the status page uses this alias.
+fastify.get('/api/ready', { logLevel: 'error' }, readinessHandler);
+
+// ── Public room info (for share-link previews) ────────────────────────
+// The static web server calls this to inject a live og:title into /room/<id>
+// responses, so links shared on WhatsApp/Telegram show "en directo" with the
+// host's title instead of the generic site card. Returns NO secrets: just
+// existence, liveness, viewer count and the public title.
+const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const roomInfoCalls = new Map<string, { count: number; resetAt: number }>();
+function roomInfoRateOk(ip: string): boolean {
+  const now = Date.now();
+  const entry = roomInfoCalls.get(ip);
+  if (!entry || now > entry.resetAt) {
+    roomInfoCalls.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= 60;
+}
+fastify.get('/api/room-info/:roomId', { logLevel: 'error' }, async (req, reply) => {
+  if (!roomInfoRateOk(req.ip)) {
+    return reply.code(429).send({ error: 'too many requests' });
+  }
+  const { roomId } = req.params as { roomId: string };
+  if (!ROOM_ID_RE.test(roomId)) {
+    return reply.code(400).send({ error: 'invalid room id' });
+  }
+  const room = rooms.get(roomId);
+  if (!room) {
+    return reply.code(404).send({ exists: false });
+  }
+  return {
+    exists: true,
+    live: room.isSharing,
+    viewers: Array.from(room.viewers.values()).filter((v) => v.connected).length,
+    title: room.title ?? null,
+  };
 });
 
 // ── Admin API ────────────────────────────────────────────────────────
@@ -734,6 +795,11 @@ registerErrorRoutes(fastify);
 
 // Public contact form + post-broadcast feedback.
 registerFeedbackRoutes(fastify);
+
+// Web push (host notifications when a viewer joins). Keys: env override or
+// generated once and persisted under the data volume — never in source.
+initPush(join(process.cwd(), 'data'));
+registerPushRoutes(fastify, (roomId) => rooms.has(roomId));
 
 // Drain the SFU's in-memory error ring into the central store. Called from
 // the 5-min sweeper — if the SFU is unreachable the buffer simply waits.

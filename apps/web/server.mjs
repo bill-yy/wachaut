@@ -11,13 +11,20 @@
  * Replaces `serve -s` (which rewrote EVERY path to index.html, hiding the
  * prerendered pages from crawlers) with explicit, predictable behavior.
  */
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('./web/build/', import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000');
+
+/**
+ * Internal signaling-server URL (dokploy network), e.g. http://wachaut-server:3001.
+ * When set, /room/<id> requests get a live og:title injected into the SPA
+ * shell so links shared on WhatsApp/Telegram preview "en directo" + title.
+ */
+const API_INTERNAL = (process.env.API_INTERNAL_URL || '').replace(/\/$/, '');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -41,13 +48,56 @@ function isSpaRoute(pathname) {
          pathname === '/admin' || pathname.startsWith('/admin/');
 }
 
+// ── Live room previews (og tags for /room/<id>) ─────────────────────────
+const ROOM_INFO_TTL_MS = 30_000;
+const roomInfoCache = new Map(); // roomId → { at, data }
+const roomIdRe = /^\/room\/([A-Za-z0-9_-]{1,64})\/?$/;
+
+async function fetchRoomInfo(roomId) {
+  if (!API_INTERNAL) return null;
+  const hit = roomInfoCache.get(roomId);
+  if (hit && Date.now() - hit.at < ROOM_INFO_TTL_MS) return hit.data;
+  try {
+    const res = await fetch(`${API_INTERNAL}/api/room-info/${encodeURIComponent(roomId)}`, {
+      signal: AbortSignal.timeout(400),
+      headers: { accept: 'application/json' },
+    });
+    const data = res.ok ? await res.json() : null;
+    if (roomInfoCache.size > 500) roomInfoCache.clear();
+    roomInfoCache.set(roomId, { at: Date.now(), data });
+    return data;
+  } catch {
+    return null; // API down/slow → serve the plain shell, never block the room
+  }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function injectLiveOg(html, info) {
+  const title = info?.title
+    ? `${info.title} — Wachaut`
+    : 'Wachaut — pantalla en directo · screen live';
+  const desc = info?.title
+    ? 'En directo ahora: únete con un clic · Live now: join with one click'
+    : 'Alguien está compartiendo su pantalla — únete con un clic · Someone is sharing their screen';
+  const tags =
+    `<meta property="og:title" content="${escapeHtml(title)}"/>` +
+    `<meta property="og:description" content="${escapeHtml(desc)}"/>` +
+    `<meta property="og:type" content="website"/>` +
+    `<meta name="twitter:title" content="${escapeHtml(title)}"/>` +
+    `<meta name="twitter:description" content="${escapeHtml(desc)}"/>`;
+  return html.replace('</head>', `${tags}</head>`);
+}
+
 function sendFile(res, filePath, status = 200) {
   const type = MIME[extname(filePath)] || 'application/octet-stream';
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=3600' });
   createReadStream(filePath).pipe(res);
 }
 
-createServer((req, res) => {
+createServer(async (req, res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     // Normalize and confine to ROOT (blocks ../ traversal).
@@ -64,6 +114,20 @@ createServer((req, res) => {
     if (target.startsWith(ROOT) && existsSync(dirIndex)) {
       sendFile(res, dirIndex);
       return;
+    }
+    // Live room preview: for /room/<id>, ask the API for the room and inject
+    // a live og:title into the shell (WhatsApp/Telegram link previews).
+    const roomMatch = pathname.match(roomIdRe);
+    if (roomMatch && API_INTERNAL) {
+      const info = await fetchRoomInfo(roomMatch[1]);
+      if (info?.exists) {
+        try {
+          const shell = readFileSync(join(ROOT, '404.html'), 'utf-8');
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+          res.end(injectLiveOg(shell, info));
+          return;
+        } catch { /* fall through to the plain shell */ }
+      }
     }
     // SPA routes get the adapter's fallback shell (empty body + app bundles).
     // NOT the prerendered landing: serving landing HTML at /admin or /room

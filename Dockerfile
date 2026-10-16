@@ -47,6 +47,9 @@ USER appuser
 EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
+# Internal signaling URL (dokploy network) for live /room/<id> link previews.
+# Per-environment value is set in Dokploy; empty disables the injection.
+ENV API_INTERNAL_URL=
 ENTRYPOINT ["tini", "--"]
 CMD ["node", "server.mjs"]
 
