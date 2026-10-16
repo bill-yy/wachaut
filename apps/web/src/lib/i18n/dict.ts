@@ -303,6 +303,10 @@ const es = {
 	'push.working': 'Activando…',
 	'push.fail': 'No se pudieron activar los avisos',
 	'push.promptBug': 'El navegador no pudo mostrar el permiso. Prueba de nuevo con la pestaña en primer plano (o actívalo desde el candado 🔒 → Notificaciones).',
+	'push.blocked': 'Notificaciones bloqueadas para este sitio. Actívalas desde el candado 🔒 (a la izquierda de la URL) → Permisos → Notificaciones → Permitir, y recarga la página.',
+	'push.blockedShort': 'Notificaciones bloqueadas 🔒',
+	'push.blockedHint': 'El navegador bloqueó las notificaciones de wachaut.com. Se desbloquean solo desde el candado de la barra de direcciones.',
+	'push.serviceDown': 'Tu navegador no pudo conectar con su servicio de notificaciones. Suele ser una extensión, VPN o bloqueador. Prueba en ventana de incógnito sin extensiones o en otro navegador.',
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'La retransmisión ha terminado',
@@ -647,6 +651,10 @@ const en: Dict = {
 	'push.working': 'Enabling…',
 	'push.fail': 'Could not enable alerts',
 	'push.promptBug': "The browser couldn't show the permission prompt. Try again with the tab focused (or enable it from the padlock 🔒 → Notifications).",
+	'push.blocked': 'Notifications are blocked for this site. Enable them from the padlock 🔒 (left of the URL) → Permissions → Notifications → Allow, then reload the page.',
+	'push.blockedShort': 'Notifications blocked 🔒',
+	'push.blockedHint': 'Your browser blocked wachaut.com notifications. Undo it from the address-bar padlock.',
+	'push.serviceDown': "Your browser couldn't reach its notification service — usually an extension, VPN or blocker. Try an incognito window without extensions or another browser.",
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'The broadcast has ended',

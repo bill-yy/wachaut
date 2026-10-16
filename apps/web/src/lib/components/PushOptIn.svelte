@@ -1,11 +1,16 @@
 <script lang="ts">
 	/**
 	 * Host opt-in for push notifications ("a viewer joined") — shown in the
-	 * room sidebar. Hidden when unsupported or permanently denied.
+	 * room sidebar. Hidden when unsupported. Failure messages are specific
+	 * per cause (blocked permission vs browser push-service unreachable),
+	 * auto-attempts on load are silent, and failures are reported to the
+	 * error tracker so they show up in the admin panel.
 	 */
 	import { t } from '$lib/i18n/index.svelte';
+	import type { DictKey } from '$lib/i18n/dict';
 	import { toast } from '$lib/stores/toast.svelte';
-	import { BellRing, Check } from 'lucide-svelte';
+	import { captureClientError } from '$lib/error-report';
+	import { BellRing, Check, BellOff } from 'lucide-svelte';
 
 	let { roomId }: { roomId: string } = $props();
 
@@ -17,11 +22,14 @@
 			state = 'unsupported';
 			return;
 		}
-		// Already granted from a previous session → resubscribe for THIS room.
-		if (Notification.permission === 'granted') {
-			subscribe().catch(() => {});
-		} else if (Notification.permission === 'denied') {
+		if (Notification.permission === 'denied') {
 			state = 'denied';
+			return;
+		}
+		// Already granted from a previous session → resubscribe for THIS room.
+		// Silent: an auto-attempt on load must never pop an error toast.
+		if (Notification.permission === 'granted') {
+			subscribe({ silent: true }).catch(() => {});
 		}
 	});
 
@@ -31,8 +39,16 @@
 		return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 	}
 
-	async function subscribe(): Promise<void> {
-		state = 'working';
+	/** Human message for a subscribe() failure. */
+	function failureKey(err: unknown): DictKey {
+		const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+		if (Notification.permission === 'denied' || /permission/i.test(msg)) return 'push.blocked';
+		if (/push service|AbortError|network/i.test(msg)) return 'push.serviceDown';
+		return 'push.fail';
+	}
+
+	async function subscribe({ silent = false }: { silent?: boolean } = {}): Promise<void> {
+		if (!silent) state = 'working';
 		try {
 			const keyRes = await fetch('/api/push/key');
 			if (!keyRes.ok) throw new Error('push disabled');
@@ -51,11 +67,15 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ roomId, subscription: sub.toJSON() }),
 			});
-			if (!res.ok && res.status !== 204) throw new Error('subscribe rejected');
+			if (!res.ok && res.status !== 204) throw new Error(`subscribe rejected (${res.status})`);
 			state = 'on';
-		} catch {
-			state = Notification.permission === 'denied' ? 'denied' : 'idle';
-			if (Notification.permission !== 'denied') toast.error(t('push.fail'));
+		} catch (err) {
+			if (Notification.permission === 'denied') state = 'denied';
+			else state = 'idle';
+			// Always report (server logs + admin error panel), toast only on
+			// explicit user action — never for the silent load-time attempt.
+			captureClientError(new Error(`push opt-in failed: ${err instanceof Error ? err.message : String(err)}`));
+			if (!silent) toast.error(t(failureKey(err)));
 		}
 	}
 
@@ -64,12 +84,12 @@
 			if (typeof Notification === 'undefined') return;
 			if (Notification.permission === 'denied') {
 				state = 'denied';
+				toast.warning(t('push.blocked'));
 				return;
 			}
 			if (Notification.permission !== 'granted') {
 				// Chrome can REJECT this promise instead of showing the prompt
-				// (the notorious "No Listener: tabs:outgoing.message.ready" bug,
-				// usually extension/tab-focus related) — treat as retryable.
+				// (extension/tab-focus related) — treat as retryable with advice.
 				let perm: string;
 				try {
 					perm = await Notification.requestPermission();
@@ -77,14 +97,17 @@
 					toast.warning(t('push.promptBug'));
 					return;
 				}
-				if (perm !== 'granted') {
-					state = perm === 'denied' ? 'denied' : 'idle';
+				if (perm === 'denied') {
+					// Chrome auto-blocks sites after repeated dismissals — from
+					// here ONLY the padlock settings can re-enable them.
+					state = 'denied';
+					toast.warning(t('push.blocked'));
 					return;
 				}
+				if (perm !== 'granted') return; // dismissed — keep idle, no noise
 			}
 			await subscribe();
 		} catch {
-			// Belt and braces: no unhandled rejections from the click handler.
 			state = 'idle';
 			toast.error(t('push.fail'));
 		}
@@ -115,6 +138,16 @@
 	>
 		<Check class="h-3.5 w-3.5 shrink-0" />
 		<span class="truncate">{t('push.on')}</span>
+	</button>
+{:else if state === 'denied'}
+	<!-- Chrome auto-blocked notifications for the site: only the padlock can undo it. -->
+	<button
+		onclick={() => toast.warning(t('push.blocked'))}
+		class="flex w-full items-center gap-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/8 px-3 py-2 text-xs font-medium text-[var(--warning)] transition-all active:scale-[0.98]"
+		title={t('push.blockedHint')}
+	>
+		<BellOff class="h-3.5 w-3.5 shrink-0" />
+		<span class="truncate">{t('push.blockedShort')}</span>
 	</button>
 {:else if state === 'idle' || state === 'working'}
 	<button
