@@ -28,6 +28,7 @@ import {
   storeRecoveryCodes, consumeRecoveryCode,
 } from './auth.js';
 import { verifyTotp, generateTotpSecret, totpUri } from './totp.js';
+import { notifyAdmin, mailerStatus } from '../mailer.js';
 import { findViewerInRoom, removeViewer } from '../room-store.js';
 import { queryAnalytics } from '../analytics.js';
 import { queryFeedback } from '../feedback.js';
@@ -176,6 +177,11 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
 
     if (!checkLoginRateLimit(ip)) {
       auditLog(null, String(username).slice(0, 64), 'login_rate_limited', ip, country);
+      notifyAdmin('security', `Login bloqueado por límite de intentos (${country || '??'})`, [
+        `Usuario intentado: ${String(username).slice(0, 64)}`,
+        `IP: ${ip}${country ? ` (${country})` : ''}`,
+        'Se superaron los intentos permitidos en 10 minutos — posible fuerza bruta.',
+      ], );
       return reply.code(429).send({ error: 'Too many attempts. Try again in 10 minutes.' });
     }
 
@@ -183,6 +189,11 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
 
     if (!user || !user.active || !verifyPassword(password, user.password_hash)) {
       auditLog(user?.id ?? null, String(username).slice(0, 64), 'login_failed', ip, country);
+      notifyAdmin('security', `Intento de login fallido (${country || '??'})`, [
+        `Usuario intentado: ${String(username).slice(0, 64)}`,
+        `IP: ${ip}${country ? ` (${country})` : ''}`,
+        user && !user.active ? 'La cuenta existe pero está revocada.' : 'Credenciales incorrectas.',
+      ], );
       return reply.code(401).send({ error: 'Invalid credentials' });
     }
 
@@ -193,6 +204,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
         || (code && consumeRecoveryCode(user.id, code));
       if (!codeOk) {
         auditLog(user.id, user.username, 'login_totp_failed', ip, country);
+        notifyAdmin('security', `Código 2FA incorrecto: ${user.username}`, [
+          `Usuario: ${user.username} (contraseña correcta, 2FA fallido)`,
+          `IP: ${ip}${country ? ` (${country})` : ''}`,
+        ], );
         return reply.code(401).send({ error: 'Invalid 2FA code', totpRequired: true });
       }
     }
@@ -251,6 +266,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       memory: Math.round(process.memoryUsage().rss / 1024 / 1024), // MB
       errors: { open: openErrors, last24h: errors24h },
       contact: { unread: contactUnread },
+      mail: mailerStatus(),
     };
   });
 
@@ -707,6 +723,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     try {
       const newUser = createUser(username, password, role || 'admin');
       auditLog(user.userId, user.username, `create_user:${username}`, req.ip, lookupCountry(req.ip));
+      notifyAdmin('security', `Usuario admin creado: ${username}`, [
+        `Nuevo usuario: ${username} (rol ${newUser.role})`,
+        `Creado por: ${user.username} · IP ${req.ip}`,
+      ]);
       return { user: newUser };
     } catch (err: any) {
       if (err?.message?.includes('UNIQUE')) {
@@ -739,6 +759,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     }
     deactivateUser(id);
     auditLog(user.userId, user.username, `revoke_user:${target.username}`, req.ip, lookupCountry(req.ip));
+    notifyAdmin('security', `Cuenta admin revocada: ${target.username}`, [
+      `Usuario revocado: ${target.username}`,
+      `Por: ${user.username} · IP ${req.ip}`,
+    ]);
     return { success: true };
   });
 
@@ -793,6 +817,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     }
     changeUserRole(id, role);
     auditLog(user.userId, user.username, `role_change:${target.username}:${role}`, req.ip, lookupCountry(req.ip));
+    notifyAdmin('security', `Rol cambiado: ${target.username} → ${role}`, [
+      `${target.username}: ${target.role} → ${role}`,
+      `Por: ${user.username} · IP ${req.ip}`,
+    ]);
     return { success: true };
   });
 
@@ -829,6 +857,11 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     }
     changePassword(id, password);
     auditLog(user.userId, user.username, `change_password:${target.username}`, req.ip, lookupCountry(req.ip));
+    notifyAdmin('security', `Contraseña cambiada: ${target.username}`, [
+      `Contraseña actualizada para ${target.username}`,
+      `Por: ${user.username} · IP ${req.ip}`,
+      'Si no fuiste tú, revisa la cuenta de inmediato.',
+    ]);
     return { success: true };
   });
 
@@ -870,6 +903,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     enableTotp(user.userId);
     const recoveryCodes = storeRecoveryCodes(user.userId);
     auditLog(user.userId, user.username, 'totp_enable', req.ip, lookupCountry(req.ip));
+    notifyAdmin('security', `2FA activado: ${user.username}`, [
+      `Se activó el segundo factor para ${user.username}`,
+      `IP ${req.ip}${lookupCountry(req.ip) ? ` (${lookupCountry(req.ip)})` : ''}`,
+    ]);
     return { enabled: true, recoveryCodes };
   });
 
@@ -920,6 +957,12 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     }
     disableTotp(targetId);
     auditLog(actor.userId, actor.username, `totp_disable:${target.username}`, req.ip, lookupCountry(req.ip));
+    notifyAdmin('security', `2FA DESACTIVADO: ${target.username}`, [
+      `Se desactivó el segundo factor de ${target.username}`,
+      `Por: ${actor.username} · IP ${req.ip}`,
+      targetId === actor.userId ? 'Auto-desactivación con código verificado.' : 'Desactivada por un superadmin.',
+      'Si no fuiste tú, asegúrate de que la cuenta no esté comprometida.',
+    ], );
     return { success: true };
   });
 }

@@ -13,6 +13,7 @@ import { rollupTrafficStats } from './stats.js';
 import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
 import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
 import { initPush, registerPushRoutes, notifyHostViewersJoined, dropRoomSubscriptions, cleanupPushRateLimits } from './push.js';
+import { initMailer, flushMailer } from './mailer.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
 import {
   registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
@@ -234,6 +235,8 @@ setInterval(() => {
     rollupTrafficStats(now);
     // Pull captured SFU errors into the central error store.
     drainSfuErrorsNow();
+    // Send aggregated admin alert emails (no-op when mail is not configured).
+    flushMailer(nowMs);
 
     // Cleanup stale connection counts (defensive — the disconnect handler
     // already decrements, but if a socket leaked we'd otherwise hold the IP
@@ -800,6 +803,10 @@ registerFeedbackRoutes(fastify);
 // generated once and persisted under the data volume — never in source.
 initPush(join(process.cwd(), 'data'));
 registerPushRoutes(fastify, (roomId) => rooms.has(roomId));
+
+// Admin email alerts (Resend). No-op until RESEND_API_KEY +
+// ADMIN_NOTIFY_EMAIL are set; batches flush from the 5-min sweeper.
+initMailer();
 
 // Drain the SFU's in-memory error ring into the central store. Called from
 // the 5-min sweeper — if the SFU is unreachable the buffer simply waits.
