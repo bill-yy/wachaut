@@ -792,7 +792,7 @@
 				<button
 					class="fixed inset-0 z-40 bg-black/60 md:hidden"
 					onclick={toggleChat}
-					aria-label="Cerrar chat"
+					aria-label={t('room.closeChat')}
 					tabindex="-1"
 				></button>
 			{/if}
@@ -801,9 +801,9 @@
 			{#if showShortcuts}
 				<div class="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 animate-fade-in md:bottom-8">
 					<div class="glass flex max-w-[90vw] flex-wrap items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs text-[var(--text-muted)] shadow-xl sm:max-w-none sm:gap-3 sm:px-4">
-						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">M</kbd> silenciar</span>
-						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">F</kbd> pantalla completa</span>
-						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">/</kbd> chat</span>
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">M</kbd> {t('room.scMute')}</span>
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">F</kbd> {t('room.scFullscreen')}</span>
+						<span class="flex items-center gap-1.5"><kbd class="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--text)]">/</kbd> {t('room.scChat')}</span>
 					</div>
 				</div>
 			{/if}

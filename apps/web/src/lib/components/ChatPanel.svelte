@@ -152,7 +152,7 @@
 		{#if showCounter}
 			<div class="mt-1.5 flex items-center justify-between">
 				<span class="text-[10px] text-[var(--text-subtle)]">{value.length}/{maxLength}</span>
-				<span class="text-[10px] text-[var(--text-subtle)]">/help para comandos</span>
+				<span class="text-[10px] text-[var(--text-subtle)]">{t('comp.chatHint')}</span>
 			</div>
 		{/if}
 	</div>

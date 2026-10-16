@@ -1,16 +1,12 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
 	import { Monitor } from 'lucide-svelte';
+	import { t } from '$lib/i18n/index.svelte';
 
 	let status = $derived(page.status);
 	let message = $derived(page.error?.message || '');
 
-	const titles: Record<number, string> = {
-		404: 'Página no encontrada',
-		500: 'Algo salió mal',
-	};
-	const title = $derived(titles[status] ?? 'Error');
+	const title = $derived(status === 404 ? t('err.404') : status === 500 ? t('err.500') : t('comp.stError'));
 </script>
 
 <svelte:head>
@@ -18,17 +14,17 @@
 </svelte:head>
 
 <div class="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-app px-6 text-center">
-	<!-- Ambient glow -->
+	<!-- Ambient glow (soft gradient alone — no live blur on phones: iOS compositor) -->
 	<div class="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
 		<div
-			class="absolute -top-40 left-1/2 h-[420px] w-[620px] -translate-x-1/2 rounded-full opacity-30 blur-[120px]"
+			class="absolute -top-40 left-1/2 h-[420px] w-[620px] -translate-x-1/2 rounded-full opacity-30 blur-[120px] max-md:blur-none"
 			style="background: radial-gradient(circle, var(--color-amber-500), transparent 70%);"
 		></div>
 	</div>
 
 	<!-- Icon with glow -->
 	<div class="relative mb-6">
-		<div class="absolute inset-0 rounded-3xl opacity-40 blur-2xl gradient-brand"></div>
+		<div class="absolute inset-0 rounded-3xl opacity-40 blur-2xl gradient-brand max-md:hidden"></div>
 		<div class="relative flex h-20 w-20 animate-float items-center justify-center rounded-3xl bg-[var(--surface)] border border-[var(--border)]">
 			<Monitor class="h-10 w-10 text-[var(--brand)]" />
 		</div>
@@ -45,14 +41,14 @@
 	<!-- Message -->
 	<p class="mb-8 max-w-sm text-sm text-[var(--text-muted)]">
 		{#if status === 404}
-			La página que buscas no existe o la sala ha cerrado.
+			{t('err.404body')}
 		{:else}
-			{message || 'Ha ocurrido un error inesperado.'}
+			{message || t('err.fallbackBody')}
 		{/if}
 	</p>
 
 	<!-- CTA -->
 	<a href="/" class="btn-primary gap-2 px-6 py-3">
-		Volver al inicio
+		{t('room.backHome')}
 	</a>
 </div>

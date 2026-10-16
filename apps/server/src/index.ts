@@ -511,13 +511,13 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return;
     const viewer = findViewerInRoom(room, viewerId);
     if (!viewer) {
-      socket.emit('host:kick-failed', { viewerId, message: `No se encontro a ${viewerId}` });
+      socket.emit('host:kick-failed', { viewerId, message: 'No se ha encontrado al espectador. Puede que ya se haya ido.' });
       return;
     }
 
     room.viewers.delete(viewer.socketId);
     viewerToRoom.delete(viewer.socketId);
-    io.to(viewer.socketId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrion' });
+    io.to(viewer.socketId).emit('viewer:kicked', { reason: 'Expulsado por el anfitrión' });
     socket.emit('viewer:left', { viewerId: viewer.socketId, username: viewer.name });
     logRoomEvent('viewer_left', roomId, room.viewers.size);
   });

@@ -113,7 +113,7 @@
   }
 </script>
 
-<div class="glass mx-auto w-full max-w-md rounded-2xl p-6 text-center" role="region" aria-label="Valoración de la retransmisión">
+<div class="glass mx-auto w-full max-w-md rounded-2xl p-6 text-center" role="region" aria-label={t('rating.ariaRegion')}>
   {#if done}
     <p class="py-6 text-sm text-[var(--text-muted)]">{t('rating.thanksBody')}</p>
   {:else}
@@ -121,7 +121,7 @@
     <p class="mb-4 text-xs text-[var(--text-muted)]">{t('rating.subtitle')}</p>
 
     <!-- Stars -->
-    <div class="mb-5 flex justify-center gap-1" role="radiogroup" aria-label="Puntuación de 1 a 5 estrellas">
+    <div class="mb-5 flex justify-center gap-1" role="radiogroup" aria-label={t('rating.ariaStars')}>
       {#each [1, 2, 3, 4, 5] as n (n)}
         <button
           type="button"

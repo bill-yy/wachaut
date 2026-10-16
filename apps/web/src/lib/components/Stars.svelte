@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Read-only star display (e.g. "4.2" average) for the admin panel. */
   import { Star } from 'lucide-svelte';
+  import { t } from '$lib/i18n/index.svelte';
 
   let { value = 0, size = 20 }: { value?: number; size?: number } = $props();
 
@@ -8,7 +9,7 @@
   const rounded = $derived(Math.round(value * 2) / 2);
 </script>
 
-<div class="flex items-center gap-2" role="img" aria-label="Valoración media: {value} de 5">
+<div class="flex items-center gap-2" role="img" aria-label={t('stars.aria', { value })}>
   <div class="flex gap-0.5">
     {#each [1, 2, 3, 4, 5] as n (n)}
       <div class="relative">

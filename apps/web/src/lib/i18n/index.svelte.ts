@@ -59,6 +59,8 @@ const SERVER_MAP: Record<string, DictKey> = {
   'PIN o clave de host incorrectos para reclaim.': 'srv.reclaimBad',
   'Expulsado por el anfitrión': 'srv.kicked',
   'Expulsado por un administrador': 'srv.kickedAdmin',
+  'Error interno. Inténtalo de nuevo en unos segundos.': 'srv.internal',
+  'No se ha encontrado al espectador. Puede que ya se haya ido.': 'srv.kickNotFound',
 };
 
 export function srv(message: string | undefined | null): string {

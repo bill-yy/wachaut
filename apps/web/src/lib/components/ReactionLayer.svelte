@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { FloatingReaction, ConfettiParticle } from '$lib/types/room';
+	import { t } from '$lib/i18n/index.svelte';
 
 	interface Props {
 		/** Floating emoji reactions currently animating. */
@@ -57,15 +58,15 @@
 			>
 				<div class="mb-3 text-5xl">🎉</div>
 				<h2 class="mb-1 text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
-					¡Primer espectador!
+					{t('room.firstViewer')}
 				</h2>
-				<p class="text-sm text-[var(--text-muted)]">Alguien está viendo tu pantalla</p>
+				<p class="text-sm text-[var(--text-muted)]">{t('room.firstViewerBody')}</p>
 				<div class="mt-3 flex items-center justify-center gap-1.5">
 					<span class="relative flex h-2 w-2">
 						<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75"></span>
 						<span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--success)]"></span>
 					</span>
-					<span class="text-xs font-medium text-[var(--success)]">En vivo</span>
+					<span class="text-xs font-medium text-[var(--success)]">{t('room.liveNow')}</span>
 				</div>
 			</div>
 		</div>

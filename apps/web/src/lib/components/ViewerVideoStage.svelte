@@ -101,12 +101,12 @@
 				<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
 				<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-white"></span>
 			</span>
-			EN VIVO
+			{t('comp.liveBadge')}
 		</span>
 		{#if hostMuted}
 			<span class="flex items-center gap-1 rounded-full bg-[var(--warning)]/90 px-2 py-1 text-xs font-medium text-white max-md:backdrop-blur-none md:backdrop-blur-sm">
 				<VolumeX class="h-3 w-3" />
-				Silenciado
+				{t('vroom.hostMutedBadge')}
 			</span>
 		{/if}
 		{#if assignedUsername}

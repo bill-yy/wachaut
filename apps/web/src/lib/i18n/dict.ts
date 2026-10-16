@@ -351,6 +351,50 @@ const es = {
 	'srv.reclaimBad': 'PIN o clave de host incorrectos para reclaim.',
 	'srv.kicked': 'Expulsado por el anfitrión',
 	'srv.kickedAdmin': 'Expulsado por un administrador',
+	'srv.internal': 'Error interno. Inténtalo de nuevo en unos segundos.',
+	'srv.kickNotFound': 'No se ha encontrado al espectador. Puede que ya se haya ido.',
+
+	// Error page (+error.svelte)
+	'err.404': 'Página no encontrada',
+	'err.500': 'Algo salió mal',
+	'err.404body': 'La página que buscas no existe o la sala ha cerrado.',
+	'err.fallbackBody': 'Ha ocurrido un error inesperado.',
+
+	// Global layout
+	'layout.maintenance':
+		'Wachaut está en mantenimiento programado — la creación de salas nuevas está pausada temporalmente.',
+
+	// Landing mockup (SSR per locale — ScreenMockup receives the locale prop)
+	'mockup.sharing': 'Tu pantalla se está compartiendo',
+	'mockup.stop': 'Detener transmisión',
+	'mockup.stopShort': 'Detener',
+	'mockup.fullscreen': 'Pantalla completa',
+	'mockup.notifications': 'Notificaciones',
+	'mockup.pin': 'PIN de la sala',
+	'mockup.copy': 'Copiar enlace',
+	'mockup.chatMsg': 'Se ve genial 👍',
+	'mockup.zoom': '¿Puedes acercar?',
+	'mockup.type': 'Escribe…',
+	'mockup.send': 'Enviar',
+
+	// Rating / stars (aria)
+	'rating.ariaRegion': 'Valoración de la retransmisión',
+	'rating.ariaStars': 'Puntuación de 1 a 5 estrellas',
+	'stars.aria': 'Valoración media: {value} de 5',
+
+	// Host live overlays
+	'room.firstViewer': '¡Primer espectador!',
+	'room.firstViewerBody': 'Alguien está viendo tu pantalla',
+	'room.liveNow': 'En vivo',
+	'room.scMute': 'silenciar',
+	'room.scFullscreen': 'pantalla completa',
+	'room.scChat': 'chat',
+
+	// Viewer stage badges
+	'vroom.hostMutedBadge': 'Silenciado',
+
+	// Chat
+	'comp.chatHint': '/help para comandos',
 };
 
 export type Dict = Record<keyof typeof es, string>;
@@ -701,6 +745,50 @@ const en: Dict = {
 	'srv.reclaimBad': 'Wrong PIN or host key for reclaim.',
 	'srv.kicked': 'Kicked by the host',
 	'srv.kickedAdmin': 'Kicked by an administrator',
+	'srv.internal': 'Internal error. Try again in a few seconds.',
+	'srv.kickNotFound': 'Viewer not found. They may have already left.',
+
+	// Error page (+error.svelte)
+	'err.404': 'Page not found',
+	'err.500': 'Something went wrong',
+	'err.404body': "The page you're looking for doesn't exist or the room has closed.",
+	'err.fallbackBody': 'An unexpected error occurred.',
+
+	// Global layout
+	'layout.maintenance':
+		'Wachaut is under scheduled maintenance — creating new rooms is temporarily paused.',
+
+	// Landing mockup (SSR per locale — ScreenMockup receives the locale prop)
+	'mockup.sharing': 'Your screen is being shared',
+	'mockup.stop': 'Stop broadcast',
+	'mockup.stopShort': 'Stop',
+	'mockup.fullscreen': 'Fullscreen',
+	'mockup.notifications': 'Notifications',
+	'mockup.pin': 'Room PIN',
+	'mockup.copy': 'Copy link',
+	'mockup.chatMsg': 'Looks great 👍',
+	'mockup.zoom': 'Can you zoom in?',
+	'mockup.type': 'Type…',
+	'mockup.send': 'Send',
+
+	// Rating / stars (aria)
+	'rating.ariaRegion': 'Rate the broadcast',
+	'rating.ariaStars': 'Rate 1 to 5 stars',
+	'stars.aria': 'Average rating: {value} of 5',
+
+	// Host live overlays
+	'room.firstViewer': 'First viewer!',
+	'room.firstViewerBody': 'Someone is watching your screen',
+	'room.liveNow': 'Live',
+	'room.scMute': 'mute',
+	'room.scFullscreen': 'fullscreen',
+	'room.scChat': 'chat',
+
+	// Viewer stage badges
+	'vroom.hostMutedBadge': 'Host muted',
+
+	// Chat
+	'comp.chatHint': '/help for commands',
 };
 
 export const dict = { es, en } as const;

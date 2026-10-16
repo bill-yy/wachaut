@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Locale } from '$lib/i18n/dict';
+	import { dict } from '$lib/i18n/dict';
 	import {
 		Monitor,
 		Radio,
@@ -12,6 +14,11 @@
 		ArrowLeft,
 		StopCircle,
 	} from 'lucide-svelte';
+
+	// The landing is server-rendered per locale, so the mockup receives the
+	// locale as a prop instead of the reactive store (which is ES at SSR).
+	let { locale }: { locale: Locale } = $props();
+	const L = $derived(dict[locale]);
 </script>
 
 <div class="mockup-container relative w-full max-w-2xl select-none">
@@ -38,7 +45,7 @@
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
-				<button class="rounded-lg p-1.5 text-[var(--text-subtle)] hover:bg-[var(--surface)]" aria-label="Notificaciones">
+				<button class="rounded-lg p-1.5 text-[var(--text-subtle)] hover:bg-[var(--surface)]" aria-label={L['mockup.notifications']}>
 					<Bell class="h-4 w-4" />
 				</button>
 			</div>
@@ -59,16 +66,16 @@
 							<div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--brand)]/15 text-[var(--brand)]">
 								<Monitor class="h-7 w-7" />
 							</div>
-							<p class="text-xs font-medium text-[var(--text-muted)]">Tu pantalla se está compartiendo</p>
+							<p class="text-xs font-medium text-[var(--text-muted)]">{L['mockup.sharing']}</p>
 						</div>
 					</div>
 
 					<!-- Floating video controls -->
 					<div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-black/60 px-3 py-2 backdrop-blur-md">
-						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger)] text-white" aria-label="Detener">
+						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger)] text-white" aria-label={L['mockup.stopShort']}>
 							<StopCircle class="h-4 w-4" />
 						</button>
-						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text)]" aria-label="Pantalla completa">
+						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text)]" aria-label={L['mockup.fullscreen']}>
 							<Maximize class="h-4 w-4" />
 						</button>
 					</div>
@@ -86,18 +93,18 @@
 			<div class="hidden w-56 border-l border-[var(--border)] bg-[var(--surface)] p-4 lg:block">
 				<!-- Share info -->
 				<div class="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-					<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">PIN de la sala</p>
+					<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">{L['mockup.pin']}</p>
 					<div class="mb-2 flex items-center justify-center">
 						<span class="font-mono text-lg font-bold tracking-[0.2em] text-[var(--text)]">482917</span>
 					</div>
-					<button class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--surface)] py-1.5 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text)]" aria-label="Copiar enlace">
-						<Copy class="h-3 w-3" /> Copiar enlace
+					<button class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--surface)] py-1.5 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text)]" aria-label={L['mockup.copy']}>
+						<Copy class="h-3 w-3" /> {L['mockup.copy']}
 					</button>
 				</div>
 
 				<!-- Main action -->
-				<button class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger)] py-2.5 text-xs font-semibold text-white transition-all" aria-label="Detener transmisión">
-					<StopCircle class="h-4 w-4" /> Detener transmisión
+				<button class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger)] py-2.5 text-xs font-semibold text-white transition-all" aria-label={L['mockup.stop']}>
+					<StopCircle class="h-4 w-4" /> {L['mockup.stop']}
 				</button>
 
 				<!-- Chat preview -->
@@ -111,25 +118,25 @@
 							<div class="h-5 w-5 shrink-0 rounded-full bg-[var(--success)]"></div>
 							<div>
 								<p class="text-[9px] font-medium text-[var(--success)]">Ana</p>
-								<p class="text-[10px] text-[var(--text-muted)]">Se ve genial 👍</p>
+								<p class="text-[10px] text-[var(--text-muted)]">{L['mockup.chatMsg']}</p>
 							</div>
 						</div>
 						<div class="flex gap-2">
 							<div class="h-5 w-5 shrink-0 rounded-full bg-[var(--color-blue-600)]"></div>
 							<div>
 								<p class="text-[9px] font-medium text-[var(--color-blue-600)]">Luis</p>
-								<p class="text-[10px] text-[var(--text-muted)]">¿Puedes acercar?</p>
+								<p class="text-[10px] text-[var(--text-muted)]">{L['mockup.zoom']}</p>
 							</div>
 						</div>
 					</div>
 					<div class="flex items-center gap-1 border-t border-[var(--border)] p-2">
 						<input
 							type="text"
-							placeholder="Escribe…"
+							placeholder={L['mockup.type']}
 							class="flex-1 rounded-md border-0 bg-transparent px-2 py-1 text-[10px] text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:outline-none"
 							disabled
 						/>
-						<button class="text-[var(--text-subtle)]" aria-label="Enviar"><Send class="h-3.5 w-3.5" /></button>
+						<button class="text-[var(--text-subtle)]" aria-label={L['mockup.send']}><Send class="h-3.5 w-3.5" /></button>
 					</div>
 				</div>
 			</div>
