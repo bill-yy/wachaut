@@ -36,6 +36,8 @@
 	type Status = 'idle' | 'connecting' | 'auth' | 'waiting' | 'live' | 'ended' | 'error' | 'disconnected' | 'reconnecting';
 	let status = $state<Status>('idle');
 	let errorMessage = $state('');
+	/** Public room title shown on the join screen (from /api/room-info). */
+	let roomTitle = $state('');
 	let pin = $state('');
 	let username = $state('');
 	let assignedUsername = $state('');
@@ -331,6 +333,10 @@
 				// The SFU preserved our consumers; nothing to do here unless
 				// the recv transport died, in which case the next check kicks in.
 			}
+		});
+
+		socket.on('room:title', (data: any) => {
+			roomTitle = data?.title || '';
 		});
 
 		socket.on('room:closed', () => {
@@ -652,6 +658,11 @@
 	});
 
 	onMount(() => {
+		// Public room info → title for the join screen (also used by share previews server-side).
+		fetch(`/api/room-info/${encodeURIComponent(roomId)}`).then((r) => (r.ok ? r.json() : null)).then((info) => {
+			if (info?.title) roomTitle = info.title;
+		}).catch(() => {});
+
 		try { username = localStorage.getItem(USERNAME_STORAGE_KEY) || ''; } catch { username = ''; }
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -692,7 +703,10 @@
 		<main class="mx-auto max-w-5xl px-4 py-6">
 			{#if status === 'idle'}
 				<div class="flex items-center justify-center" style="min-height: 60vh;">
-					<ViewerAuth bind:username bind:pin onConnect={connect} />
+					{#if roomTitle}
+							<p class="mb-4 max-w-sm text-center text-sm font-semibold text-[var(--brand)]" style="font-family: var(--font-display);">{roomTitle}</p>
+						{/if}
+						<ViewerAuth bind:username bind:pin onConnect={connect} />
 				</div>
 			{:else if status === 'ended'}
 				<!-- Broadcast ended: dedicated screen with a rating prompt -->

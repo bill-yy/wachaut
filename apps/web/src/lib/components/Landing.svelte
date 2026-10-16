@@ -287,6 +287,7 @@
 			<div class="flex items-center gap-4">
 				<p class="text-xs text-[var(--text-subtle)]">{L['landing.footerTagline']} · {new Date().getFullYear()}</p>
 				<a href={locale === 'es' ? '/blog/' : '/en/blog/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerBlog']}</a>
+				<a href={locale === 'es' ? '/estado/' : '/en/status/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerStatus']}</a>
 				<a href={locale === 'es' ? '/contacto/' : '/en/contacto/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerContact']}</a>
 				<a href={locale === 'es' ? '/privacidad/' : '/en/privacidad/'} class="text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">{L['landing.footerPrivacy']}</a>
 			</div>

@@ -19,6 +19,7 @@
   import HostHeader from '$lib/components/HostHeader.svelte';
   import VideoStage from '$lib/components/VideoStage.svelte';
   import RoomSidebar from '$lib/components/RoomSidebar.svelte';
+	import PushOptIn from '$lib/components/PushOptIn.svelte';
   import ChatPanel from '$lib/components/ChatPanel.svelte';
   import ReactionLayer from '$lib/components/ReactionLayer.svelte';
   import ViewersPanel from '$lib/components/ViewersPanel.svelte';
@@ -262,7 +263,7 @@
 
   // Room info — try to reclaim a previous session (host refresh survival).
   const HOST_SESSION_KEY = 'wachaut.host.session';
-  function loadHostSession(): { roomId: string; pin: string; hostSecret?: string } | null {
+  function loadHostSession(): { roomId: string; pin: string; hostSecret?: string; title?: string } | null {
     try {
       const raw = sessionStorage.getItem(HOST_SESSION_KEY);
       if (!raw) return null;
@@ -272,7 +273,7 @@
     return null;
   }
   function saveHostSession(rid: string, p: string, secret?: string) {
-    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p, hostSecret: secret })); } catch { /* ignore */ }
+    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p, hostSecret: secret, title: roomTitle })); } catch { /* ignore */ }
   }
   function clearHostSession() {
     try { sessionStorage.removeItem(HOST_SESSION_KEY); } catch { /* ignore */ }
@@ -280,6 +281,8 @@
 
   const savedSession = loadHostSession();
   let roomId = $state(savedSession?.roomId || crypto.randomUUID());
+  /** Public room title (shown to viewers and in share-link previews). */
+  let roomTitle = $state(savedSession?.title || '');
   let hostSecret = $state(savedSession?.hostSecret || '');
   function generatePin(): string {
     const arr = new Uint32Array(1);
@@ -417,6 +420,15 @@
     }
   }
 
+  function saveRoomTitle(next: string) {
+    roomTitle = next.slice(0, 80);
+    if (socket && roomId) {
+      socket.emit('host:set-title', { roomId, title: roomTitle.trim() || undefined });
+    }
+    // keep the refresh-survival session in sync
+    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId, pin, hostSecret: hostSecret || undefined, title: roomTitle })); } catch { /* ignore */ }
+  }
+
   function addSystemMessage(text: string) {
     chatMessages = [...chatMessages, systemMessage(text)];
   }
@@ -484,7 +496,7 @@
       // Always send the current roomId so the server can reclaim it instead
       // of minting a new one (which would orphan all viewers). The host
       // secret proves we created the room (viewers know roomId+PIN too).
-      socket.emit('host:create-room', { roomId, pin, hostSecret: hostSecret || undefined });
+      socket.emit('host:create-room', { roomId, pin, hostSecret: hostSecret || undefined, title: roomTitle || undefined });
       socket.once('room:created', (data: any) => {
         if (loadingTimeout) { clearTimeout(loadingTimeout); loadingTimeout = null; }
         if (data?.roomId) {
@@ -1031,6 +1043,8 @@
       <RoomSidebar
         {pin}
         roomUrl={roomUrl}
+        title={roomTitle}
+        onSetTitle={saveRoomTitle}
         {copiedInvite}
         sharing={isSharing}
         presets={presets}
@@ -1047,7 +1061,8 @@
         {favoriteEmojis}
         {showEmotePicker}
         onCopyInvite={copyInvite}
-        onToggleSettings={() => (showSettings = !showSettings)}
+        onToggleSettings={() =>
+          (showSettings = !showSettings)}
         onShare={() => { startSharing(); showChat = false; }}
         onStop={stopSharing}
         onStartRecording={startRecording}
@@ -1057,6 +1072,9 @@
         onCloseEmotePicker={() => (showEmotePicker = false)}
         onLeave={() => (showLeaveModal = true)}
       >
+        {#snippet pushOptIn()}
+          <PushOptIn {roomId} />
+        {/snippet}
         <ChatPanel messages={chatMessages} bind:value={chatInput} onSend={sendChatMessage} />
       </RoomSidebar>
     </div>

@@ -35,6 +35,8 @@ export interface Room {
    * distinguish the real host from a malicious viewer.
    */
   hostSecret: string;
+  /** Optional public title the host sets (e.g. "Partido Barça–Madrid"). Shown on the viewer join screen and in share-link previews. */
+  title?: string;
   viewers: Map<string, ViewerInfo>;
   createdAt: Date;
   /** Timestamp of the last meaningful activity in the room. Drives the idle TTL. */
@@ -88,18 +90,29 @@ export function gcExpiredRooms(
 }
 
 /** Factory: build an empty Room with consistent createdAt/lastActivityAt. */
+/** Sanitize a user-supplied room title: visible chars only, ≤80, trimmed. */
+export function sanitizeTitle(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  // Reject mojibake (U+FFFD) — the bytes were mis-decoded and are unrecoverable.
+  if (raw.includes('\uFFFD')) return undefined;
+  const clean = raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return clean.length > 0 ? clean : undefined;
+}
+
 export function createRoom(
   id: string,
   pinHashed: string,
   hostId: string,
   now: Date = new Date(),
-  hostSecret: string = randomSecret()
+  hostSecret: string = randomSecret(),
+  title?: string
 ): Room {
   return {
     id,
     pin: pinHashed,
     hostId,
     hostSecret,
+    title,
     viewers: new Map(),
     createdAt: now,
     lastActivityAt: now,

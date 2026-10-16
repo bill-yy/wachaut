@@ -41,6 +41,7 @@ const es = {
 	'landing.footerContact': 'Contacto',
 	'landing.footerPrivacy': 'Privacidad',
 	'landing.footerBlog': 'Blog',
+	'landing.footerStatus': 'Estado',
 	'landing.onboardingLabel': 'Bienvenida a Wachaut',
 	'landing.onboardingStep': 'Paso',
 	'landing.onboardingOf': 'de',
@@ -184,6 +185,9 @@ const es = {
 	'room.connError': 'Error de conexión',
 
 	// ── Sala host: componentes ───────────────────────────────────────
+	'room.titlePlaceholder': 'Título de la sala (opcional)',
+	'room.titleSave': 'Guardar título',
+	'room.titleHint': 'El título aparece en la vista previa del enlace compartido y en la pantalla de acceso de los espectadores',
 	'room.pinLabel': 'PIN de acceso',
 	'room.copyInvite': 'Copiar invitación',
 	'room.includesPin': 'incluye PIN',
@@ -273,6 +277,32 @@ const es = {
 	// ── Valoración ───────────────────────────────────────────────────
 	'rating.label': 'Valorar la retransmisión',
 
+	// ── Página de estado ─────────────────────────────────────────────
+	'status.title': 'Estado del servicio — Wachaut',
+	'status.description': 'Estado en vivo de Wachaut: web, API y servidor de streaming.',
+	'status.h1': 'Estado del servicio',
+	'status.subtitle': 'Comprobación en vivo cada 30 segundos. Si algo va mal, aquí lo verás.',
+	'status.web': 'Web y API',
+	'status.webDesc': 'wachaut.com y el servidor de señalización',
+	'status.sfu': 'Streaming (SFU)',
+	'status.sfuDesc': 'Servidor de vídeo WebRTC',
+	'status.rooms': 'Salas activas',
+	'status.roomsDesc': 'Retransmisiones en curso ahora mismo',
+	'status.checking': 'Comprobando…',
+	'status.ok': 'Operativo',
+	'status.maintenance': 'Mantenimiento',
+	'status.down': 'Caído',
+	'status.lastCheck': 'Última comprobación',
+	'status.refresh': 'Actualizar',
+
+	// ── Push (avisos al host) ────────────────────────────────────────
+	'push.off': 'Avisarme cuando entre alguien',
+	'push.offHint': 'Notificación del navegador aunque cierres esta pestaña',
+	'push.on': 'Avisos activados',
+	'push.onHint': 'Toca para desactivar los avisos',
+	'push.working': 'Activando…',
+	'push.fail': 'No se pudieron activar los avisos',
+
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'La retransmisión ha terminado',
 	'vroom.endedThanks': 'Gracias por acompañarnos.',
@@ -354,6 +384,7 @@ const en: Dict = {
 	'landing.footerContact': 'Contact',
 	'landing.footerPrivacy': 'Privacy',
 	'landing.footerBlog': 'Blog',
+	'landing.footerStatus': 'Status',
 	'landing.onboardingLabel': 'Welcome to Wachaut',
 	'landing.onboardingStep': 'Step',
 	'landing.onboardingOf': 'of',
@@ -497,6 +528,9 @@ const en: Dict = {
 	'room.connError': 'Connection error',
 
 	// ── Host room: components ───────────────────────────────────────
+	'room.titlePlaceholder': 'Room title (optional)',
+	'room.titleSave': 'Save title',
+	'room.titleHint': 'The title shows in the shared link preview and on the viewers join screen',
 	'room.pinLabel': 'Access PIN',
 	'room.copyInvite': 'Copy invite',
 	'room.includesPin': 'PIN included',
@@ -585,6 +619,32 @@ const en: Dict = {
 
 	// ── Rating ────────────────────────────────────────────────────────
 	'rating.label': 'Rate the broadcast',
+
+	// ── Status page ──────────────────────────────────────────────────
+	'status.title': 'Service status — Wachaut',
+	'status.description': 'Live status of Wachaut: web, API and streaming server.',
+	'status.h1': 'Service status',
+	'status.subtitle': 'Live checks every 30 seconds. If something is wrong, you will see it here.',
+	'status.web': 'Web & API',
+	'status.webDesc': 'wachaut.com and the signaling server',
+	'status.sfu': 'Streaming (SFU)',
+	'status.sfuDesc': 'WebRTC video server',
+	'status.rooms': 'Active rooms',
+	'status.roomsDesc': 'Broadcasts happening right now',
+	'status.checking': 'Checking…',
+	'status.ok': 'Operational',
+	'status.maintenance': 'Maintenance',
+	'status.down': 'Down',
+	'status.lastCheck': 'Last check',
+	'status.refresh': 'Refresh',
+
+	// ── Push (host alerts) ───────────────────────────────────────────
+	'push.off': 'Alert me when someone joins',
+	'push.offHint': 'Browser notification even with this tab closed',
+	'push.on': 'Alerts on',
+	'push.onHint': 'Tap to turn alerts off',
+	'push.working': 'Enabling…',
+	'push.fail': 'Could not enable alerts',
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'The broadcast has ended',
