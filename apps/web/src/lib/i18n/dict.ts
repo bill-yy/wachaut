@@ -307,6 +307,8 @@ const es = {
 	'push.blockedShort': 'Notificaciones bloqueadas 🔒',
 	'push.blockedHint': 'El navegador bloqueó las notificaciones de wachaut.com. Se desbloquean solo desde el candado de la barra de direcciones.',
 	'push.serviceDown': 'Tu navegador no pudo conectar con su servicio de notificaciones. Suele ser una extensión, VPN o bloqueador. Prueba en ventana de incógnito sin extensiones o en otro navegador.',
+	'push.embeddedShort': 'Avisos no disponibles aquí',
+	'push.embedded': 'Este navegador integrado no soporta notificaciones push. Abre Wachaut en Chrome, Edge o Firefox (el navegador real, no el panel integrado) y actívalos desde ahí.',
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'La retransmisión ha terminado',
@@ -655,6 +657,8 @@ const en: Dict = {
 	'push.blockedShort': 'Notifications blocked 🔒',
 	'push.blockedHint': 'Your browser blocked wachaut.com notifications. Undo it from the address-bar padlock.',
 	'push.serviceDown': "Your browser couldn't reach its notification service — usually an extension, VPN or blocker. Try an incognito window without extensions or another browser.",
+	'push.embeddedShort': 'Alerts unavailable here',
+	'push.embedded': "This embedded browser doesn't support push notifications. Open Wachaut in a real Chrome, Edge or Firefox window (not the built-in panel) and enable alerts there.",
 
 	// ── Viewer room ──────────────────────────────────────────────────
 	'vroom.ended': 'The broadcast has ended',

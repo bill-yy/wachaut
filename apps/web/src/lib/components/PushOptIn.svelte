@@ -16,9 +16,22 @@
 
 	let state = $state<'unsupported' | 'idle' | 'working' | 'on' | 'denied'>('idle');
 
+	/**
+	 * Embedded browsers (Electron webviews like ZCode's panel, in-app
+	 * browsers) have NO push service — subscribe() fails there forever.
+	 * Detected once so we can hide the feature with an honest message.
+	 */
+	const isEmbeddedBrowser = (): boolean =>
+		/ Electron\/| ZCode\/| WebView\)|; wv\)/i.test(navigator.userAgent);
+
 	$effect(() => {
 		if (typeof window === 'undefined') return;
-		if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+		if (
+			!('serviceWorker' in navigator) ||
+			!('PushManager' in window) ||
+			!('Notification' in window) ||
+			isEmbeddedBrowser()
+		) {
 			state = 'unsupported';
 			return;
 		}
@@ -158,5 +171,15 @@
 	>
 		<BellRing class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
 		<span class="truncate">{state === 'working' ? t('push.working') : t('push.off')}</span>
+	</button>
+{:else if state === 'unsupported'}
+	<!-- Embedded webview (in-app browsers) — no push service exists there. -->
+	<button
+		onclick={() => toast.info(t('push.embedded'))}
+		class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-subtle)] transition-all hover:bg-[var(--border)] active:scale-[0.98]"
+		title={t('push.embedded')}
+	>
+		<BellOff class="h-3.5 w-3.5 shrink-0" />
+		<span class="truncate">{t('push.embeddedShort')}</span>
 	</button>
 {/if}
