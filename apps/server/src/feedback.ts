@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import geoip from 'geoip-country';
 import { db } from './db.js';
+import { notifyAdmin } from './mailer.js';
 
 const IP_HASH_SALT = process.env.ADMIN_JWT_SECRET || 'feedback-salt';
 
@@ -109,6 +110,15 @@ export function registerFeedbackRoutes(app: FastifyInstance): void {
     }
     db.prepare('INSERT INTO contact_messages (name, email, message, page, ip_hash, country) VALUES (?, ?, ?, ?, ?, ?)')
       .run(name?.trim() || null, email?.trim().toLowerCase() || null, message.trim(), page || null, hashIp(req.ip), lookupCountry(req.ip));
+    notifyAdmin('contact', `Contacto${name ? ` de ${name.trim().slice(0, 40)}` : ''}`, [
+      `De: ${name?.trim() || 'anónimo'}${email ? ` <${email.trim().toLowerCase()}>` : ''}`,
+      page ? `Desde: ${page}` : '',
+      lookupCountry(req.ip) ? `País: ${lookupCountry(req.ip)}` : '',
+      '',
+      `“${message.trim().slice(0, 500)}”`,
+      '',
+      'Responder desde tu cliente de correo o verlo en el panel → Contacto.',
+    ].filter((l) => l !== ''), );
     return { ok: true };
   });
 
@@ -169,6 +179,16 @@ export function registerFeedbackRoutes(app: FastifyInstance): void {
 
     db.prepare('INSERT INTO feedback (room_id, role, rating, answers, comment, visitor_id, ip_hash, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(body.roomId, body.role, body.rating, JSON.stringify(answers), body.comment?.trim() || null, body.vid || null, ipHash, lookupCountry(req.ip));
+    // Only ratings that carry a comment are worth an email — silent 5-star
+    // ratings are visible in the panel aggregates.
+    if (body.comment?.trim()) {
+      notifyAdmin('feedback', `Valoración ${body.rating}★ (${body.role === 'host' ? 'anfitrión' : 'viewer'}) con comentario`, [
+        `${body.rating}/5 · rol ${body.role} · sala ${body.roomId}`,
+        lookupCountry(req.ip) ? `País: ${lookupCountry(req.ip)}` : '',
+        '',
+        `“${body.comment.trim().slice(0, 400)}”`,
+      ].filter((l) => l !== ''));
+    }
     return { ok: true };
   });
 }

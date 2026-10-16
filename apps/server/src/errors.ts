@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import geoip from 'geoip-country';
 import { db } from './db.js';
+import { notifyAdmin } from './mailer.js';
 
 const ERRORS_SECRET = process.env.ERRORS_SECRET || '';
 const IP_HASH_SALT = process.env.ADMIN_JWT_SECRET || 'errors-salt';
@@ -163,6 +164,15 @@ function internalRecord(input: {
         VALUES (?, ?, ?, ?, ?, 1, ?, ?)
       `).run(fingerprint, input.source, input.component, input.message.slice(0, 500), input.severity, stack, JSON.stringify({ page: input.page, roomId: input.roomId, ...(input.meta || {}) }));
       groupId = Number(info.lastInsertRowid);
+      // Alert the admin only about NEW error groups — repeats increment
+      // the counter silently (the panel shows the volume).
+      notifyAdmin('errors', `Nuevo error (${input.source}): ${input.component}`, [
+        `Error: ${input.message.slice(0, 300)}`,
+        input.page ? `Página: ${input.page}` : '',
+        input.roomId ? `Sala: ${input.roomId}` : '',
+        `Severidad: ${input.severity}`,
+        'Panel → Errores para el stack y el histórico.',
+      ].filter(Boolean));
     }
     const country = input.ip ? (() => { try { return geoip.lookup(input.ip)?.country || null; } catch { return null; } })() : null;
     db.prepare('INSERT INTO error_events (group_id, page, room_id, visitor_id, ip_hash, country, message) VALUES (?, ?, ?, ?, ?, ?, ?)')
