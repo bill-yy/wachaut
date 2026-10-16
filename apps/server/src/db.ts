@@ -228,5 +228,5 @@ export function setSetting(key: string, value: string): void {
   db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
 }
 
-export { db };
+export { db, DB_PATH };
 export type Db = DatabaseType;

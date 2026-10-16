@@ -28,6 +28,29 @@ export const VALID_EMOJIS = new Set([
   '👋', '✌️', '💪', '🙏', '⭐', '💯', '🎯', '💡', '🎵', '☕', '🍕', '🎂',
 ]);
 
+// Loose IPv4/IPv6 shape check — enough to reject header garbage without
+// pretending to be a full validator.
+const IP_SHAPE = /^[0-9a-fA-F.:]{3,45}$/;
+
+/**
+ * Real client IP behind Cloudflare + Traefik.
+ *
+ * Priority: CF-Connecting-IP (set by Cloudflare, which strips any spoofed
+ * inbound value — the only trustworthy source for proxied traffic), then
+ * X-Forwarded-For leftmost (direct→Traefik traffic; spoofable only by
+ * clients that inject their own XFF), then the socket address.
+ */
+export function clientIpFromHeaders(headers: Record<string, unknown>, fallback: string): string {
+  const cf = headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && IP_SHAPE.test(cf.trim())) return cf.trim();
+  const xff = headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.length > 0) {
+    const first = xff.split(',')[0].trim();
+    if (IP_SHAPE.test(first)) return first;
+  }
+  return fallback;
+}
+
 /** Sanitize chat text: validate type, strip control chars, cap length. */
 export function sanitizeChatText(input: unknown): string | null {
   if (typeof input !== 'string') return null;
