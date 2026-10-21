@@ -1,7 +1,10 @@
 <script lang="ts">
-	import { Volume2, Volume1, VolumeX, Maximize, Minimize, Share2, PictureInPicture2 } from 'lucide-svelte';
+	import { Volume2, Volume1, VolumeX, Maximize, Minimize, Share2, PictureInPicture2, Gauge, WifiOff } from 'lucide-svelte';
 	import { t } from '$lib/i18n/index.svelte';
+	import { clickOutside } from '$lib/actions';
 	import type { FloatingReaction } from '$lib/types/room';
+
+	export type QualityMode = 'auto' | 'high' | 'medium' | 'low';
 
 	interface Props {
 		muted: boolean;
@@ -10,6 +13,14 @@
 		hostMuted: boolean;
 		assignedUsername: string;
 		reactions: FloatingReaction[];
+		/** Layered (simulcast/SVC) producer — enables the quality selector. */
+		layered: boolean;
+		qualityMode: QualityMode;
+		/** e.g. "Media" — the layer the SFU is actually sending, null unknown. */
+		activeLayerLabel: string | null;
+		/** Last decoded frame (JPEG dataURL) kept on screen while reconnecting. */
+		frozenFrame: string | null;
+		reconnecting: boolean;
 		onVideoMount: (el: HTMLVideoElement) => void;
 		onContainerMount: (el: HTMLDivElement) => void;
 		onToggleMute: () => void;
@@ -18,6 +29,7 @@
 		onShare: () => void;
 		onShowShortcuts: () => void;
 		onVideoClick: () => void;
+		onQualityChange: (mode: QualityMode) => void;
 	}
 
 	let {
@@ -27,6 +39,11 @@
 		hostMuted,
 		assignedUsername,
 		reactions,
+		layered = false,
+		qualityMode = 'auto',
+		activeLayerLabel = null,
+		frozenFrame = null,
+		reconnecting = false,
 		onVideoMount,
 		onContainerMount,
 		onToggleMute,
@@ -35,7 +52,17 @@
 		onShare,
 		onShowShortcuts,
 		onVideoClick,
+		onQualityChange,
 	}: Props = $props();
+
+	const QUALITY_OPTIONS: Array<{ id: QualityMode; label: string }> = [
+		{ id: 'auto', label: t('vroom.qualityAuto') },
+		{ id: 'high', label: t('vroom.qualityHigh') },
+		{ id: 'medium', label: t('vroom.qualityMedium') },
+		{ id: 'low', label: t('vroom.qualityLow') },
+	];
+
+	let showQuality = $state(false);
 
 	let videoEl: HTMLVideoElement | null = $state(null);
 	let containerEl: HTMLDivElement | null = $state(null);
@@ -92,6 +119,26 @@
 		class="h-full w-full cursor-pointer object-contain"
 		title={t('vroom.clickToUnmute')}
 	></video>
+
+	<!-- Frozen last frame: while the viewer's connection is down the <video>
+	     would go black (its stream is torn down) — keep the last decoded
+	     frame on screen with an honest "reconnecting" pill instead. -->
+	{#if frozenFrame}
+		<img
+			src={frozenFrame}
+			alt=""
+			aria-hidden="true"
+			class="pointer-events-none absolute inset-0 h-full w-full object-contain"
+		/>
+		{#if reconnecting}
+			<div class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center px-4">
+				<span class="flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm">
+					<WifiOff class="h-3.5 w-3.5 animate-pulse" />
+					{t('vroom.frozenReconnecting')}
+				</span>
+			</div>
+		{/if}
+	{/if}
 
 	<!-- Top-left overlays -->
 	<div class="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2">
@@ -153,6 +200,51 @@
 			</div>
 
 			<div class="flex-1"></div>
+
+			<!-- Quality selector (layered producers only): preferred layer cap
+			     + the layer the SFU is actually sending right now. -->
+			{#if layered}
+				<div class="relative" use:clickOutside={() => (showQuality = false)}>
+					<button
+						onclick={() => (showQuality = !showQuality)}
+						class="flex h-11 w-11 items-center justify-center rounded-xl transition-all active:scale-95 {showQuality ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/15 hover:text-white'}"
+						title={t('vroom.quality')}
+						aria-label={t('vroom.quality')}
+						aria-haspopup="menu"
+						aria-expanded={showQuality}
+					>
+						<Gauge class="h-4 w-4" />
+					</button>
+					{#if showQuality}
+						<div
+							role="menu"
+							aria-label={t('vroom.quality')}
+							class="absolute bottom-14 right-0 z-20 w-44 overflow-hidden rounded-xl border border-white/10 bg-[var(--surface)]/95 p-1 shadow-2xl backdrop-blur-md"
+						>
+							{#each QUALITY_OPTIONS as opt (opt.id)}
+								<button
+									role="menuitemradio"
+									aria-checked={qualityMode === opt.id}
+									onclick={() => { onQualityChange(opt.id); showQuality = false; }}
+									class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-white/10 {qualityMode === opt.id ? 'font-semibold text-[var(--brand)]' : 'text-[var(--text)]'}"
+								>
+									{opt.label}
+									{#if qualityMode === opt.id}
+										<span class="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" aria-hidden="true"></span>
+									{/if}
+								</button>
+							{/each}
+							<div class="mt-1 border-t border-white/10 px-3 py-2 text-[11px] leading-snug text-[var(--text-subtle)]">
+								{#if activeLayerLabel}
+									{t('vroom.qualityActive', { layer: activeLayerLabel })}
+								{:else}
+									{t('vroom.qualityActiveUnknown')}
+								{/if}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<!-- Share -->
 			<button

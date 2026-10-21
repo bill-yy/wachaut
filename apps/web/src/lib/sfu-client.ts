@@ -31,6 +31,8 @@ export class SfuClient {
   #iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   /** Video mode negotiated with the SFU at join time (SFU_VIDEO_MODE env). */
   #videoMode: "vp8-single" | "vp8-simulcast" | "vp9-svc" = "vp8-single";
+  /** Consumer id of the (single) screen-video stream — the quality selector's target. */
+  #videoConsumerId: string | null = null;
   /** Stashed join params so we can re-emit join-room on every reconnect. */
   #joinParams: {
     roomId: string;
@@ -70,6 +72,17 @@ export class SfuClient {
   /** Video mode negotiated with the SFU ("vp8-single" until the SFU says otherwise). */
   get videoMode(): "vp8-single" | "vp8-simulcast" | "vp9-svc" {
     return this.#videoMode;
+  }
+
+  /** True when the negotiated producer is layered (SVC/simulcast) and the
+   *  viewer quality selector is meaningful. */
+  get isLayered(): boolean {
+    return this.#videoMode !== "vp8-single";
+  }
+
+  /** Consumer id of the screen-video stream (null until the host produces). */
+  get videoConsumerId(): string | null {
+    return this.#videoConsumerId;
   }
 
   off(event: string, fn: Function) {
@@ -613,6 +626,8 @@ export class SfuClient {
     });
 
     this.#consumers.set(consumer.id, consumer);
+    // The viewer's quality selector targets the video consumer's layers.
+    if (consumer.kind === "video") this.#videoConsumerId = consumer.id;
 
     // Clean up when the host stops producing or the transport closes.
     consumer.on("producerclose", () => {
@@ -717,10 +732,13 @@ export class SfuClient {
   /**
    * Viewer-side layer preference (only meaningful on layered producers —
    * SVC/simulcast). The SFU clamps to the available layers; layer changes
-   * arrive back via the "consumer-layers" event.
+   * arrive back via the "consumer-layers" event. Defaults to the tracked
+   * screen-video consumer.
    */
-  setPreferredLayers(consumerId: string, spatialLayer: number, temporalLayer: number): void {
-    this.#socket?.emit("viewer:set-preferred-layers", { consumerId, spatialLayer, temporalLayer });
+  setPreferredLayers(spatialLayer: number, temporalLayer: number, consumerId?: string): void {
+    const id = consumerId ?? this.#videoConsumerId;
+    if (!id) return;
+    this.#socket?.emit("viewer:set-preferred-layers", { consumerId: id, spatialLayer, temporalLayer });
   }
 
   stopProducing() {

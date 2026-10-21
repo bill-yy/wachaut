@@ -280,6 +280,14 @@ const es = {
 	'vroom.exitPip': 'Salir de Picture-in-Picture',
 	'vroom.pip': 'Picture-in-Picture',
 	'vroom.shortcuts': 'Atajos de teclado',
+	'vroom.quality': 'Calidad',
+	'vroom.qualityAuto': 'Auto',
+	'vroom.qualityHigh': 'Alta',
+	'vroom.qualityMedium': 'Media',
+	'vroom.qualityLow': 'Baja',
+	'vroom.qualityActive': 'Capa activa: {layer}',
+	'vroom.qualityActiveUnknown': 'El servidor adapta la capa a tu conexión',
+	'vroom.frozenReconnecting': 'Conexión inestable — reconectando…',
 
 	// ── Valoración ───────────────────────────────────────────────────
 	'rating.label': 'Valorar la retransmisión',
@@ -681,6 +689,14 @@ const en: Dict = {
 	'vroom.exitPip': 'Exit Picture-in-Picture',
 	'vroom.pip': 'Picture-in-Picture',
 	'vroom.shortcuts': 'Keyboard shortcuts',
+	'vroom.quality': 'Quality',
+	'vroom.qualityAuto': 'Auto',
+	'vroom.qualityHigh': 'High',
+	'vroom.qualityMedium': 'Medium',
+	'vroom.qualityLow': 'Low',
+	'vroom.qualityActive': 'Active layer: {layer}',
+	'vroom.qualityActiveUnknown': 'The server adapts the layer to your connection',
+	'vroom.frozenReconnecting': 'Unstable connection — reconnecting…',
 
 	// ── Rating ────────────────────────────────────────────────────────
 	'rating.label': 'Rate the broadcast',

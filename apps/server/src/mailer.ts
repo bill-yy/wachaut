@@ -31,7 +31,7 @@ const log = {
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';const IMMEDIATE_COOLDOWN_MS = 10 * 60 * 1000; // first hit sends, rest batch
 const DIGEST_MIN_INTERVAL_MS = 20 * 60 * 60 * 1000; // ~daily
 
-export type MailType = 'security' | 'errors' | 'contact' | 'feedback';
+export type MailType = 'security' | 'errors' | 'contact' | 'feedback' | 'capacity';
 
 /** Per-type daily caps — together well under Resend's 100/day. */
 const TYPE_CAPS: Record<MailType, number> = {
@@ -39,6 +39,7 @@ const TYPE_CAPS: Record<MailType, number> = {
   errors: 20,
   contact: 25,
   feedback: 15,
+  capacity: 10,
 };
 /** Global daily ceiling across all types (headroom for digest + retries). */
 const GLOBAL_CAP = 70;
@@ -57,9 +58,9 @@ let recipients: string[] = [];
 let fromAddress = 'Wachaut <alertas@wachaut.com>';
 
 let day = '';
-let sentByType: Record<MailType, number> = { security: 0, errors: 0, contact: 0, feedback: 0 };
+let sentByType: Record<MailType, number> = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
 let globalSent = 0;
-let suppressedByType: Record<MailType, number> = { security: 0, errors: 0, contact: 0, feedback: 0 };
+let suppressedByType: Record<MailType, number> = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
 let lastDigestAt = 0;
 
 const batches = new Map<string, BatchEntry>();
@@ -86,7 +87,7 @@ function rolloverDay(nowMs: number): void {
   const today = new Date(nowMs).toISOString().slice(0, 10);
   if (today !== day) {
     day = today;
-    sentByType = { security: 0, errors: 0, contact: 0, feedback: 0 };
+    sentByType = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
     globalSent = 0;
     lastSentAt.clear(); // a fresh day re-earns immediate sends
   }
@@ -209,7 +210,7 @@ function maybeDigest(nowMs: number): void {
   globalSent++;
   void sendMail('Resumen diario de avisos suprimidos', renderBody(lines, nowMs))
     .then(() => {
-      suppressedByType = { security: 0, errors: 0, contact: 0, feedback: 0 };
+      suppressedByType = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
     })
     .catch(() => {});
 }
@@ -298,8 +299,8 @@ export function __resetMailerForTests(): void {
   recipients = [];
   fromAddress = 'Wachaut <alertas@wachaut.com>';
   day = '';
-  sentByType = { security: 0, errors: 0, contact: 0, feedback: 0 };
-  suppressedByType = { security: 0, errors: 0, contact: 0, feedback: 0 };
+  sentByType = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
+  suppressedByType = { security: 0, errors: 0, contact: 0, feedback: 0, capacity: 0 };
   globalSent = 0;
   lastDigestAt = 0;
   batches.clear();

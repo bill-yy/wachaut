@@ -3,18 +3,17 @@
  *
  *   node report.mjs tests/load/results/
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dir = process.argv[2] || 'tests/load/results/';
+const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
+// Run outputs live in r{rooms}x{viewers}-{stamp}/ subdirectories; the VPS
+// docker-stats sample lands here as wachaut-load.csv.
 const files = readdirSync(dir).flatMap((f) => {
-  if (f.endsWith('.csv') && f.startsWith('r')) {
-    const sub = join(dir, f);
-    try {
-      return readdirSync(sub).map((s) => join(sub, s));
-    } catch { return []; }
-  }
-  if (f === 'wachaut-load.csv') return [join(dir, f)];
+  const p = join(dir, f);
+  if (f.startsWith('r') && isDir(p)) return readdirSync(p).map((s) => join(p, s));
+  if (f === 'wachaut-load.csv') return [p];
   return [];
 });
 

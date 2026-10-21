@@ -5,7 +5,8 @@
  *   node run.mjs --base-url https://wachaut.billytech.es --rooms 1 --viewers 10 --minutes 5
  */
 import { mkdirSync, appendFileSync, writeFileSync } from 'node:fs';
-import { launchHost, launchViewer, sampleViewer, sampleStatus } from './lib.mjs';
+import { fileURLToPath } from 'node:url';
+import { launchHost, launchViewer, sampleViewer, sampleStatus, sampleSfuHealth } from './lib.mjs';
 
 const args = process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith('--')) acc[a.slice(2)] = arr[i + 1];
@@ -13,18 +14,20 @@ const args = process.argv.slice(2).reduce((acc, a, i, arr) => {
 }, {});
 
 const BASE_URL = args['base-url'] || 'https://wachaut.billytech.es';
+const SFU_URL = args['sfu-url'] || 'https://sfu-wachaut.billytech.es';
 const ROOMS = parseInt(args.rooms || '1', 10);
 const VIEWERS = parseInt(args.viewers || '5', 10);
 const MINUTES = parseFloat(args.minutes || '5', 10);
 const SAMPLE_MS = 10_000;
 
 const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 17);
-const outDir = new URL(`./results/r${ROOMS}x${VIEWERS}-${stamp}/`, import.meta.url).pathname;
+// fileURLToPath: URL.pathname yields "/C:/…" on Windows and breaks mkdir.
+const outDir = fileURLToPath(new URL(`./results/r${ROOMS}x${VIEWERS}-${stamp}/`, import.meta.url));
 mkdirSync(outDir, { recursive: true });
 const viewersCsv = `${outDir}viewers.csv`;
 const statusCsv = `${outDir}status.csv`;
 writeFileSync(viewersCsv, 'ts,viewer,total_frames,dropped_frames,width,height,ready_state\n');
-writeFileSync(statusCsv, 'ts,rooms,maintenance\n');
+writeFileSync(statusCsv, 'ts,rooms,maintenance,sfu_status,sfu_utilization,sfu_total_peers\n');
 
 console.log(`[load] ${ROOMS} room(s) × ${VIEWERS} viewer(s) for ${MINUTES} min against ${BASE_URL}`);
 console.log('[load] remember: run sample-server.sh on the VPS in parallel!');
@@ -65,8 +68,16 @@ try {
       }
     }
     const status = await sampleStatus(BASE_URL);
-    if (status) appendFileSync(statusCsv, `${ts},${status.rooms ?? '?'}?,${status.maintenance}\n`);
-    if (tick % 6 === 0) console.log(`[load] ${Math.round((deadline - Date.now()) / 1000)}s left… rooms=${status?.rooms}`);
+    const sfu = await sampleSfuHealth(SFU_URL);
+    if (status)
+      appendFileSync(
+        statusCsv,
+        `${ts},${status.rooms ?? '?'},${status.maintenance ?? ''},${sfu?.status ?? '?'},${sfu?.utilization ?? '?'},${sfu?.totalPeers ?? '?'}\n`,
+      );
+    if (tick % 6 === 0)
+      console.log(
+        `[load] ${Math.round((deadline - Date.now()) / 1000)}s left… rooms=${status?.rooms} sfu=${sfu?.status ?? '?'} (${sfu?.totalPeers ?? '?'} peers)`,
+      );
   }
 } finally {
   console.log('[load] closing browsers…');

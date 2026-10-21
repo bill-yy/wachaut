@@ -306,12 +306,23 @@ fastify.register(cors, {
 // Security headers (HSTS, X-Frame-Options, etc.). CSP disabled for Socket.IO.
 await fastify.register(helmet, { contentSecurityPolicy: false });
 
-fastify.get('/health', { logLevel: 'error' }, async () => ({
-  status: 'ok',
-  workers: workers.length,
-  rooms: rooms.size,
-  totalPeers: Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0),
-}));
+// Capacity-aware health (W3.2): "ok" below 70% utilization of the configured
+// room/peer ceilings, "degraded" at 70%, "critical" at 90% — external
+// monitors and the signaling server's readiness probe read this.
+fastify.get('/health', { logLevel: 'error' }, async () => {
+  const activeRooms = rooms.size;
+  const totalPeers = Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0);
+  const pct = Math.max(activeRooms / MAX_ROOMS, totalPeers / MAX_TOTAL_PEERS);
+  const status = pct >= 0.9 ? 'critical' : pct >= 0.7 ? 'degraded' : 'ok';
+  return {
+    status,
+    workers: workers.length,
+    rooms: activeRooms,
+    totalPeers,
+    utilization: Math.round(pct * 100),
+    limits: { rooms: MAX_ROOMS, peers: MAX_TOTAL_PEERS },
+  };
+});
 
 /**
  * Internal: the signaling server drains captured SFU errors from here every

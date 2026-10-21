@@ -1,29 +1,40 @@
-feat: sprint calidad + capacidad + analytics + SVC con gate
+feat: viewer quality selector + freeze-frame reconnect + capacity health/alerts + first measured load report
 
-Calidad de imagen: techos coherentes (VP9/AV1 10 Mbps, VP8 8 Mbps,
-MAX_INCOMING_BITRATE env), keyframe al reanudar consumer, audio estéreo Opus,
-mecanismo SVC negociado via SFU_VIDEO_MODE (default vp8-single, sin cambio de
-comportamiento; el spike se hace flippeando el env en pruebas).
+Viewer quality (W1.5) — layered producers only (vp8-simulcast):
+- ViewerVideoStage: gear control with Auto/Alta/Media/Baja + the layer
+  the SFU is ACTUALLY sending (consumer-layers events), i18n es+en.
+- sfu-client: tracks the screen-video consumer id; setPreferredLayers()
+  targets it by default; exposes isLayered/videoConsumerId.
+- Manual cap re-applied after rejoin; auto = top cap, SFU adapts down.
 
-Analytics (remake del panel): rangos custom + filtros cruzados + funnel +
-fiabilidad + export CSV + índices; frontend con charts SVG propios, chips de
-filtro, rango global y paginación. room_events.host_ip pasa a hash.
+Freeze last frame (W1.6):
+- On connection loss the page used to unmount the <video> into a full
+  "reconnecting" panel → black screen. Now the last decoded frame is
+  snapshotted (canvas→JPEG) and kept on the live layout with an honest
+  "unstable connection" pill; it clears only when a real new frame is
+  presented (requestVideoFrameCallback, 5s safety).
 
-Seguridad: headers CSP/HSTS/etc en server.mjs; SSRF gate (toSafeHttpUrl) en
-todos los fetch al SFU + tests; timing-safe y rate limit de joins en el SFU;
-maxHttpBufferSize; validación de requestedRoomId.
+Capacity health (W3.2) + email alerts (W3.3):
+- /health (server and SFU) now reports ok/degraded/critical at 70%/90%
+  of configured ceilings, with utilization % and limits in the payload.
+  Server ceilings: HEALTH_MAX_ROOMS/HEALTH_MAX_CONNECTIONS (200/1200).
+- New 'capacity' mail type (cap 10/day): server sweeper alerts on level
+  transitions (30-min throttle); the readiness probe forwards SFU
+  capacity states from its /health poll.
 
-SEO: html lang por idioma, doble title eliminado, sitemap hreflang completo,
-og:url en previews, cache 1 año inmutable.
+Load suite fixes + first measured report (W3.1/W3.4):
+- lib.mjs/run.mjs had the SAME silent viewer-join bug the SVC spike had
+  (generic selectors → strict-mode error swallowed → viewers never left
+  the auth screen) plus a Windows path bug in run.mjs and a file/dir
+  confusion in report.mjs — all fixed with the spike-proven flows.
+- Measured against test env (vp8-simulcast, image 0d8f8a4): 1×5 → 960×540
+  served (BWE adapting), 1×7 → full 1080p to all 7 viewers, 0.4–1% drops,
+  38k frames total, SFU healthy. Bigger ramps blocked by launcher-side
+  MAX_CONNECTIONS_PER_IP=8 — documented in the informe + capacity doc.
 
-UX: copiar diagnóstico (host+viewer) con ruta ICE/RTT/decoder; semáforo
-pre-conexión del viewer.
+docker-compose.prod-sfu.yml: SFU_VIDEO_MODE=vp8-simulcast default with
+the VP9-SVC do-not-enable note.
 
-Infra: docker-compose.prod-sfu.yml (sfu.wachaut.com, UDP 40000-40399),
-tests/load/ (suite capacidad Playwright + sampler VPS), runbook Dokploy,
-README/.env.example ampliados, SECURITY.md con riesgos aceptados
-(HMAC-SHA1 TURN: exigido por coturn y HMAC-SHA1 sigue sólido como PRF;
-TOTP SHA1: RFC 6238).
-
-Tests: SFU 18/18, security/analytics ampliado (CI Node 22), svelte-check 0
-errores, tsc limpio.
+Checks: svelte-check 0 errors, tsc clean (server+sfu), E2E spike green
+with the new viewer page (131 frames decoded), 0 pageerrors in 12
+load-test viewers.

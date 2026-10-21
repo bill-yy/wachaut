@@ -13,7 +13,7 @@ import { rollupTrafficStats } from './stats.js';
 import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
 import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
 import { initPush, registerPushRoutes, notifyHostViewersJoined, dropRoomSubscriptions, cleanupPushRateLimits } from './push.js';
-import { initMailer, flushMailer } from './mailer.js';
+import { initMailer, flushMailer, notifyAdmin } from './mailer.js';
 import { runDailyBackup } from './backup.js';
 import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews, hashIp } from './analytics.js';
 import {
@@ -262,6 +262,8 @@ setInterval(() => {
     rollupTrafficStats(now);
     // Pull captured SFU errors into the central error store.
     drainSfuErrorsNow();
+    // Capacity alert email on overload (no-op when mail is not configured).
+    checkCapacity(nowMs);
     // Send aggregated admin alert emails (no-op when mail is not configured).
     flushMailer(nowMs);
     // Daily DB backup: idempotent per UTC day, rotated, mailed offsite.
@@ -741,16 +743,61 @@ io.on('connection', (socket) => {
 });
 
 // Health check endpoint
+// ── Capacity health (W3.2) + email alerts (W3.3) ──────────────────────
+// Utilization ceilings for /health status + alerting. Defaults mirror the
+// SFU's own limits; the load test report calibrates real numbers per
+// environment (raise via HEALTH_MAX_ROOMS / HEALTH_MAX_CONNECTIONS).
+const HEALTH_MAX_ROOMS = parseInt(process.env.HEALTH_MAX_ROOMS || '200');
+const HEALTH_MAX_CONNECTIONS = parseInt(process.env.HEALTH_MAX_CONNECTIONS || '1200');
+/** Utilization fraction that flips /health to "degraded" / "critical". */
+const CAPACITY_DEGRADED_AT = 0.7;
+const CAPACITY_CRITICAL_AT = 0.9;
+
+function capacityLevel(): { level: 'ok' | 'degraded' | 'critical'; rooms: number; connections: number; pct: number } {
+  const activeRooms = rooms.size;
+  const connections = io.engine.clientsCount;
+  const pct = Math.max(activeRooms / HEALTH_MAX_ROOMS, connections / HEALTH_MAX_CONNECTIONS);
+  const level = pct >= CAPACITY_CRITICAL_AT ? 'critical' : pct >= CAPACITY_DEGRADED_AT ? 'degraded' : 'ok';
+  return { level, rooms: activeRooms, connections, pct };
+}
+
+// Alert on level TRANSITIONS and at most every 30 min while overloaded —
+// notifyAdmin's own cooldown handles any residual churn.
+let lastCapacityLevel: 'ok' | 'degraded' | 'critical' = 'ok';
+let lastCapacityAlertAt = 0;
+function checkCapacity(nowMs = Date.now()): void {
+  const { level, pct, rooms: activeRooms, connections } = capacityLevel();
+  if (level === 'ok') {
+    lastCapacityLevel = 'ok';
+    return;
+  }
+  const changed = level !== lastCapacityLevel;
+  const due = nowMs - lastCapacityAlertAt > 30 * 60 * 1000;
+  if (changed || due) {
+    lastCapacityAlertAt = nowMs;
+    notifyAdmin('capacity', `Capacidad del servidor: ${level.toUpperCase()} (${Math.round(pct * 100)}%)`, [
+      `Nivel: ${level} — ${Math.round(pct * 100)}% de los límites configurados.`,
+      `Salas activas: ${activeRooms}/${HEALTH_MAX_ROOMS} · Conexiones socket: ${connections}/${HEALTH_MAX_CONNECTIONS}`,
+      `Umbrales: degradado al ${Math.round(CAPACITY_DEGRADED_AT * 100)}%, crítico al ${Math.round(CAPACITY_CRITICAL_AT * 100)}% (HEALTH_MAX_ROOMS / HEALTH_MAX_CONNECTIONS ajustan los límites).`,
+    ], { nowMs });
+  }
+  lastCapacityLevel = level;
+}
+
 fastify.get('/health', { logLevel: 'error' }, async () => {
+  const { level, rooms: activeRooms, connections, pct } = capacityLevel();
   return {
-    status: 'ok',
-    rooms: rooms.size,
-    connections: io.engine.clientsCount
+    status: level,
+    rooms: activeRooms,
+    connections,
+    utilization: Math.round(pct * 100),
+    limits: { rooms: HEALTH_MAX_ROOMS, connections: HEALTH_MAX_CONNECTIONS },
   };
 });
 
 // Readiness probe: checks that Socket.IO is accepting connections.
 // Use this for Traefik/Docker load-balancer routing decisions.
+let lastSfuCapacityAlertAt = 0;
 async function readinessHandler(_req: any, reply: any) {
   // Maintenance mode: return 503 so Traefik shows the maintenance page.
   if (isMaintenanceMode()) {
@@ -765,6 +812,19 @@ async function readinessHandler(_req: any, reply: any) {
       try {
         const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(2000) });
         sfuReachable = res.ok;
+        // Surface SFU capacity states as admin mail (30-min throttle so the
+        // status page's polling can't burn the quota).
+        const body = await res.json().catch(() => null as any);
+        if (body && (body.status === 'degraded' || body.status === 'critical')) {
+          const nowMs = Date.now();
+          if (nowMs - lastSfuCapacityAlertAt > 30 * 60 * 1000) {
+            lastSfuCapacityAlertAt = nowMs;
+            notifyAdmin('capacity', `Capacidad del SFU: ${String(body.status).toUpperCase()} (${body.utilization ?? '?'}%)`, [
+              `El SFU informa estado "${body.status}" (${body.utilization ?? '?'}% de utilización).`,
+              `Salas: ${body.rooms ?? '?'}/${body.limits?.rooms ?? '?'} · Peers: ${body.totalPeers ?? '?'}/${body.limits?.peers ?? '?'}`,
+            ], { nowMs });
+          }
+        }
       } catch (err) {
         sfuReachable = false;
         captureError(err, { source: 'server', component: 'sfuHealth', severity: 'warning' });

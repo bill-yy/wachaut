@@ -14,6 +14,9 @@
 # Optional:
 #   ERRORS_SECRET          — lets the signaling server drain /internal/errors
 #   SFU_IMAGE_TAG          — pin a sha instead of :latest (default latest)
+#   SFU_VIDEO_MODE         — vp8-simulcast (default, VALIDATED E2E 2026-10-21)
+#                           | vp8-single | vp9-svc (encoder-dead on current
+#                           Chromium — see tests/load/README.md; do not enable)
 #
 # One-time setup checklist (outside this file):
 #   1. Cloudflare DNS: sfu.wachaut.com → A 167.86.110.249, proxy ON (orange).
@@ -46,6 +49,10 @@ services:
       - RTC_LISTEN_IP=0.0.0.0
       - RTC_ANNOUNCED_IP=${RTC_ANNOUNCED_IP}
       - MAX_INCOMING_BITRATE=10000000
+      # Layered mode validated E2E (spike 2026-10-21): VP8 simulcast, 3
+      # spatial layers. vp9-svc must NOT be used (Chromium's encoder never
+      # starts — producer sits at 0 bytes/0 frames silently).
+      - SFU_VIDEO_MODE=${SFU_VIDEO_MODE:-vp8-simulcast}
       - TURN_URL=turn:wachaut.billytech.es:3478?transport=udp
       - TURN_SECRET=${TURN_SECRET}
       - ERRORS_SECRET=${ERRORS_SECRET}
