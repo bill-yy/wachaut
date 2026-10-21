@@ -356,17 +356,41 @@ export class SfuClient {
               },
             }
           : {};
-      this.#producer = await this.#sendTransport.produce({
-        track: videoTrack,
-        appData: { mediaTag: "screen-video" },
-        ...(encodings ? { encodings } : {}),
-        ...(codec ? { codec } : {}),
-        ...googleCodecOptions,
-      });
-      devlog(
-        `[sfu] Video producer created (${this.#videoMode}${encodings ? ", layered" : ""}):`,
-        this.#producer.id,
-      );
+      try {
+        this.#producer = await this.#sendTransport.produce({
+          track: videoTrack,
+          appData: { mediaTag: "screen-video" },
+          ...(encodings ? { encodings } : {}),
+          ...(codec ? { codec } : {}),
+          ...googleCodecOptions,
+        });
+        devlog(
+          `[sfu] Video producer created (${this.#videoMode}${encodings ? ", layered" : ""}):`,
+          this.#producer.id,
+        );
+      } catch (err: any) {
+        // A layered produce can be rejected by the SFU for codec reasons the
+        // client can't foresee — e.g. a stale cached bundle that doesn't pin
+        // VP8 sends AV1 under simulcast and mediasoup refuses ("video/AV1
+        // codec not supported for simulcast"). Clients and SFU versions mix
+        // in the wild, so degrade to a plain VP8 single encode instead of
+        // killing the whole share: viewers still get video, just without
+        // per-layer adaptation.
+        if (!encodings) throw err;
+        devwarn(
+          `[sfu] layered produce failed (${err?.message ?? err}); falling back to VP8 single`,
+        );
+        this.#producer = await this.#sendTransport.produce({
+          track: videoTrack,
+          appData: { mediaTag: "screen-video" },
+          codec: this.#findCodec("video/VP8"),
+          codecOptions: {
+            videoGoogleStartBitrate: Math.max(startBitrate, 100),
+            videoGoogleMaxBitrate: maxBitrate,
+          },
+        });
+        devlog("[sfu] Video producer created (vp8-single fallback):", this.#producer.id);
+      }
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
