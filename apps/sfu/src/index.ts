@@ -186,16 +186,18 @@ const videoRtcpFeedback = [
   { type: 'transport-cc' },
 ];
 
+// NOTE: x-google-* bitrate knobs are deliberately ABSENT from every router
+// codec. Router codec parameters propagate verbatim into clients' sender
+// fmtp lines (observed as "VP9 profile-id=0;x-google-…" during the SVC
+// spike, 2026-10-21): non-standard for VP9/AV1 and useless server-side.
+// Bitrate ceilings are enforced via transport.setMaxIncomingBitrate() and
+// client-side per-encoding maxBitrate instead.
 const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
   // AV1 — best quality/bitrate for screen sharing on modern Chrome
   {
     kind: 'video',
     mimeType: 'video/AV1',
     clockRate: 90000,
-    parameters: {
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 10000,
-    },
     rtcpFeedback: videoRtcpFeedback,
   },
   {
@@ -204,8 +206,6 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
     clockRate: 90000,
     parameters: {
       'profile-id': 0, // profile 0 (4:2:0 8-bit) — what Chrome's SVC encoder produces
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 10000,
     },
     rtcpFeedback: videoRtcpFeedback,
   },
@@ -213,10 +213,6 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
     kind: 'video',
     mimeType: 'video/VP8',
     clockRate: 90000,
-    parameters: {
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 8000,
-    },
     rtcpFeedback: videoRtcpFeedback,
   },
   {
@@ -227,8 +223,6 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
       'packetization-mode': 1,
       'profile-level-id': '42e01f',
       'level-asymmetry-allowed': 1,
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 5000,
     },
     rtcpFeedback: videoRtcpFeedback,
   },

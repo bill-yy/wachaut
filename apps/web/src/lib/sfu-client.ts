@@ -298,19 +298,39 @@ export class SfuClient {
     // ── Video producer ─────────────────────────────────────────────────
     // Encoding shape is negotiated with the SFU (SFU_VIDEO_MODE):
     //  - "vp8-single"    — proven default: one VP8 encode, bitrate from preset.
-    //  - "vp9-svc"       — one VP9 encode with L3T3 scalability layers: the
-    //                      SFU forwards each viewer the highest layer their
-    //                      link can carry, without a host re-encode.
-    //  - "vp8-simulcast" — three VP8 encodings (¼, ½, full) as the fallback
-    //                      layered path where VP9/SVC misbehaves.
-    // The historical "VP9 stalled ICE" note almost certainly described the
-    // RTC port misalignment fixed on 2026-10-19 (a codec cannot stall ICE);
-    // layered modes are gated behind the server-side flag regardless.
+    //  - "vp8-simulcast" — three VP8 encodings (¼, ½, full): the VALIDATED
+    //                      layered path (spike 2026-10-21: media flows E2E).
+    //  - "vp9-svc"       — one VP9 encode with L3T3 SVC layers. MEASUREDED
+    //                      DEAD on current Chromium (155/156 Win, headless,
+    //                      headed and system Chrome): the encoder produces
+    //                      0 bytes / 0 frames, silently, while VP9 without
+    //                      scalabilityMode encodes fine. Kept behind the
+    //                      server flag for re-testing on future Chrome, but
+    //                      NOT enabled anywhere.
+    // The pre-sprint "VP9 stalled ICE" note was this same encoder stall seen
+    // through a black screen, not an ICE problem (a codec cannot stall ICE).
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
       let encodings: Array<Record<string, unknown>> | undefined;
       let codec: any;
       if (this.#videoMode === "vp9-svc") {
+        // Router codec parameters propagate into the device caps at load()
+        // and from there into the sender's VP9 fmtp — and x-google-* entries
+        // there stop Chromium's VP9 encoder from ever starting (0 bytes /
+        // 0 frames, zero errors; found during the SVC spike, 2026-10-21).
+        // Sanitize the local caps before producing. (The router-side source
+        // of these knobs is also removed for the next SFU image.)
+        try {
+          for (const c of this.#device?.rtpCapabilities?.codecs ?? []) {
+            if (String(c.mimeType).toLowerCase() === "video/vp9" && c.parameters) {
+              for (const k of Object.keys(c.parameters)) {
+                if (k.startsWith("x-google-")) delete c.parameters[k];
+              }
+            }
+          }
+        } catch {
+          /* caps sanitation is best-effort */
+        }
         encodings = [{ scalabilityMode: "L3T3", maxBitrate }];
         codec = this.#findCodec("video/VP9");
       } else if (this.#videoMode === "vp8-simulcast") {
@@ -319,16 +339,29 @@ export class SfuClient {
           { maxBitrate: Math.round(maxBitrate / 2), scaleResolutionDownBy: 2 },
           { maxBitrate, scaleResolutionDownBy: 1 },
         ];
+        // Pin VP8: without an explicit codec the browser sends its default
+        // (AV1 on current Chrome), which mediasoup rejects for simulcast.
+        codec = this.#findCodec("video/VP8");
       }
+      // Legacy Google bitrate knobs only on the proven VP8 path: they end
+      // up baked into the sender's codec fmtp line, which is fine for VP8
+      // but non-standard noise for the layered codecs. Layered modes carry
+      // their bitrate per encoding instead.
+      const googleCodecOptions =
+        this.#videoMode === "vp8-single"
+          ? {
+              codecOptions: {
+                videoGoogleStartBitrate: Math.max(startBitrate, 100),
+                videoGoogleMaxBitrate: maxBitrate,
+              },
+            }
+          : {};
       this.#producer = await this.#sendTransport.produce({
         track: videoTrack,
         appData: { mediaTag: "screen-video" },
         ...(encodings ? { encodings } : {}),
         ...(codec ? { codec } : {}),
-        codecOptions: {
-          videoGoogleStartBitrate: Math.max(startBitrate, 100),
-          videoGoogleMaxBitrate: maxBitrate,
-        },
+        ...googleCodecOptions,
       });
       devlog(
         `[sfu] Video producer created (${this.#videoMode}${encodings ? ", layered" : ""}):`,
