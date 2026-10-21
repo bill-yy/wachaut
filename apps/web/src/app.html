@@ -31,7 +31,9 @@
 		<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
 		<link rel="preload" href="/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin />
 
-		<title>Wachaut</title>
+		<!-- No static title element here: every prerendered page sets its own
+		     via svelte:head and the SPA shell (room/admin) sets one client-side
+		     — a static title here produced duplicates on all content pages. -->
 
 		%sveltekit.head%
 	</head>

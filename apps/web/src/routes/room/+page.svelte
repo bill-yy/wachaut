@@ -4,6 +4,7 @@
   import { io } from 'socket.io-client';
   import { SfuClient } from '$lib/sfu-client';
   import { captureClientError } from '$lib/error-report';
+  import { buildDiagnosticsReport } from '$lib/diagnostics';
   import { t, srv } from '$lib/i18n/index.svelte';
   import { hasRated } from '$lib/feedback';
   import RatingCard from '$lib/components/RatingCard.svelte';
@@ -72,6 +73,28 @@
   let lastPacketsSent = 0;
   let targetBitrate = 2_500_000;
   let lastHealthState: 'good' | 'degraded' | 'poor' = 'good';
+
+  /** Copy a full host-side diagnostics report to the clipboard. */
+  async function copyHostDiagnostics() {
+    const report = buildDiagnosticsReport('host', {
+      rol: 'host',
+      health: connectionHealth,
+      preset: presetLabel(qualityPreset),
+      bitrate_objetivo: `${(currentMaxBitrate / 1_000_000).toFixed(1)} Mbps`,
+      auto_adapt: autoAdaptQuality ? 'on' : 'off',
+      viewers: viewerCount,
+      compartiendo: isSharing ? 'sí' : 'no',
+      audio: includeAudio ? 'sí' : 'no',
+      content_hint: contentHintMode,
+      sfu: sfuClient ? 'conectado' : 'desconectado',
+    });
+    try {
+      await copyText(report);
+      addSystemMessage(t('room.diagCopied'));
+    } catch {
+      addSystemMessage(report.replace(/\n/g, ' · '));
+    }
+  }
 
   /** Poll outbound-rtp stats from the send transport and derive health. */
   function startHealthMonitor(bitrate: number) {
@@ -232,8 +255,8 @@
   let showSettings = $state(false);
   const presets = $state<Record<string, QualityPreset>>({
     low: { label: t('room.presetLow'), resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_500_000, desc: t('room.presetLowDesc') },
-    normal: { label: t('room.presetNormal'), resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_000_000, desc: t('room.presetNormalDesc') },
-    high: { label: t('room.presetHigh'), resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 6_000_000, desc: t('room.presetHighDesc') }
+    normal: { label: t('room.presetNormal'), resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_500_000, desc: t('room.presetNormalDesc') },
+    high: { label: t('room.presetHigh'), resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 8_000_000, desc: t('room.presetHighDesc') }
   });
 
   // Safe label lookup that handles the 'custom' preset (not in the presets map).
@@ -397,6 +420,11 @@
           quality: presetLabel(qualityPreset)
         };
         addSystemMessage(t('room.cmdStats', { viewers: stats.viewers, connected: stats.connected, sharing: stats.sharing, muted: stats.muted, quality: stats.quality }));
+        void copyHostDiagnostics();
+        return true;
+      }
+      case '/diag': {
+        void copyHostDiagnostics();
         return true;
       }
       case '/clear': {
@@ -647,7 +675,16 @@
           // @ts-expect-error — cursor is valid for getDisplayMedia but not in TS types
           cursor: 'always',
         },
-        audio: includeAudio,
+        // Tab/system audio is finished content (music/video), not a mic: keep it
+        // stereo and unprocessed so voice processing doesn't mangle it.
+        audio: includeAudio
+          ? {
+              channelCount: { ideal: 2 },
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            }
+          : false,
       });
       localStream = stream;
       isSharing = true;
@@ -864,6 +901,7 @@
 </script>
 
 <svelte:head>
+	<title>{t('room.hostPageTitle')}</title>
 	<!-- Ephemeral private broadcast pages must never be indexed. -->
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>

@@ -36,6 +36,11 @@
   let deleteBusy = $state(false);
 
   let connections = $state<AdminConnections | null>(null);
+  // Range for the connection-reliability panel (API accepts 1..30).
+  let connDays = $state<7 | 30>(7);
+  // Error-group pagination (API already supported limit/offset).
+  let page = $state(0);
+  const PAGE_SIZE = 50;
 
   onMount(() => {
     if (!adminSession.token) { goto('/admin'); return; }
@@ -47,8 +52,13 @@
     loadError = '';
     try {
       const [errPage, conn] = await Promise.all([
-        getErrors({ status: statusFilter || undefined, source: sourceFilter || undefined }),
-        getConnections(7),
+        getErrors({
+          status: statusFilter || undefined,
+          source: sourceFilter || undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        }),
+        getConnections(connDays),
       ]);
       groups = errPage.groups;
       total = errPage.total;
@@ -59,6 +69,17 @@
     } finally {
       loading = false;
     }
+  }
+
+  function setConnDays(d: 7 | 30) {
+    if (connDays === d) return;
+    connDays = d;
+    void load();
+  }
+  function setPage(next: number) {
+    if (next < 0) return;
+    page = next;
+    void load();
   }
 
   async function openDetail(g: AdminErrorGroup) {
@@ -199,7 +220,7 @@
     <div class="flex overflow-hidden rounded-lg border border-[var(--border)]" role="group" aria-label="Filtrar por estado">
       {#each [['', 'Todos'], ['open', 'Abiertos'], ['acknowledged', 'Reconocidos'], ['resolved', 'Resueltos']] as [value, label]}
         <button
-          onclick={() => { statusFilter = value as '' | ErrorStatus; void load(); }}
+          onclick={() => { statusFilter = value as '' | ErrorStatus; page = 0; void load(); }}
           class="px-3 py-1.5 text-xs {statusFilter === value ? 'bg-[var(--brand)]/15 text-[var(--brand)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'}"
           aria-pressed={statusFilter === value}
         >
@@ -210,7 +231,7 @@
     <div class="flex overflow-hidden rounded-lg border border-[var(--border)]" role="group" aria-label="Filtrar por origen">
       {#each [['', 'Todo origen'], ['web', 'Web'], ['server', 'Server'], ['sfu', 'SFU']] as [value, label]}
         <button
-          onclick={() => { sourceFilter = value; void load(); }}
+          onclick={() => { sourceFilter = value; page = 0; void load(); }}
           class="px-3 py-1.5 text-xs {sourceFilter === value ? 'bg-[var(--brand)]/15 text-[var(--brand)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'}"
           aria-pressed={sourceFilter === value}
         >
@@ -258,14 +279,40 @@
           </div>
         </Card>
       {/each}
+
+      <!-- Pagination (total comes from the API; PAGE_SIZE per page) -->
+      {#if total > PAGE_SIZE}
+        <div class="flex items-center justify-between pt-1 text-xs text-[var(--text-muted)]">
+          <span>
+            Página {page + 1} de {Math.ceil(total / PAGE_SIZE)} · {total} grupos
+          </span>
+          <span class="flex gap-1">
+            <Button variant="secondary" size="sm" disabled={page === 0} onclick={() => setPage(page - 1)}>Anterior</Button>
+            <Button variant="secondary" size="sm" disabled={(page + 1) * PAGE_SIZE >= total} onclick={() => setPage(page + 1)}>Siguiente</Button>
+          </span>
+        </div>
+      {/if}
     {/if}
   </div>
 
   <!-- Connection reliability -->
-  <h2 class="mb-3 mt-8 flex items-center gap-2 text-sm font-bold text-[var(--text)]">
-    <WifiOff size={16} aria-hidden="true" />
-    Fiabilidad de conexiones (últimas 50 pérdidas)
-  </h2>
+  <div class="mb-3 mt-8 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="flex items-center gap-2 text-sm font-bold text-[var(--text)]">
+      <WifiOff size={16} aria-hidden="true" />
+      Fiabilidad de conexiones (últimas 50 pérdidas)
+    </h2>
+    <div class="flex overflow-hidden rounded-lg border border-[var(--border)]" role="group" aria-label="Rango de conexiones">
+      {#each [7, 30] as d (d)}
+        <button
+          onclick={() => setConnDays(d as 7 | 30)}
+          class="px-3 py-1.5 text-xs {connDays === d ? 'bg-[var(--brand)]/15 text-[var(--brand)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'}"
+          aria-pressed={connDays === d}
+        >
+          {d} días
+        </button>
+      {/each}
+    </div>
+  </div>
   {#if !connections || connections.events.length === 0}
     <Card class="p-8 text-center text-sm text-[var(--text-muted)]">
       Sin pérdidas de conexión registradas todavía.

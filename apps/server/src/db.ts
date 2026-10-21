@@ -163,6 +163,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pageviews_ts ON pageviews(ts);
   CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path);
   CREATE INDEX IF NOT EXISTS idx_pageviews_referrer_host ON pageviews(referrer_host);
+  -- Filter dimensions of the admin analytics (cross-dimension filtering
+  -- would otherwise scan the whole retention window per request).
+  CREATE INDEX IF NOT EXISTS idx_pageviews_visitor ON pageviews(visitor_id);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_country ON pageviews(country);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_device ON pageviews(device);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_lang ON pageviews(lang);
+  CREATE INDEX IF NOT EXISTS idx_pageviews_campaign ON pageviews(utm_campaign);
   CREATE INDEX IF NOT EXISTS idx_error_groups_status ON error_groups(status);
   CREATE INDEX IF NOT EXISTS idx_error_events_ts ON error_events(ts);
   CREATE INDEX IF NOT EXISTS idx_error_events_group ON error_events(group_id);
@@ -226,6 +233,17 @@ export function getSetting(key: string): string | null {
 
 export function setSetting(key: string, value: string): void {
   db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+}
+
+// ── Privacy migration: room_events.host_ip ──────────────────────────────
+// host_ip historically stored the RAW host IP — inconsistent with the
+// hashed-IP privacy model used everywhere else (pageviews, errors,
+// feedback). New rows store a salted hash (see logRoomEvent in index.ts);
+// this one-time step nulls the historical raw values, which no admin view
+// ever surfaced.
+if (getSetting('migrated.room_events_host_ip_hashed') !== '1') {
+  db.prepare('UPDATE room_events SET host_ip = NULL').run();
+  setSetting('migrated.room_events_host_ip_hashed', '1');
 }
 
 export { db, DB_PATH };

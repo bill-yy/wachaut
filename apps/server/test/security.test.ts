@@ -5,6 +5,7 @@ import {
   pinEquals,
   sanitizeChatText,
   sanitizeUsername,
+  toSafeHttpUrl,
   VALID_EMOJIS,
   MAX_CHAT_LENGTH,
   MAX_USERNAME_LENGTH,
@@ -116,5 +117,46 @@ describe('VALID_EMOJIS', () => {
     assert.ok(!VALID_EMOJIS.has('malicious'));
     assert.ok(!VALID_EMOJIS.has('<script>'));
     assert.ok(!VALID_EMOJIS.has(''));
+  });
+});
+
+describe('toSafeHttpUrl (SSRF gate for SFU fetches)', () => {
+  it('normalizes public ws(s) URLs to http(s) and strips the query', () => {
+    assert.equal(toSafeHttpUrl('wss://sfu-wachaut.billytech.es?x=1'), 'https://sfu-wachaut.billytech.es');
+    assert.equal(toSafeHttpUrl('ws://example.com:3002/health'), 'http://example.com:3002');
+    assert.equal(toSafeHttpUrl('https://sfu.wachaut.com'), 'https://sfu.wachaut.com');
+  });
+
+  it('rejects loopback, private, link-local and reserved targets', () => {
+    for (const bad of [
+      'http://localhost:3002',
+      'http://127.0.0.1:3002',
+      'http://10.1.2.3',
+      'http://172.16.0.5',
+      'http://172.31.255.255',
+      'http://192.168.1.10',
+      'http://169.254.169.254',
+      'http://100.64.0.1',
+      'http://[::1]:3002',
+      'http://[fe80::1]',
+      'http://[fd00::1]',
+      'http://0.0.0.0',
+      'http://224.0.0.1',
+      'http://svc.internal',
+      'http://printer.local',
+    ]) {
+      assert.equal(toSafeHttpUrl(bad), null, bad + ' must be rejected');
+    }
+  });
+
+  it('rejects non-HTTP schemes and garbage', () => {
+    for (const bad of ['file:///etc/passwd', 'ftp://example.com', 'gopher://x', 'not a url', '']) {
+      assert.equal(toSafeHttpUrl(bad), null, bad + ' must be rejected');
+    }
+  });
+
+  it('allows public IPv4 literals and IPv4-mapped public IPv6', () => {
+    assert.equal(toSafeHttpUrl('http://167.86.110.249:3002'), 'http://167.86.110.249:3002');
+    assert.ok(toSafeHttpUrl('http://[::ffff:167.86.110.249]'));
   });
 });

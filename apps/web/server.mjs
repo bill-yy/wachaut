@@ -75,7 +75,11 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function injectLiveOg(html, info) {
+/**
+ * og injection for a live /room/<id>: title/description plus the canonical
+ * og:url so scrapers associate the preview with the room link itself.
+ */
+function injectLiveOg(html, info, roomUrl) {
   const title = info?.title
     ? `${info.title} — Wachaut`
     : 'Wachaut — pantalla en directo · screen live';
@@ -86,14 +90,67 @@ function injectLiveOg(html, info) {
     `<meta property="og:title" content="${escapeHtml(title)}"/>` +
     `<meta property="og:description" content="${escapeHtml(desc)}"/>` +
     `<meta property="og:type" content="website"/>` +
+    (roomUrl ? `<meta property="og:url" content="${escapeHtml(roomUrl)}"/>` : '') +
     `<meta name="twitter:title" content="${escapeHtml(title)}"/>` +
     `<meta name="twitter:description" content="${escapeHtml(desc)}"/>`;
   return html.replace('</head>', `${tags}</head>`);
 }
 
-function sendFile(res, filePath, status = 200) {
+// ── Security headers ────────────────────────────────────────────────────
+// The Fastify API sets its own headers via helmet; this static server had
+// none at all. Notes on the CSP:
+//  - script/style 'unsafe-inline': SvelteKit prod builds embed one inline
+//    bootstrap script and inline style attributes everywhere. The inline
+//    script is build-hashed, so a hash-based policy would churn every build;
+//    'unsafe-inline' still blocks every EXTERNAL script/style host, which is
+//    the dominant XSS vector for a static app.
+//  - wss:/https: in connect-src: signaling and the SFU may live on a sibling
+//    origin per environment (api-wachaut / sfu-wachaut).
+//  - display-capture=(self) is REQUIRED — getDisplayMedia is the product.
+//  - media-src blob:: the local-recording preview uses object URLs.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "font-src 'self'",
+  "connect-src 'self' https: wss:",
+  "worker-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': CSP,
+  // 180 days, no includeSubDomains yet: every current subdomain is HTTPS
+  // (www/wadmin/sfu) but opting the whole zone in is a one-way door best
+  // flipped deliberately later.
+  'Strict-Transport-Security': 'max-age=15552000',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Permissions-Policy': 'camera=(), microphone=(), display-capture=(self), geolocation=()',
+};
+
+/** Cache policy: hashed bundles are immutable forever; everything else 1h. */
+function cacheControlFor(filePath) {
+  const ext = extname(filePath);
+  if (ext === '.html') return 'no-cache';
+  if (filePath.includes('/_app/immutable/')) return 'public, max-age=31536000, immutable';
+  return 'public, max-age=3600';
+}
+
+function sendFile(res, filePath, status = 200, extraHeaders = {}) {
   const type = MIME[extname(filePath)] || 'application/octet-stream';
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=3600' });
+  res.writeHead(status, {
+    'Content-Type': type,
+    'Cache-Control': cacheControlFor(filePath),
+    ...SECURITY_HEADERS,
+    ...extraHeaders,
+  });
   createReadStream(filePath).pipe(res);
 }
 
@@ -123,8 +180,15 @@ createServer(async (req, res) => {
       if (info?.exists) {
         try {
           const shell = readFileSync(join(ROOT, '404.html'), 'utf-8');
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
-          res.end(injectLiveOg(shell, info));
+          // og:url uses the public host the requester asked for (www vs apex).
+          const host = String(req.headers.host || '').replace(/[^a-zA-Z0-9.-]/g, '');
+          const roomUrl = host ? `https://${host}${pathname}` : '';
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            ...SECURITY_HEADERS,
+          });
+          res.end(injectLiveOg(shell, info, roomUrl));
           return;
         } catch { /* fall through to the plain shell */ }
       }

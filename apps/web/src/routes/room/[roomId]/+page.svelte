@@ -5,6 +5,7 @@
 	import { SfuClient } from '$lib/sfu-client';
 	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
 	import { captureClientError } from '$lib/error-report';
+	import { buildDiagnosticsReport, icePathLabel } from '$lib/diagnostics';
 	import { t, srv, i18n } from '$lib/i18n/index.svelte';
 	import { hasRated } from '$lib/feedback';
 	import RatingCard from '$lib/components/RatingCard.svelte';
@@ -87,7 +88,7 @@
 	let autoConnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Connection Stats ---
-	let connectionStats = $state({ resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 });
+	let connectionStats = $state({ resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' });
 	let statsInterval: ReturnType<typeof setInterval> | null = null;
 	let lastBytesReceived = 0;
 	let lastStatsTime = 0;
@@ -106,6 +107,27 @@
 	function toggleNotificationsMuted() {
 		notificationsMuted = !notificationsMuted;
 		setNotifMuted(notificationsMuted);
+	}
+
+	// --- Pre-connection quality hint (measured before joining) ---
+	let preConnRttMs = $state<number | null>(null);
+	let preConnQuality = $derived.by<'good' | 'ok' | 'poor' | 'unknown'>(() => {
+		if (preConnRttMs == null) return 'unknown';
+		if (preConnRttMs < 100) return 'good';
+		if (preConnRttMs < 250) return 'ok';
+		return 'poor';
+	});
+
+	async function measurePreConnection() {
+		try {
+			const samples: number[] = [];
+			for (let i = 0; i < 2; i++) {
+				const t0 = performance.now();
+				await fetch('/api/status', { method: 'HEAD', cache: 'no-store' });
+				samples.push(performance.now() - t0);
+			}
+			preConnRttMs = Math.round(Math.min(...samples));
+		} catch { /* hint stays unknown — never block joining */ }
 	}
 
 	// --- Derived ---
@@ -130,6 +152,29 @@
 		}];
 	}
 
+	/** Copy a full diagnostics report (stats + network path) to the clipboard. */
+	async function copyDiagnostics() {
+		const report = buildDiagnosticsReport('viewer', {
+			rol: 'viewer',
+			estado: status,
+			calidad: connectionQuality,
+			resolución: connectionStats.resolution || '—',
+			fps: connectionStats.fps || '—',
+			bitrate: connectionStats.bitrate || '—',
+			pérdida: connectionStats.lossRate ? `${(connectionStats.lossRate * 100).toFixed(1)}%` : '0%',
+			jitter: `${connectionStats.jitter} ms`,
+			rtt: connectionStats.rtt ? `${connectionStats.rtt} ms` : '—',
+			decoder: connectionStats.decoder || '—',
+			ruta_ice: connectionStats.icePath || '—',
+		});
+		try {
+			await copyText(report);
+			addSystemMessage(t('room.diagCopied'));
+		} catch {
+			addSystemMessage(report.replace(/\n/g, ' · '));
+		}
+	}
+
 	function sendChatMessage() {
 		const text = chatInput.trim();
 		if (!text || !socket) return;
@@ -143,6 +188,7 @@
 				return;
 			} else if (command === '/stats') {
 				addSystemMessage(t('room.cmdStatsViewer', { status, resolution: connectionStats.resolution || 'N/A', fps: connectionStats.fps || 'N/A', bitrate: connectionStats.bitrate || 'N/A' }));
+				void copyDiagnostics();
 				chatInput = '';
 				return;
 			} else if (command === '/clear') {
@@ -375,7 +421,7 @@
 		assignedUsername = '';
 		chatMessages = [];
 		errorMessage = '';
-		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' };
 	}
 
 	function cleanupSocket() {
@@ -536,12 +582,26 @@
 			let bitrate = connectionStats.bitrate;
 			let lossRate = 0;
 			let jitter = 0;
+			let rtt = connectionStats.rtt;
+			let decoder = connectionStats.decoder;
+			let icePath = connectionStats.icePath;
+			let nominatedPairId: string | null = null;
 
 			for (const report of stats as any[]) {
+				// Selected candidate pair → RTT + the local candidate id it rides on
+				// (resolved to a relay/direct label by the local-candidate reports).
+				if (report.type === 'candidate-pair' && (report.nominated || report.selected === true) && report.state === 'succeeded') {
+					nominatedPairId = report.localCandidateId || null;
+					rtt = report.currentRoundTripTime ? Math.round(report.currentRoundTripTime * 1000) : rtt;
+				}
+				if (report.type === 'local-candidate' && nominatedPairId !== null && report.id === nominatedPairId) {
+					icePath = icePathLabel(report.candidateType);
+				}
 				if (report.type === 'inbound-rtp' && report.kind === 'video') {
 					resolution = `${report.frameWidth || '?'}×${report.frameHeight || '?'}`;
 					fps = `${report.framesPerSecond || '?'}`;
 					jitter = report.jitter ? Math.round(report.jitter * 1000) : 0; // ms
+					decoder = report.decoderImplementation || decoder;
 					const now = Date.now();
 					const bytesReceived = report.bytesReceived || 0;
 					const packetsLost = report.packetsLost || 0;
@@ -562,12 +622,11 @@
 					lastStatsTime = now;
 					lastPacketsLost = packetsLost;
 					lastPacketsReceived = packetsReceived;
-					break;
 				}
 			}
 
-			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate || lossRate !== connectionStats.lossRate || jitter !== connectionStats.jitter) {
-				connectionStats = { resolution, fps, bitrate, lossRate, jitter };
+			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate || lossRate !== connectionStats.lossRate || jitter !== connectionStats.jitter || rtt !== connectionStats.rtt || decoder !== connectionStats.decoder || icePath !== connectionStats.icePath) {
+				connectionStats = { resolution, fps, bitrate, lossRate, jitter, rtt, decoder, icePath };
 			}
 		} catch {}
 	}
@@ -578,7 +637,7 @@
 		lastStatsTime = 0;
 		lastPacketsLost = 0;
 		lastPacketsReceived = 0;
-		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' };
 		// Poll every 5s (was 3s) — resolution/fps rarely change, reduces getStats overhead.
 		statsInterval = setInterval(updateStats, 5000);
 	}
@@ -663,6 +722,11 @@
 			if (info?.title) roomTitle = info.title;
 		}).catch(() => {});
 
+		// Pre-connection hint: best-of-2 HEAD round-trips to the same origin
+		// (through the CDN) — cheap and honest enough to set expectations
+		// before the user commits to joining.
+		void measurePreConnection();
+
 		try { username = localStorage.getItem(USERNAME_STORAGE_KEY) || ''; } catch { username = ''; }
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -681,6 +745,7 @@
 </script>
 
 <svelte:head>
+	<title>{t('room.viewerPageTitle')}</title>
 	<!-- Ephemeral private broadcast pages must never be indexed. -->
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
@@ -709,6 +774,17 @@
 							<p class="mb-4 max-w-sm text-center text-sm font-semibold text-[var(--brand)]" style="font-family: var(--font-display);">{roomTitle}</p>
 						{/if}
 						<ViewerAuth bind:username bind:pin onConnect={connect} />
+						{#if preConnQuality !== 'unknown'}
+							<p class="mt-2 flex items-center justify-center gap-1.5 text-xs text-[var(--text-subtle)]">
+								<span
+									class="inline-block h-2 w-2 rounded-full {preConnQuality === 'good' ? 'bg-[var(--success)]' : preConnQuality === 'ok' ? 'bg-[var(--warning)]' : 'bg-[var(--danger)]'}"
+									aria-hidden="true"
+								></span>
+								{t('viewer.preConnLabel')}:
+								{t(preConnQuality === 'good' ? 'viewer.preConnGood' : preConnQuality === 'ok' ? 'viewer.preConnOk' : 'viewer.preConnPoor')}
+								<span class="font-mono">({preConnRttMs}ms)</span>
+							</p>
+						{/if}
 				</div>
 			{:else if status === 'ended'}
 				<!-- Broadcast ended: dedicated screen with a rating prompt -->

@@ -233,7 +233,7 @@
 				/>
 				<div class="mt-0.5 flex justify-between text-[10px] text-[var(--text-subtle)]">
 					<span>0.5 Mbps</span>
-					<span>5 Mbps</span>
+					<span>10 Mbps</span>
 				</div>
 			</div>
 		</div>

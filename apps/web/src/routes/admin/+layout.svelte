@@ -38,6 +38,10 @@
   }
 </script>
 
+<svelte:head>
+  <title>Wachaut — panel</title>
+</svelte:head>
+
 {#if !isBareRoute}
   <div class="min-h-screen bg-[var(--bg)]">
     <header class="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-lg">

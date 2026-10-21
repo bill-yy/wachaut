@@ -1,0 +1,29 @@
+feat: sprint calidad + capacidad + analytics + SVC con gate
+
+Calidad de imagen: techos coherentes (VP9/AV1 10 Mbps, VP8 8 Mbps,
+MAX_INCOMING_BITRATE env), keyframe al reanudar consumer, audio estéreo Opus,
+mecanismo SVC negociado via SFU_VIDEO_MODE (default vp8-single, sin cambio de
+comportamiento; el spike se hace flippeando el env en pruebas).
+
+Analytics (remake del panel): rangos custom + filtros cruzados + funnel +
+fiabilidad + export CSV + índices; frontend con charts SVG propios, chips de
+filtro, rango global y paginación. room_events.host_ip pasa a hash.
+
+Seguridad: headers CSP/HSTS/etc en server.mjs; SSRF gate (toSafeHttpUrl) en
+todos los fetch al SFU + tests; timing-safe y rate limit de joins en el SFU;
+maxHttpBufferSize; validación de requestedRoomId.
+
+SEO: html lang por idioma, doble title eliminado, sitemap hreflang completo,
+og:url en previews, cache 1 año inmutable.
+
+UX: copiar diagnóstico (host+viewer) con ruta ICE/RTT/decoder; semáforo
+pre-conexión del viewer.
+
+Infra: docker-compose.prod-sfu.yml (sfu.wachaut.com, UDP 40000-40399),
+tests/load/ (suite capacidad Playwright + sampler VPS), runbook Dokploy,
+README/.env.example ampliados, SECURITY.md con riesgos aceptados
+(HMAC-SHA1 TURN: exigido por coturn y HMAC-SHA1 sigue sólido como PRF;
+TOTP SHA1: RFC 6238).
+
+Tests: SFU 18/18, security/analytics ampliado (CI Node 22), svelte-check 0
+errores, tsc limpio.

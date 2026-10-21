@@ -36,14 +36,29 @@ El web corre en `http://localhost:5173`.
 | Variable | Descripción | Default |
 |----------|-------------|---------|
 | `VITE_WS_URL` | URL del signaling server (wss://) | `wss://api-wachaut.billytech.es` |
-| `VITE_SFU_URL` | URL del SFU (wss://) | `wss://sfu-wachaut.billytech.es` |
+| `VITE_SFU_URL` | URL del SFU (wss://); el server también la usa en runtime para health/errors | `wss://sfu-wachaut.billytech.es` |
 | `TURN_SECRET` | Shared secret para coturn | — |
 | `TURN_URL` | URL del TURN server | — |
-| `RTC_ANNOUNCED_IP` | IP pública para ICE candidates | — |
-| `ALLOWED_ORIGINS` | CORS origins (comma-separated) | `https://wachaut.billytech.es` |
+| `RTC_ANNOUNCED_IP` | IP pública para ICE candidates (**obligatoria en producción** — el SFU no arranca sin ella) | — |
+| `RTC_MIN_PORT` / `RTC_MAX_PORT` | Rango UDP de media — debe coincidir EXACTO con los puertos publicados del contenedor | `40000`–`49999` |
+| `MAX_INCOMING_BITRATE` | Techo del uplink del host en bps (deja holgura sobre el preset alto, 8 Mbps) | `10000000` |
+| `ALLOWED_ORIGINS` | CORS origins (comma-separated) — **incluye todos los orígenes que sirvan el cliente** | `https://wachaut.billytech.es` |
 | `ADMIN_JWT_SECRET` | Secreto de firma de los tokens admin (**obligatorio en producción**, `openssl rand -hex 32`) | — |
 | `ADMIN_BOOTSTRAP_PASSWORD` | Contraseña del primer superadmin si la BD está vacía (≥10 chars; se fuerza su rotación al primer login) | — |
 | `ADMIN_JWT_EXPIRY` | Duración del token admin (formato jsonwebtoken) | `8h` |
+| `MAX_CONNECTIONS_PER_IP` | Conexiones socket por IP (subir en load tests) | `8` |
+| `ROOM_IDLE_TTL_MS` / `HOST_RECONNECT_GRACE_MS` | TTL de salas abandonadas / gracia de reconexión del host | `4h` / `30s` |
+| `WACHAUT_DB_PATH` | Ruta del SQLite (montar un volumen en Docker) | `./data/wachaut.db` |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push (se autogeneran en `data/push-keys.json` si no se setean) | — |
+| `RESEND_API_KEY` / `ADMIN_NOTIFY_EMAIL` | Alertas admin por email (opcional) | — |
+
+## Despliegue — SFU de producción
+
+El SFU de `wachaut.com` se despliega como **Compose** (`docker/docker-compose.prod-sfu.yml`)
+en el entorno production de Dokploy: rango UDP nativo 40000-40399 (~400 transports),
+restart garantizado y signaling por Traefik (`sfu.wachaut.com`, naranja en Cloudflare).
+El checklist completo (DNS, firewall, build args) va en comentarios al principio del YAML.
+La suite de capacidad vive en `tests/load/` (ver su README).
 
 ## Panel de administración
 
