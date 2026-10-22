@@ -36,6 +36,7 @@
 	{#if maintenance.active}
 		<div
 			class="fixed inset-x-0 top-0 z-50 border-b border-[var(--warning)]/40 bg-[var(--warning)]/15 px-4 py-2 text-center text-sm text-[var(--warning)] backdrop-blur-lg"
+			style="padding-top: max(0.5rem, env(safe-area-inset-top));"
 			role="status"
 		>
 			{t('layout.maintenance')}

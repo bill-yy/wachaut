@@ -124,7 +124,7 @@
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
 				<div class="mb-3 flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
-						<Server class="h-5 w-5 text-[var(--text-muted)]" />
+						<Server class="h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">{T.whatTitle}</h2>
 				</div>
@@ -142,7 +142,7 @@
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
 				<div class="mb-3 flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
-						<Lock class="h-5 w-5 text-[var(--text-muted)]" />
+						<Lock class="h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">{T.notTitle}</h2>
 				</div>
@@ -157,7 +157,7 @@
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
 				<div class="mb-3 flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
-						<BarChart3 class="h-5 w-5 text-[var(--text-muted)]" />
+						<BarChart3 class="h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">{T.statsTitle}</h2>
 				</div>
@@ -177,7 +177,7 @@
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
 				<div class="mb-3 flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
-						<Cookie class="h-5 w-5 text-[var(--text-muted)]" />
+						<Cookie class="h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">{T.localTitle}</h2>
 				</div>
@@ -188,7 +188,7 @@
 			<div class="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
 				<div class="mb-3 flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
-						<Eye class="h-5 w-5 text-[var(--text-muted)]" />
+						<Eye class="h-5 w-5 text-[var(--text-muted)]" aria-hidden="true" />
 					</span>
 					<h2 class="text-lg font-bold text-[var(--text)]">{T.recTitle}</h2>
 				</div>
@@ -197,7 +197,10 @@
 		</div>
 
 		<div class="mt-8">
-			<a href={locale === 'es' ? '/' : '/en/'} class="text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">
+			<a
+				href={locale === 'es' ? '/' : '/en/'}
+				class="inline-flex min-h-[44px] items-center px-2 text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]"
+			>
 				{T.back}
 			</a>
 		</div>

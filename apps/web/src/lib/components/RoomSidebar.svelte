@@ -4,7 +4,7 @@
 	import EmotePicker from './EmotePicker.svelte';
 	import QualitySettings, { type QualityPreset } from './QualitySettings.svelte';
 	import { t } from '$lib/i18n/index.svelte';
-	import { Check, Link2, Settings, Share2, StopCircle, ArrowLeft, ChevronDown, Pencil } from 'lucide-svelte';
+	import { Check, Link2, Settings, Share2, StopCircle, ArrowLeft, ChevronDown, Pencil, X } from 'lucide-svelte';
 
 	interface Props {
 		// Room info
@@ -43,6 +43,8 @@
 		onToggleEmotePicker: () => void;
 		onCloseEmotePicker: () => void;
 		onLeave: () => void;
+		/** Close the drawer (mobile drawer mode only; hidden on md+). */
+		onClosePanel?: () => void;
 		// Host push opt-in chip (rendered under the title editor).
 		pushOptIn?: Snippet;
 		// Chat panel slot
@@ -79,6 +81,7 @@
 		onToggleEmotePicker,
 		onCloseEmotePicker,
 		onLeave,
+		onClosePanel,
 		pushOptIn,
 		children,
 	}: Props = $props();
@@ -95,10 +98,21 @@
 
 <aside class="flex h-full w-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--surface)] md:w-80">
 	<!-- ── Room info: PIN protagonista + URL compacta ── -->
-	<div class="shrink-0 space-y-2.5 border-b border-[var(--border)] p-4">
+	<div class="shrink-0 space-y-2.5 border-b border-[var(--border)] p-4 pb-safe">
+		<!-- Mobile drawer: close affordance inside the panel itself -->
+		{#if onClosePanel}
+			<button
+				onclick={onClosePanel}
+				class="-mr-1 -mt-1 mb-1 flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-xl text-[var(--text-subtle)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)] md:hidden"
+				aria-label={t('room.closePanel')}
+			>
+				<X class="h-5 w-5" aria-hidden="true" />
+			</button>
+		{/if}
+
 		<!-- PIN: prominent card with brand glow (display only) -->
 		<div class="relative overflow-hidden rounded-xl border border-[var(--brand)]/20 bg-[var(--surface-2)] p-3.5">
-			<div class="absolute -right-8 -top-8 h-20 w-20 rounded-full opacity-20 blur-2xl gradient-brand"></div>
+			<div class="absolute -right-8 -top-8 h-20 w-20 rounded-full opacity-20 blur-2xl gradient-brand" aria-hidden="true"></div>
 			<span class="relative text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">{t('room.pinLabel')}</span>
 			<p class="relative font-mono text-2xl font-bold tracking-[0.15em] text-[var(--brand)] sm:text-3xl sm:tracking-[0.25em]">{pin}</p>
 		</div>
@@ -111,7 +125,8 @@
 					bind:value={titleDraft}
 					maxlength="80"
 					placeholder={t('room.titlePlaceholder')}
-					class="min-w-0 flex-1 rounded-lg border border-[var(--brand)]/40 bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-[var(--brand)] focus:outline-none"
+					aria-label={t('room.titlePlaceholder')}
+					class="min-w-0 flex-1 rounded-lg border border-[var(--brand)]/40 bg-[var(--surface-2)] px-3 py-2.5 text-[16px] text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:border-[var(--brand)] focus:outline-none sm:text-xs"
 					onkeydown={(e) => {
 						if (e.key === 'Enter') commitTitle();
 						if (e.key === 'Escape') { titleEditing = false; titleDraft = title; }
@@ -120,19 +135,19 @@
 				/>
 				<button
 					onclick={commitTitle}
-					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg gradient-brand text-black transition-all hover:brightness-110 active:scale-95"
+					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg gradient-brand text-black transition-[filter,transform] hover:brightness-110 active:scale-95"
 					aria-label={t('room.titleSave')}
 				>
-					<Check class="h-3.5 w-3.5" />
+					<Check class="h-4 w-4" aria-hidden="true" />
 				</button>
 			</div>
 		{:else}
 			<button
 				onclick={() => { titleDraft = title || ''; titleEditing = true; }}
-				class="group flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text)] transition-all hover:bg-[var(--border)] active:scale-[0.98]"
+				class="group flex min-h-[40px] w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text)] transition-[background-color,transform] hover:bg-[var(--border)] active:scale-[0.98]"
 				title={t('room.titleHint')}
 			>
-				<Pencil class="h-3 w-3 shrink-0 text-[var(--text-subtle)] group-hover:text-[var(--brand)]" />
+				<Pencil class="h-3 w-3 shrink-0 text-[var(--text-subtle)] group-hover:text-[var(--brand)]" aria-hidden="true" />
 				<span class="truncate">{title || t('room.titlePlaceholder')}</span>
 			</button>
 		{/if}
@@ -144,13 +159,13 @@
 		<!-- Single copy invitation button (URL + PIN embedded) -->
 		<button
 			onclick={onCopyInvite}
-			class="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-xs font-medium text-[var(--text)] transition-all hover:bg-[var(--border)] active:scale-95"
+			class="flex min-h-[44px] w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-xs font-medium text-[var(--text)] transition-[background-color,transform] hover:bg-[var(--border)] active:scale-95"
 		>
 			{#if copiedInvite}
-				<Check class="h-3.5 w-3.5 shrink-0 text-[var(--success)]" />
+				<Check class="h-3.5 w-3.5 shrink-0 text-[var(--success)]" aria-hidden="true" />
 				<span class="text-[var(--success)]">{t('room.inviteCopied')}</span>
 			{:else}
-				<Link2 class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
+				<Link2 class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" aria-hidden="true" />
 				<span>{t('room.copyInvite')}</span>
 				<span class="ml-auto text-[10px] text-[var(--text-subtle)]">{t('room.includesPin')}</span>
 			{/if}
@@ -158,17 +173,18 @@
 	</div>
 
 	<!-- ── Actions: compartir/detener + calidad + emotes ── -->
-	<div class="shrink-0 space-y-2 border-b border-[var(--border)] p-4">
+	<div class="shrink-0 space-y-2 border-b border-[var(--border)] p-4 pb-safe">
 		{#if !sharing}
 			<!-- Quality settings: collapsible, compact -->
 			<button
 				onclick={onToggleSettings}
-				class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-all hover:bg-[var(--border)] active:scale-95"
+				aria-expanded={showSettings}
+				class="flex min-h-[40px] w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-[background-color,transform] hover:bg-[var(--border)] active:scale-95"
 			>
-				<Settings class="h-3.5 w-3.5" />
+				<Settings class="h-3.5 w-3.5" aria-hidden="true" />
 				{t('room.quality')}
 				<span class="ml-auto text-[var(--text-subtle)]">{qualityPreset === 'custom' ? t('room.presetCustom') : presets[qualityPreset]?.label ?? '—'}</span>
-				<ChevronDown class={`h-3.5 w-3.5 text-[var(--text-subtle)] transition-transform ${showSettings ? 'rotate-180' : ''}`} />
+				<ChevronDown class={`h-3.5 w-3.5 text-[var(--text-subtle)] transition-transform ${showSettings ? 'rotate-180' : ''}`} aria-hidden="true" />
 			</button>
 
 			{#if showSettings}
@@ -187,14 +203,14 @@
 			<!-- Compartir: protagonista -->
 			<button
 				onclick={onShare}
-				class="gradient-brand flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-all hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+				class="gradient-brand flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-[filter,transform] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
 			>
-				<Share2 class="h-4 w-4" />
+				<Share2 class="h-4 w-4" aria-hidden="true" />
 				{t('room.shareButton')}
 			</button>
 		{:else}
 			<Button variant="danger" onclick={onStop} class="w-full" size="lg">
-				<StopCircle class="h-4 w-4" />
+				<StopCircle class="h-4 w-4" aria-hidden="true" />
 				{t('room.stopShare')}
 			</Button>
 
@@ -210,8 +226,8 @@
 			</div>
 		{/if}
 
-		<Button variant="ghost" onclick={onLeave} size="sm" class="w-full !text-[var(--text-subtle)]">
-			<ArrowLeft class="h-3.5 w-3.5" />
+		<Button variant="ghost" onclick={onLeave} size="md" class="w-full !text-[var(--text-subtle)]">
+			<ArrowLeft class="h-3.5 w-3.5" aria-hidden="true" />
 			{t('room.closeRoom')}
 		</Button>
 	</div>

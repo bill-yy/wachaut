@@ -27,26 +27,27 @@
 <!-- Live region: polite so announcements don't interrupt. -->
 <div
 	class="pointer-events-none fixed inset-x-0 top-4 z-[120] flex flex-col items-center gap-2 px-4"
+	style="top: max(1rem, env(safe-area-inset-top));"
 	aria-live="polite"
 	aria-atomic="false"
 >
 	{#each toast.items as t (t.id)}
 		{@const Icon = icon[t.kind]}
 		<div
-			class="glass pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl px-4 py-3 shadow-xl"
+			class="glass pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-xl px-4 py-3 shadow-xl"
 			animate:flip={{ duration: d }}
 			in:fly={{ y: -16, duration: d }}
 			out:fly={{ y: -16, duration: reduce ? 0 : 160 }}
 			role={t.kind === 'error' ? 'alert' : 'status'}
 		>
-			<Icon class={`mt-0.5 h-5 w-5 shrink-0 ${accent[t.kind]}`} />
-			<p class="flex-1 text-sm text-[var(--text)]">{t.message}</p>
+			<Icon class={`mt-0.5 h-5 w-5 shrink-0 ${accent[t.kind]}`} aria-hidden="true" />
+			<p class="min-w-0 flex-1 break-words text-sm text-[var(--text)]">{t.message}</p>
 			<button
-				class="shrink-0 rounded-md p-0.5 text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
+				class="-m-1.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
 				aria-label={translate('comp.closeToast')}
 				onclick={() => toast.dismiss(t.id)}
 			>
-				<X class="h-4 w-4" />
+				<X class="h-4 w-4" aria-hidden="true" />
 			</button>
 		</div>
 	{/each}

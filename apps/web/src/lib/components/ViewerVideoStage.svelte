@@ -117,6 +117,7 @@
 		onclick={onVideoClick}
 		use:pipEvents
 		class="h-full w-full cursor-pointer object-contain"
+		aria-label={t('vroom.liveVideo')}
 		title={t('vroom.clickToUnmute')}
 	></video>
 
@@ -132,8 +133,8 @@
 		/>
 		{#if reconnecting}
 			<div class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center px-4">
-				<span class="flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm">
-					<WifiOff class="h-3.5 w-3.5 animate-pulse" />
+				<span class="flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm" role="status">
+					<WifiOff class="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
 					{t('vroom.frozenReconnecting')}
 				</span>
 			</div>
@@ -141,10 +142,10 @@
 	{/if}
 
 	<!-- Top-left overlays -->
-	<div class="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2">
+	<div class="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2" style="top: max(0.75rem, env(safe-area-inset-top));">
 		<!-- LIVE badge: custom, matches HostHeader style -->
 		<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/90 px-2.5 py-1 text-xs font-bold text-white max-md:backdrop-blur-none md:backdrop-blur-sm">
-			<span class="relative flex h-1.5 w-1.5">
+			<span class="relative flex h-1.5 w-1.5" aria-hidden="true">
 				<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
 				<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-white"></span>
 			</span>
@@ -152,7 +153,7 @@
 		</span>
 		{#if hostMuted}
 			<span class="flex items-center gap-1 rounded-full bg-[var(--warning)]/90 px-2 py-1 text-xs font-medium text-white max-md:backdrop-blur-none md:backdrop-blur-sm">
-				<VolumeX class="h-3 w-3" />
+				<VolumeX class="h-3 w-3" aria-hidden="true" />
 				{t('vroom.hostMutedBadge')}
 			</span>
 		{/if}
@@ -163,9 +164,11 @@
 		{/if}
 	</div>
 
-	<!-- Bottom controls: glass bar matching host treatment -->
+	<!-- Bottom controls: glass bar matching host treatment. Always visible on
+	     touch/narrow viewports (no hover to reveal it); hover-reveal only on
+	     devices with a fine pointer. pb-safe clears the home indicator. -->
 	<div
-		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-4 pt-10 opacity-100 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 sm:opacity-0"
+		class="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pt-10 opacity-100 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 [@media(min-width:640px)_and_(hover:hover)]:opacity-0 pb-safe"
 	>
 		<div class="pointer-events-auto mx-auto flex max-w-2xl items-center gap-2">
 			<!-- Mute -->
@@ -176,11 +179,11 @@
 				aria-label={muted ? t('room.unmuteSound') : t('room.muteSound')}
 			>
 				{#if muted || volume === 0}
-					<VolumeX class="h-5 w-5" />
+					<VolumeX class="h-5 w-5" aria-hidden="true" />
 				{:else if volume < 50}
-					<Volume1 class="h-5 w-5" />
+					<Volume1 class="h-5 w-5" aria-hidden="true" />
 				{:else}
-					<Volume2 class="h-5 w-5" />
+					<Volume2 class="h-5 w-5" aria-hidden="true" />
 				{/if}
 			</button>
 
@@ -213,7 +216,7 @@
 						aria-haspopup="menu"
 						aria-expanded={showQuality}
 					>
-						<Gauge class="h-4 w-4" />
+						<Gauge class="h-4 w-4" aria-hidden="true" />
 					</button>
 					{#if showQuality}
 						<div
@@ -253,7 +256,7 @@
 				title={t('vroom.shareLink')}
 				aria-label={t('vroom.shareLink')}
 			>
-				<Share2 class="h-4 w-4" />
+				<Share2 class="h-4 w-4" aria-hidden="true" />
 			</button>
 
 			<!-- Picture-in-Picture -->
@@ -263,7 +266,7 @@
 				title={isPip ? t('vroom.exitPip') : t('vroom.pip')}
 				aria-label={isPip ? t('vroom.exitPip') : t('vroom.pip')}
 			>
-				<PictureInPicture2 class="h-4 w-4" />
+				<PictureInPicture2 class="h-4 w-4" aria-hidden="true" />
 			</button>
 
 			<!-- Fullscreen -->
@@ -274,9 +277,9 @@
 				aria-label={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
 			>
 				{#if fullscreen}
-					<Minimize class="h-5 w-5" />
+					<Minimize class="h-5 w-5" aria-hidden="true" />
 				{:else}
-					<Maximize class="h-5 w-5" />
+					<Maximize class="h-5 w-5" aria-hidden="true" />
 				{/if}
 			</button>
 
@@ -295,6 +298,7 @@
 	<!-- Floating reactions -->
 	{#each reactions as reaction (reaction.id)}
 		<div
+			aria-hidden="true"
 			class="pointer-events-none absolute z-10 select-none text-3xl"
 			style:left="{reaction.x}%"
 			style:bottom="{reaction.bottom}px"

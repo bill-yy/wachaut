@@ -30,12 +30,12 @@
 </script>
 
 <div class="relative pt-2" use:clickOutside={onClose}>
-	<!-- Favorites quick row -->
-	<div class="flex items-center justify-center gap-2">
+	<!-- Favorites quick row: 44px targets for rapid-fire tapping -->
+	<div class="flex items-center justify-center gap-1.5">
 		{#each favorites as emoji (emoji)}
 			<button
 				onclick={() => onSend(emoji)}
-				class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-all hover:bg-[var(--border)] active:scale-90"
+				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-[background-color,transform] hover:bg-[var(--border)] active:scale-90"
 				aria-label={t('comp.sendReaction', { emoji })}
 			>
 				{emoji}
@@ -43,20 +43,20 @@
 		{/each}
 		<button
 			onclick={onToggle}
-			class="flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:bg-[var(--border)] active:scale-90 {open
+			class="flex h-11 w-11 items-center justify-center rounded-xl transition-[background-color,transform] hover:bg-[var(--border)] active:scale-90 {open
 				? 'bg-[var(--border)] text-[var(--text)]'
 				: 'bg-[var(--surface-2)] text-[var(--text-subtle)]'}"
 			aria-label={t('comp.moreEmojis')}
 			aria-expanded={open}
 		>
-			<SmilePlus class="h-5 w-5" />
+			<SmilePlus class="h-5 w-5" aria-hidden="true" />
 		</button>
 	</div>
 
 	<!-- Expandable grid -->
 	{#if open}
 		<div
-			class="glass absolute bottom-full left-0 right-0 z-10 mb-2 max-h-64 overflow-y-auto rounded-xl p-3 shadow-2xl"
+			class="glass absolute bottom-full left-0 right-0 z-10 mb-2 max-h-64 overflow-y-auto overscroll-contain rounded-xl p-3 shadow-2xl"
 		>
 			{#each EMOTE_CATEGORIES as category (category.label)}
 				<div class="mb-2 last:mb-0">
@@ -67,7 +67,7 @@
 						{#each category.emojis as emoji (emoji)}
 							<button
 								onclick={() => onSend(emoji)}
-								class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-all duration-150 hover:bg-[var(--border)] active:scale-90"
+								class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--surface-2)] text-xl transition-[background-color,transform] duration-150 hover:bg-[var(--border)] active:scale-90"
 								aria-label={t('comp.sendEmoji', { emoji })}
 							>
 								{emoji}

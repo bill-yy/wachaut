@@ -21,7 +21,9 @@
 	const L = $derived(dict[locale]);
 </script>
 
-<div class="mockup-container relative w-full max-w-2xl select-none">
+<!-- Purely decorative illustration of the product: hidden from assistive
+     tech entirely and every fake control is removed from the tab order. -->
+<div class="mockup-container relative w-full max-w-2xl select-none" aria-hidden="true">
 	<!-- Browser window frame -->
 	<div
 		class="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
@@ -30,7 +32,7 @@
 		<!-- Top bar / HostHeader -->
 		<div class="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
 			<div class="flex items-center gap-3">
-				<button class="text-[var(--text-subtle)]" aria-label="Volver"><ArrowLeft class="h-4 w-4" /></button>
+				<button type="button" tabindex="-1" class="text-[var(--text-subtle)]" aria-label="Volver"><ArrowLeft class="h-4 w-4" /></button>
 				<span class="h-4 w-[1px] bg-[var(--border)]"></span>
 				<div class="flex items-center gap-2 text-[10px] font-bold text-[var(--danger)]">
 					<span class="relative flex h-2 w-2">
@@ -45,7 +47,7 @@
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
-				<button class="rounded-lg p-1.5 text-[var(--text-subtle)] hover:bg-[var(--surface)]" aria-label={L['mockup.notifications']}>
+				<button type="button" tabindex="-1" class="rounded-lg p-1.5 text-[var(--text-subtle)] hover:bg-[var(--surface)]" aria-label={L['mockup.notifications']}>
 					<Bell class="h-4 w-4" />
 				</button>
 			</div>
@@ -72,10 +74,10 @@
 
 					<!-- Floating video controls -->
 					<div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-black/60 px-3 py-2 backdrop-blur-md">
-						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger)] text-white" aria-label={L['mockup.stopShort']}>
+						<button type="button" tabindex="-1" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger)] text-white" aria-label={L['mockup.stopShort']}>
 							<StopCircle class="h-4 w-4" />
 						</button>
-						<button class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text)]" aria-label={L['mockup.fullscreen']}>
+						<button type="button" tabindex="-1" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text)]" aria-label={L['mockup.fullscreen']}>
 							<Maximize class="h-4 w-4" />
 						</button>
 					</div>
@@ -97,13 +99,13 @@
 					<div class="mb-2 flex items-center justify-center">
 						<span class="font-mono text-lg font-bold tracking-[0.2em] text-[var(--text)]">482917</span>
 					</div>
-					<button class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--surface)] py-1.5 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text)]" aria-label={L['mockup.copy']}>
+					<button type="button" tabindex="-1" class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--surface)] py-1.5 text-[10px] font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text)]" aria-label={L['mockup.copy']}>
 						<Copy class="h-3 w-3" /> {L['mockup.copy']}
 					</button>
 				</div>
 
 				<!-- Main action -->
-				<button class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger)] py-2.5 text-xs font-semibold text-white transition-all" aria-label={L['mockup.stop']}>
+				<button type="button" tabindex="-1" class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger)] py-2.5 text-xs font-semibold text-white transition-all" aria-label={L['mockup.stop']}>
 					<StopCircle class="h-4 w-4" /> {L['mockup.stop']}
 				</button>
 
@@ -136,7 +138,7 @@
 							class="flex-1 rounded-md border-0 bg-transparent px-2 py-1 text-[10px] text-[var(--text)] placeholder:text-[var(--text-subtle)] focus:outline-none"
 							disabled
 						/>
-						<button class="text-[var(--text-subtle)]" aria-label={L['mockup.send']}><Send class="h-3.5 w-3.5" /></button>
+						<button type="button" tabindex="-1" class="text-[var(--text-subtle)]" aria-label={L['mockup.send']}><Send class="h-3.5 w-3.5" /></button>
 					</div>
 				</div>
 			</div>

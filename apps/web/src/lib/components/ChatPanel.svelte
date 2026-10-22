@@ -57,14 +57,14 @@
 	<!-- Header: compact, coherente con sidebar -->
 	<div class="flex items-center justify-between border-b border-[var(--border)] px-4 py-2.5">
 		<div class="flex items-center gap-1.5">
-			<MessageCircle class="h-3.5 w-3.5 text-[var(--text-subtle)]" />
+			<MessageCircle class="h-3.5 w-3.5 text-[var(--text-subtle)]" aria-hidden="true" />
 			<span class="text-xs font-bold uppercase tracking-wider text-[var(--text-subtle)]">Chat</span>
 			{#if messages.length > 0}
 				<span class="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--surface-2)] px-1 text-[10px] font-medium text-[var(--text-subtle)]">{messages.length}</span>
 			{/if}
 		</div>
 		<div class="flex items-center gap-1 text-[var(--text-subtle)]">
-			<Terminal class="h-3 w-3" />
+			<Terminal class="h-3 w-3" aria-hidden="true" />
 			<span class="font-mono text-[10px]">/help</span>
 		</div>
 	</div>
@@ -73,7 +73,8 @@
 	<!-- Messages -->
 	<div
 		bind:this={container}
-		class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3"
+		class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3"
+		role="log"
 		aria-live="polite"
 		aria-label={t('comp.chatAria')}
 	>
@@ -82,7 +83,7 @@
 				<div class="relative mb-4">
 					<div class="absolute inset-0 rounded-full opacity-20 blur-2xl gradient-brand"></div>
 					<div class="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
-						<MessageCircle class="h-6 w-6 text-[var(--text-subtle)]" />
+						<MessageCircle class="h-6 w-6 text-[var(--text-subtle)]" aria-hidden="true" />
 					</div>
 				</div>
 				<p class="text-sm font-medium text-[var(--text-muted)]">{t('comp.chatNoMessages')}</p>
@@ -91,18 +92,18 @@
 		{:else}
 			{#each messages.slice(-200) as msg, i (msg.id ?? `${msg.sender}-${msg.timestamp.getTime()}-${i}`)}
 				<div
-					class="flex flex-col {msg.sender === SENDER_HOST
+					class="flex min-w-0 flex-col {msg.sender === SENDER_HOST
 						? 'items-end'
 						: msg.sender === SENDER_SYSTEM
 							? 'items-center'
 							: 'items-start'}"
 				>
-					<div class="mb-0.5 flex items-center gap-1.5">
+					<div class="mb-0.5 flex max-w-full items-center gap-1.5">
 						{#if msg.sender === SENDER_SYSTEM}
-							<Shield class="h-3 w-3 text-[var(--text-subtle)]" />
+							<Shield class="h-3 w-3 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
 						{/if}
 						<span
-							class="text-[10px] font-semibold {msg.sender === SENDER_HOST
+							class="max-w-[10rem] truncate text-[10px] font-semibold {msg.sender === SENDER_HOST
 								? 'text-[var(--text-muted)]'
 								: msg.sender === SENDER_SYSTEM
 									? 'text-[var(--text-subtle)]'
@@ -110,12 +111,12 @@
 						>
 							{msg.sender}
 						</span>
-						<span class="text-[10px] text-[var(--text-subtle)]">
+						<span class="shrink-0 text-[10px] text-[var(--text-subtle)]">
 							{formatChatTime(msg.timestamp)}
 						</span>
 					</div>
 					<div
-						class="max-w-[85%] rounded-2xl px-3 py-2 text-sm {msg.sender === SENDER_HOST
+						class="max-w-[85%] break-words rounded-2xl px-3 py-2 text-sm {msg.sender === SENDER_HOST
 							? 'gradient-brand rounded-br-md text-white'
 							: msg.sender === SENDER_SYSTEM
 								? 'rounded-xl bg-[var(--surface-2)] text-xs italic text-[var(--text-muted)]'
@@ -128,8 +129,9 @@
 		{/if}
 	</div>
 
-	<!-- Input -->
-	<div class="border-t border-[var(--border)] p-3">
+	<!-- Input: pb-safe keeps the field clear of the iOS home indicator when
+	     the panel is docked to the bottom of the screen (mobile drawer). -->
+	<div class="border-t border-[var(--border)] p-3 pb-safe">
 		<div class="flex items-center gap-2">
 			<input
 				type="text"
@@ -138,15 +140,16 @@
 				{placeholder}
 				maxlength={maxLength}
 				aria-label={t('comp.chatAria')}
-				class="input-field flex-1 !py-2.5"
+				autocomplete="off"
+				class="input-field min-w-0 flex-1 !py-2.5"
 			/>
 			<button
 				onclick={onSend}
 				disabled={!value.trim()}
-				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl gradient-brand text-white transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl gradient-brand text-white transition-[filter,transform] hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
 				aria-label={t('comp.chatSend')}
 			>
-				<Send class="h-4 w-4" />
+				<Send class="h-4 w-4" aria-hidden="true" />
 			</button>
 		</div>
 		{#if showCounter}

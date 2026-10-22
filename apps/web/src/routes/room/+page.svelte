@@ -589,7 +589,7 @@
     socket.on('viewer:joined', (data: any) => {
       const wasEmpty = viewerCount === 0;
       viewerCount = viewerCount + 1;
-      if (data.username) addSystemMessage(`${data.username} se unio a la sala.`);
+      if (data.username) addSystemMessage(t('room.viewerJoined', { name: data.username }));
       try { playViewerJoin(); } catch {}
       if (wasEmpty) triggerFirstViewerCelebration();
       // Keep the viewers list fresh if the panel is open.
@@ -598,7 +598,7 @@
 
     socket.on('viewer:left', (data: any) => {
       viewerCount = Math.max(0, viewerCount - 1);
-      if (data.username) addSystemMessage(`${data.username} salio de la sala.`);
+      if (data.username) addSystemMessage(t('room.viewerLeft', { name: data.username }));
       try { playViewerLeave(); } catch {}
       // Remove from local list + refresh from server if panel is open.
       if (data.viewerId) {
@@ -785,6 +785,8 @@
       if (showSettings) { showSettings = false; return; }
       if (showViewersPanel) { showViewersPanel = false; return; }
       if (showLeaveModal) { showLeaveModal = false; return; }
+      // Close the mobile drawer last (only relevant below md).
+      if (showChat && window.innerWidth < 768) { showChat = false; return; }
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
         isFullscreen = false;
@@ -911,10 +913,10 @@
 <!-- Mobile / unsupported gate -->
 {#if !canScreenShare}
   <div class="flex min-h-screen flex-col items-center justify-center bg-app px-6 text-center">
-    <div class="relative mb-6">
+      <div class="relative mb-6">
       <div class="absolute inset-0 rounded-full opacity-40 blur-2xl bg-[var(--danger)]"></div>
       <div class="relative flex h-20 w-20 items-center justify-center rounded-full bg-[var(--surface)] border border-[var(--border)]">
-        <Monitor class="h-10 w-10 text-[var(--text-subtle)]" />
+        <Monitor class="h-10 w-10 text-[var(--text-subtle)]" aria-hidden="true" />
       </div>
     </div>
     <h1 class="mb-3 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
@@ -927,7 +929,7 @@
       {t('room.unsupportedAdvice')}
     </p>
     <a href="/" class="btn-secondary gap-2">
-      <ArrowLeft class="h-4 w-4" />
+      <ArrowLeft class="h-4 w-4" aria-hidden="true" />
       {t('room.backHome')}
     </a>
   </div>
@@ -936,7 +938,7 @@
     <div class="text-center">
       <div class="relative mx-auto mb-6 flex h-16 w-16 items-center justify-center">
         <Spinner size="lg" />
-        <Eye class="absolute h-7 w-7 text-[var(--text-muted)]" />
+        <Eye class="absolute h-7 w-7 text-[var(--text-muted)]" aria-hidden="true" />
       </div>
       <h2 class="mb-2 text-xl font-semibold text-[var(--text)]">{t('room.preparingRoom')}</h2>
       <p class="text-sm text-[var(--text-muted)]">{t('room.preparingRoomBody')}</p>
@@ -966,7 +968,7 @@
     role="status"
     aria-live="polite"
   >
-    <SettingsIcon class="h-4 w-4 text-[var(--brand)]" />
+    <SettingsIcon class="h-4 w-4 text-[var(--brand)]" aria-hidden="true" />
     <span class="text-sm font-medium text-[var(--text)]">{autoAdaptNotification}</span>
   </div>
 {/if}
@@ -987,7 +989,7 @@
 <Modal open={showLeaveModal} title={t('room.leaveTitle')} label={t('room.leaveLabel')} size="sm" onClose={() => (showLeaveModal = false)}>
   <div class="mb-5 flex items-center gap-3">
     <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--danger)]/12">
-      <AlertTriangle class="h-5 w-5 text-[var(--danger)]" />
+      <AlertTriangle class="h-5 w-5 text-[var(--danger)]" aria-hidden="true" />
     </span>
     <p class="text-sm text-[var(--text-muted)]">
       {t('room.leaveBody')}
@@ -1023,8 +1025,9 @@
   {/if}
 </Modal>
 
-<!-- Main Container -->
-<div class="flex h-screen flex-col bg-app">
+<!-- Main Container: h-app tracks the dynamic viewport on mobile browsers -->
+<div class="flex h-app flex-col bg-app">
+  <h1 class="sr-only">{t('room.hostPageTitle')}</h1>
   <HostHeader
     sharing={isSharing}
     health={connectionHealth}
@@ -1072,11 +1075,13 @@
       ></button>
     {/if}
 
-    <!-- Sidebar wrapper: static on md+, fixed drawer on mobile -->
+    <!-- Sidebar wrapper: static on md+, fixed drawer on mobile.
+         `invisible` when closed removes the off-screen drawer (and every
+         control inside it) from the tab order and the a11y tree. -->
     <div
-      class="h-full min-h-0 md:block {showChat
-        ? 'max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:transition-transform max-md:duration-300'
-        : 'max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:translate-x-full max-md:transition-transform max-md:duration-300'}"
+      class="h-full min-h-0 md:block md:visible {showChat
+        ? 'max-md:visible max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:transition-[transform,visibility] max-md:duration-300'
+        : 'max-md:invisible max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-50 max-md:w-80 max-md:max-w-[85vw] max-md:translate-x-full max-md:transition-[transform,visibility] max-md:duration-300'}"
     >
       <RoomSidebar
         {pin}
@@ -1108,6 +1113,7 @@
         onSendReaction={handleSendReaction}
         onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
         onCloseEmotePicker={() => (showEmotePicker = false)}
+        onClosePanel={() => (showChat = false)}
         onLeave={() => (showLeaveModal = true)}
       >
         {#snippet pushOptIn()}

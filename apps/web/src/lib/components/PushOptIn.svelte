@@ -146,40 +146,40 @@
 {#if state === 'on'}
 	<button
 		onclick={disable}
-		class="flex w-full items-center gap-2 rounded-xl border border-[var(--success)]/30 bg-[var(--success)]/8 px-3 py-2 text-xs font-medium text-[var(--success)] transition-all hover:bg-[var(--success)]/15 active:scale-[0.98]"
+		class="flex w-full items-center gap-2 rounded-xl border border-[var(--success)]/30 bg-[var(--success)]/8 px-3.5 py-2.5 text-xs font-medium text-[var(--success)] transition-all hover:bg-[var(--success)]/15 active:scale-[0.98]"
 		title={t('push.onHint')}
 	>
-		<Check class="h-3.5 w-3.5 shrink-0" />
+		<Check class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t('push.on')}</span>
 	</button>
 {:else if state === 'denied'}
 	<!-- Chrome auto-blocked notifications for the site: only the padlock can undo it. -->
 	<button
 		onclick={() => toast.warning(t('push.blocked'))}
-		class="flex w-full items-center gap-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/8 px-3 py-2 text-xs font-medium text-[var(--warning)] transition-all active:scale-[0.98]"
+		class="flex w-full items-center gap-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/8 px-3.5 py-2.5 text-xs font-medium text-[var(--warning)] transition-all active:scale-[0.98]"
 		title={t('push.blockedHint')}
 	>
-		<BellOff class="h-3.5 w-3.5 shrink-0" />
+		<BellOff class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t('push.blockedShort')}</span>
 	</button>
 {:else if state === 'idle' || state === 'working'}
 	<button
 		onclick={enable}
 		disabled={state === 'working'}
-		class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition-all hover:bg-[var(--border)] hover:text-[var(--text)] active:scale-[0.98] disabled:opacity-60"
+		class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3.5 py-2.5 text-xs font-medium text-[var(--text-muted)] transition-all hover:bg-[var(--border)] hover:text-[var(--text)] active:scale-[0.98] disabled:opacity-60"
 		title={t('push.offHint')}
 	>
-		<BellRing class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
+		<BellRing class="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" aria-hidden="true" />
 		<span class="truncate">{state === 'working' ? t('push.working') : t('push.off')}</span>
 	</button>
 {:else if state === 'unsupported'}
 	<!-- Embedded webview (in-app browsers) — no push service exists there. -->
 	<button
 		onclick={() => toast.info(t('push.embedded'))}
-		class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2 text-xs font-medium text-[var(--text-subtle)] transition-all hover:bg-[var(--border)] active:scale-[0.98]"
+		class="flex w-full items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3.5 py-2.5 text-xs font-medium text-[var(--text-subtle)] transition-all hover:bg-[var(--border)] active:scale-[0.98]"
 		title={t('push.embedded')}
 	>
-		<BellOff class="h-3.5 w-3.5 shrink-0" />
+		<BellOff class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 		<span class="truncate">{t('push.embeddedShort')}</span>
 	</button>
 {/if}

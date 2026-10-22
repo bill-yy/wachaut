@@ -568,7 +568,12 @@
 	function toggleFullscreen() {
 		if (!videoContainer) return;
 		if (!document.fullscreenElement) {
-			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {});
+			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {
+				// iOS Safari rejects element fullscreen: fall back to the
+				// native video fullscreen (the primary landscape path there).
+				const v = videoEl as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+				v?.webkitEnterFullscreen?.();
+			});
 		} else {
 			document.exitFullscreen().then(() => { isFullscreen = false; }).catch(() => {});
 		}
@@ -619,7 +624,6 @@
 				}
 				startStatsPolling();
 				showShortcutsOverlay();
-				if (window.innerWidth < 768) chatOpen = true;
 			});
 
 			sfuClient.on('consumer-layers', (data: any) => {
@@ -735,6 +739,8 @@
 
 	// --- Keyboard Shortcuts ---
 	function showShortcutsOverlay() {
+		// The M/F// shortcuts need a keyboard: skip the hint on touch-only devices.
+		if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
 		showShortcuts = true;
 		if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
 		shortcutsTimeout = setTimeout(() => { showShortcuts = false; }, 3000);
@@ -743,6 +749,12 @@
 	function handleKeydown(e: KeyboardEvent) {
 		const tag = document.activeElement?.tagName;
 		const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+		// Escape closes the mobile chat drawer first (below md it overlays the video).
+		if (e.key === 'Escape' && chatOpen && window.innerWidth < 768) {
+			chatOpen = false;
+			return;
+		}
 
 		if (e.key === '/' && !isInput && status === 'live') {
 			e.preventDefault();
@@ -899,8 +911,28 @@
 			{/if}
 		</main>
 	{:else}
-		<!-- LIVE layout -->
-		<div class="flex h-screen flex-col overflow-hidden md:flex-row">
+		<!-- LIVE layout: h-app tracks the dynamic viewport on mobile browsers -->
+		<div class="flex h-app flex-col overflow-hidden md:flex-row">
+			<h1 class="sr-only">{roomTitle || t('room.viewerPageTitle')}</h1>
+
+			<!-- Screen-reader announcements of connection-state changes -->
+			<div class="sr-only" role="status" aria-live="polite">
+				{#if status === 'reconnecting'}{t('comp.stReconnecting')}
+				{:else if errorMessage}{errorMessage}
+				{/if}
+			</div>
+
+			<!-- SFU errors mid-session (was previously only rendered off-live) -->
+			{#if errorMessage}
+				<div
+					class="fixed left-1/2 top-4 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl border border-[var(--danger)]/40 bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--danger)] shadow-xl animate-fade-in"
+					role="alert"
+					style="top: max(1rem, env(safe-area-inset-top));"
+				>
+					{errorMessage}
+				</div>
+			{/if}
+
 			<!-- Video -->
 			<ViewerVideoStage
 				muted={isMuted}
@@ -940,24 +972,11 @@
 				onSendReaction={sendReaction}
 				onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
 				onCloseEmotePicker={() => (showEmotePicker = false)}
+				onClose={toggleChat}
 			/>
 
-			<!-- Mobile chat toggle (FAB) -->
-			<button
-				onclick={toggleChat}
-				class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand"
-				title={chatOpen ? t('room.closeChat') : t('room.openChat')}
-				aria-label={chatOpen ? t('room.closeChat') : t('room.openChat')}
-			>
-				<MessageCircle class="h-6 w-6" />
-				{#if unreadCount > 0}
-					<span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-xs font-bold text-white">
-						{unreadCount > 9 ? '9+' : unreadCount}
-					</span>
-				{/if}
-			</button>
-
-			<!-- Mobile backdrop (no backdrop-filter: iOS compositor) -->
+			<!-- Mobile backdrop (no backdrop-filter: iOS compositor) — rendered
+			     BEFORE the FAB so the FAB stays clickable above it. -->
 			{#if chatOpen}
 				<button
 					class="fixed inset-0 z-40 bg-black/60 md:hidden"
@@ -966,6 +985,28 @@
 					tabindex="-1"
 				></button>
 			{/if}
+
+			<!-- Mobile chat toggle (FAB): docks LEFT while the drawer is open so
+			     it never sits under the drawer/emote row, and floats above the
+			     backdrop (z-45) to stay the primary "close" control. -->
+			<button
+				onclick={toggleChat}
+				class="fixed z-[45] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand {chatOpen
+					? 'left-4'
+					: 'right-4'}"
+				style="bottom: max(1.5rem, env(safe-area-inset-bottom));"
+				title={chatOpen ? t('room.closeChat') : t('room.openChat')}
+				aria-label={chatOpen ? t('room.closeChat') : t('room.openChat')}
+				aria-expanded={chatOpen}
+			>
+				<MessageCircle class="h-6 w-6" aria-hidden="true" />
+				{#if unreadCount > 0}
+					<span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-xs font-bold text-white" aria-hidden="true">
+						{unreadCount > 9 ? '9+' : unreadCount}
+					</span>
+					<span class="sr-only">{t('room.unreadMessages', { count: unreadCount })}</span>
+				{/if}
+			</button>
 
 			<!-- Shortcuts overlay -->
 			{#if showShortcuts}

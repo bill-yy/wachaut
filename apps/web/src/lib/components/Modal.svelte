@@ -7,6 +7,7 @@
 	import { fade, scale } from 'svelte/transition';
 	import { focusTrap } from '$lib/actions';
 	import { prefersReducedMotion } from '$lib/utils/motion';
+	import { t } from '$lib/i18n/index.svelte';
 	import { cn } from '$lib/utils/cn';
 
 	interface Props {
@@ -17,6 +18,8 @@
 		closeOnBackdrop?: boolean;
 		/** Accessibility label (used as aria-label on the dialog). */
 		label: string;
+		/** Accessible name for the backdrop close button (localized). */
+		closeLabel?: string;
 		onClose: () => void;
 		children: Snippet;
 	}
@@ -27,6 +30,7 @@
 		size = 'md',
 		closeOnBackdrop = true,
 		label,
+		closeLabel,
 		onClose,
 		children,
 	}: Props = $props();
@@ -61,12 +65,16 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-[100] flex items-center justify-center p-4" role="presentation">
+	<div
+		class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+		role="presentation"
+		style="padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right));"
+	>
 		<!-- Backdrop -->
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default bg-black/60 backdrop-blur-sm"
-			aria-label="Cerrar"
+			aria-label={closeLabel ?? t('comp.close')}
 			tabindex="-1"
 			onclick={onClose}
 			transition:fade={{ duration: d ? 180 : 0 }}

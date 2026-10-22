@@ -70,9 +70,12 @@
 </svelte:head>
 
 <div class="relative min-h-screen bg-app">
-	<nav class="mx-auto flex max-w-3xl items-center justify-between px-4 py-5">
+	<nav class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4" aria-label={locale === 'es' ? 'Principal' : 'Main'}>
 		<a href={locale === 'es' ? '/' : '/en/'} aria-label="Wachaut"><Brand size="md" /></a>
-		<a href={locale === 'es' ? '/' : '/en/'} class="text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">
+		<a
+			href={locale === 'es' ? '/' : '/en/'}
+			class="flex min-h-[44px] items-center px-2 text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]"
+		>
 			{locale === 'es' ? '← Inicio' : '← Home'}
 		</a>
 	</nav>
@@ -90,8 +93,9 @@
 			<p class="mt-2 text-sm text-[var(--text-muted)]">{L['status.subtitle']}</p>
 		</header>
 
-		<div class="space-y-3">
-			<!-- Web + API -->
+	<!-- aria-live: async status flips (checking → ok/down) must be announced -->
+		<div class="space-y-3" role="status" aria-live="polite">
+			<!-- Web/API -->
 			<div class="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
 				<div class="flex items-center gap-3">
 					<span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-2)]">
@@ -103,7 +107,7 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					<span class="relative flex h-2.5 w-2.5">
+					<span class="relative flex h-2.5 w-2.5" aria-hidden="true">
 						{#if api === 'ok'}
 							<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75"></span>
 						{/if}
@@ -125,7 +129,7 @@
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
-					<span class="relative flex h-2.5 w-2.5">
+					<span class="relative flex h-2.5 w-2.5" aria-hidden="true">
 						{#if sfu === 'ok'}
 							<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75"></span>
 						{/if}
@@ -154,7 +158,11 @@
 			<span>
 				{L['status.lastCheck']}: {lastCheck ? lastCheck.toLocaleTimeString(locale === 'es' ? 'es-ES' : 'en-US') : '—'}
 			</span>
-			<button onclick={check} disabled={refreshing} class="inline-flex items-center gap-1.5 transition-colors hover:text-[var(--brand)] disabled:opacity-50">
+			<button
+				onclick={check}
+				disabled={refreshing}
+				class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-xs transition-colors hover:text-[var(--brand)] disabled:opacity-50"
+			>
 				<RefreshCw class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" aria-hidden="true" />
 				{L['status.refresh']}
 			</button>

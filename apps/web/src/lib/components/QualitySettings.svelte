@@ -67,112 +67,116 @@
 
 <div class="space-y-2 rounded-xl bg-[var(--surface-2)] p-3">
 	<!-- Audio toggle -->
-	<div class="flex items-center justify-between p-2">
+	<div class="flex min-h-[44px] items-center justify-between p-2">
 		<div class="flex items-center gap-2">
 			{#if includeAudio}
-				<Volume2 class="h-4 w-4 text-[var(--text-muted)]" />
+				<Volume2 class="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
 			{:else}
-				<VolumeX class="h-4 w-4 text-[var(--text-subtle)]" />
+				<VolumeX class="h-4 w-4 text-[var(--text-subtle)]" aria-hidden="true" />
 			{/if}
 			<span class="text-sm font-medium text-[var(--text)]">{t('room.includeAudio')}</span>
 		</div>
 		<button
 			onclick={() => (includeAudio = !includeAudio)}
-			class="relative h-6 w-10 rounded-full transition-colors duration-200 {includeAudio ? 'gradient-brand' : 'bg-[var(--border)]'}"
+			class="relative h-7 w-12 rounded-full transition-colors duration-200 {includeAudio ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={includeAudio}
 			aria-label={t('room.includeAudio')}
 		>
-			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {includeAudio ? 'translate-x-4' : 'translate-x-0'}"></span>
+			<span class="absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 {includeAudio ? 'translate-x-5' : 'translate-x-0'}" aria-hidden="true"></span>
 		</button>
 	</div>
 
 	<!-- Content hint toggle: text sharpness vs motion -->
-	<div class="flex items-center justify-between p-2">
+	<div class="flex min-h-[44px] items-center justify-between p-2">
 		<div class="flex items-center gap-2">
 			{#if contentHint === 'detail'}
-				<Type class="h-4 w-4 text-[var(--text-muted)]" />
+				<Type class="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
 			{:else}
-				<Zap class="h-4 w-4 text-[var(--text-muted)]" />
+				<Zap class="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
 			{/if}
 			<span class="text-sm font-medium text-[var(--text)]">{t('room.textSharpness')}</span>
 		</div>
 		<button
 			onclick={() => (contentHint = contentHint === 'detail' ? 'motion' : 'detail')}
-			class="relative h-6 w-10 rounded-full transition-colors duration-200 {contentHint === 'detail' ? 'gradient-brand' : 'bg-[var(--border)]'}"
+			class="relative h-7 w-12 rounded-full transition-colors duration-200 {contentHint === 'detail' ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={contentHint === 'detail'}
 			aria-label={t('room.textSharpnessAria')}
 		>
-			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {contentHint === 'detail' ? 'translate-x-4' : 'translate-x-0'}"></span>
+			<span class="absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 {contentHint === 'detail' ? 'translate-x-5' : 'translate-x-0'}" aria-hidden="true"></span>
 		</button>
 	</div>
 
 	<!-- Auto-adapt toggle -->
-	<div class="flex items-center justify-between p-2">
+	<div class="flex min-h-[44px] items-center justify-between p-2">
 		<div class="flex items-center gap-2">
-			<Settings class="h-4 w-4 text-[var(--text-muted)]" />
+			<Settings class="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
 			<span class="text-sm font-medium text-[var(--text)]">{t('room.autoAdapt')}</span>
 		</div>
 		<button
 			onclick={() => (autoAdapt = !autoAdapt)}
-			class="relative h-6 w-10 rounded-full transition-colors duration-200 {autoAdapt ? 'gradient-brand' : 'bg-[var(--border)]'}"
+			class="relative h-7 w-12 rounded-full transition-colors duration-200 {autoAdapt ? 'gradient-brand' : 'bg-[var(--border)]'}"
 			role="switch"
 			aria-checked={autoAdapt}
 			aria-label={t('room.autoAdaptAria')}
 		>
-			<span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 {autoAdapt ? 'translate-x-4' : 'translate-x-0'}"></span>
+			<span class="absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 {autoAdapt ? 'translate-x-5' : 'translate-x-0'}" aria-hidden="true"></span>
 		</button>
 	</div>
 
 	<!-- Divider -->
-	<div class="my-1 h-px bg-[var(--border)]"></div>
+	<div class="my-1 h-px bg-[var(--border)]" aria-hidden="true"></div>
 
 	<!-- Presets -->
-	{#each Object.entries(presets) as [key, preset] (key)}
+	<div class="space-y-2" role="group" aria-label={t('room.quality')}>
+		{#each Object.entries(presets) as [key, preset] (key)}
+			<button
+				onclick={() => (selected = key)}
+				aria-pressed={selected === key}
+				class="w-full rounded-xl border-2 p-3 text-left transition-[border-color,background-color,box-shadow] {selected === key
+					? 'border-[var(--brand)] bg-[var(--surface)] shadow-glow'
+					: 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--text-subtle)]'}"
+			>
+				<div class="mb-1 flex items-center justify-between">
+					<span class="text-sm font-semibold text-[var(--text)]">{preset.label}</span>
+					{#if selected === key}
+						<span class="flex h-4 w-4 items-center justify-center rounded-full gradient-brand" aria-hidden="true">
+							<Check class="h-2.5 w-2.5 text-white" />
+						</span>
+					{/if}
+				</div>
+				<p class="mb-1.5 text-xs text-[var(--text-muted)]">{preset.desc}</p>
+				<div class="flex items-center gap-2 font-mono text-[10px] text-[var(--text-subtle)]">
+					<span>{preset.resolution.width}×{preset.resolution.height}</span>
+					<span aria-hidden="true">·</span>
+					<span>{preset.fps} FPS</span>
+					<span aria-hidden="true">·</span>
+					<span>{(preset.bitrate / 1_000_000).toFixed(1)} Mbps</span>
+				</div>
+			</button>
+		{/each}
+
+		<!-- Custom preset button -->
 		<button
-			onclick={() => (selected = key)}
-			class="w-full rounded-xl border-2 p-3 text-left transition-all {selected === key
+			onclick={() => (selected = 'custom')}
+			aria-pressed={selected === 'custom'}
+			class="flex w-full items-center gap-2 rounded-xl border-2 p-3 text-left transition-[border-color,background-color,box-shadow] {selected === 'custom'
 				? 'border-[var(--brand)] bg-[var(--surface)] shadow-glow'
 				: 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--text-subtle)]'}"
 		>
-			<div class="mb-1 flex items-center justify-between">
-				<span class="text-sm font-semibold text-[var(--text)]">{preset.label}</span>
-				{#if selected === key}
-					<span class="flex h-4 w-4 items-center justify-center rounded-full gradient-brand">
-						<Check class="h-2.5 w-2.5 text-white" />
-					</span>
-				{/if}
+			<SlidersHorizontal class="h-4 w-4 shrink-0 text-[var(--brand)]" aria-hidden="true" />
+			<div class="min-w-0 flex-1">
+				<span class="text-sm font-semibold text-[var(--text)]">{t('room.presetCustom')}</span>
+				<p class="text-xs text-[var(--text-muted)]">{t('room.presetCustomDesc')}</p>
 			</div>
-			<p class="mb-1.5 text-xs text-[var(--text-muted)]">{preset.desc}</p>
-			<div class="flex items-center gap-2 font-mono text-[10px] text-[var(--text-subtle)]">
-				<span>{preset.resolution.width}×{preset.resolution.height}</span>
-				<span>·</span>
-				<span>{preset.fps} FPS</span>
-				<span>·</span>
-				<span>{(preset.bitrate / 1_000_000).toFixed(1)} Mbps</span>
-			</div>
+			{#if selected === 'custom'}
+				<span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full gradient-brand" aria-hidden="true">
+					<Check class="h-2.5 w-2.5 text-white" />
+				</span>
+			{/if}
 		</button>
-	{/each}
-
-	<!-- Custom preset button -->
-	<button
-		onclick={() => (selected = 'custom')}
-		class="flex w-full items-center gap-2 rounded-xl border-2 p-3 text-left transition-all {selected === 'custom'
-			? 'border-[var(--brand)] bg-[var(--surface)] shadow-glow'
-			: 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--text-subtle)]'}"
-	>
-		<SlidersHorizontal class="h-4 w-4 text-[var(--brand)]" />
-		<div class="flex-1">
-			<span class="text-sm font-semibold text-[var(--text)]">{t('room.presetCustom')}</span>
-			<p class="text-xs text-[var(--text-muted)]">{t('room.presetCustomDesc')}</p>
-		</div>
-		{#if selected === 'custom'}
-			<span class="flex h-4 w-4 items-center justify-center rounded-full gradient-brand">
-				<Check class="h-2.5 w-2.5 text-white" />
-			</span>
-		{/if}
-	</button>
+	</div>
 
 	<!-- Custom sliders (only when 'custom' is selected) -->
 	{#if selected === 'custom'}
@@ -241,32 +245,53 @@
 </div>
 
 <style>
+	/* Sliders: 4px visual track but a 28px tall hit area (the input itself),
+	   22px thumbs, and a visible focus ring (outline:none is replaced by a
+	   box-shadow ring on :focus-visible so keyboard focus stays visible). */
 	input[type='range'].q-slider {
 		-webkit-appearance: none;
 		appearance: none;
+		height: 28px;
+		background: transparent;
+		cursor: pointer;
+	}
+	input[type='range'].q-slider::-webkit-slider-runnable-track {
 		height: 4px;
 		border-radius: 2px;
 		background: var(--border);
-		outline: none;
-		cursor: pointer;
+	}
+	input[type='range'].q-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 2px;
+		background: var(--border);
 	}
 	input[type='range'].q-slider::-webkit-slider-thumb {
 		-webkit-appearance: none;
 		appearance: none;
-		width: 14px;
-		height: 14px;
+		margin-top: -9px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%;
 		background: var(--brand);
 		cursor: pointer;
 		box-shadow: 0 0 0 2px var(--surface);
 	}
 	input[type='range'].q-slider::-moz-range-thumb {
-		width: 14px;
-		height: 14px;
+		width: 22px;
+		height: 22px;
 		border-radius: 50%;
 		background: var(--brand);
 		border: none;
 		cursor: pointer;
 		box-shadow: 0 0 0 2px var(--surface);
+	}
+	input[type='range'].q-slider:focus-visible {
+		outline: none;
+	}
+	input[type='range'].q-slider:focus-visible::-webkit-slider-runnable-track {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent);
+	}
+	input[type='range'].q-slider:focus-visible::-moz-range-track {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent);
 	}
 </style>

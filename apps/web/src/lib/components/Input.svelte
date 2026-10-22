@@ -30,6 +30,10 @@
 	// Stable id for label association if none provided. Reactive to `id` prop.
 	const generated = `in-${Math.random().toString(36).slice(2, 9)}`;
 	const inputId = $derived(id ?? generated);
+	// Announce both the error and the hint when both are present.
+	const describedBy = $derived(
+		[error && `${inputId}-error`, hint && `${inputId}-hint`].filter(Boolean).join(' ') || undefined,
+	);
 </script>
 
 <div class="w-full">
@@ -38,22 +42,22 @@
 			{label}
 		</label>
 	{/if}
-	<div class="relative">
-		{#if leading}
-			<span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--text-subtle)]">
-				{@render leading()}
-			</span>
-		{/if}
-		<input
-			id={inputId}
-			bind:value
-			class={cn('input-field', leading && 'pl-11', error && '!border-[var(--danger)] focus:!shadow-[0_0_0_4px_color-mix(in_srgb,var(--danger)_18%,transparent)]', klass)}
-			aria-invalid={error ? 'true' : undefined}
-			aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
-			{...rest}
-		/>
-		{@render children?.()}
-	</div>
+<div class="relative">
+	{#if leading}
+		<span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[var(--text-subtle)]" aria-hidden="true">
+			{@render leading()}
+		</span>
+	{/if}
+	<input
+		id={inputId}
+		bind:value
+		class={cn('input-field', leading && 'pl-11', error && '!border-[var(--danger)] focus:!shadow-[0_0_0_4px_color-mix(in_srgb,var(--danger)_18%,transparent)]', klass)}
+		aria-invalid={error ? 'true' : undefined}
+		aria-describedby={describedBy}
+		{...rest}
+	/>
+	{@render children?.()}
+</div>
 	{#if error}
 		<p id={`${inputId}-error`} class="mt-1.5 text-xs font-medium text-[var(--danger)]">{error}</p>
 	{:else if hint}
