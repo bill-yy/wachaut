@@ -58,6 +58,7 @@ const dump = await page.evaluate(async () => {
             enabled: t.sender.track.enabled,
           },
           encodings: p.encodings,
+          degradationPreference: p.degradationPreference ?? null,
           codecs: (p.codecs || []).filter((c) => c.mimeType?.includes('VP') || c.mimeType?.includes('vp')).map((c) => c.mimeType + ' ' + (c.sdpFmtpLine || '')),
           active: t.currentDirection,
         });

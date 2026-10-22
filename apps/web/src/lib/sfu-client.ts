@@ -404,6 +404,28 @@ export class SfuClient {
         });
         devlog("[sfu] Video producer created (vp8-single fallback):", this.#producer.id);
       }
+
+      // Screen text must never trade RESOLUTION for framerate. Chrome's
+      // default degradation ("balanced") drops resolution first the moment
+      // bandwidth tightens — text turns into pixel mush while fps stays
+      // high. "maintain-resolution" drops frames instead, which is the
+      // right trade for reading a shared screen. (Live-room probe
+      // 2026-10-22: top layer served at ~1.8 Mbps of a 4.5 Mbps budget
+      // with visibly blocky text; resolution-degradation was the cause.)
+      try {
+        const pc = this.#sendTransport?._handler?._pc;
+        const sender = pc?.getSenders?.().find(
+          (s: RTCRtpSender) => s.track === videoTrack,
+        );
+        if (sender) {
+          const params = sender.getParameters();
+          (params as any).degradationPreference = "maintain-resolution";
+          await sender.setParameters(params);
+          devlog("[sfu] sender degradationPreference: maintain-resolution");
+        }
+      } catch (e) {
+        devwarn("[sfu] degradationPreference not applied:", e);
+      }
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
