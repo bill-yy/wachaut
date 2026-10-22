@@ -20,8 +20,12 @@
 #
 # One-time setup checklist (outside this file):
 #   1. Cloudflare DNS: sfu.wachaut.com → A 167.86.110.249, proxy ON (orange).
-#   2. VPS firewall: allow udp 40000-40399 (same as 20000-2010 was opened).
+#   2. VPS firewall: allow udp 40000-40399.
 #   3. Dokploy → production environment → New Compose, paste this file.
+#      IMPORTANT: Dokploy's Traefik does NOT read docker labels — create the
+#      route via the Compose's Domains UI instead: Host sfu.wachaut.com,
+#      service "sfu", port 3002, HTTPS + letsencrypt. (The labels below are
+#      inert here; kept for standalone-traefik deployments.)
 #   4. Wachaut Web (production) build args:
 #        VITE_WS_URL=wss://wachaut.com
 #        VITE_SFU_URL=wss://sfu.wachaut.com

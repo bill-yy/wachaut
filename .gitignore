@@ -18,3 +18,10 @@ _bmad-output/
 
 # Mimosa hook internal state
 .mimosa/
+
+# Load-test run artifacts (keep the informe markdown, ignore raw CSVs)
+
+# Load-test run artifacts (keep the informe markdown, ignore raw CSVs)
+tests/load/results/*/
+tests/load/results/*.csv
+!tests/load/results/informe-*.md
