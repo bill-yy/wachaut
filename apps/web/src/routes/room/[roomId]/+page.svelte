@@ -5,6 +5,7 @@
 	import { SfuClient } from '$lib/sfu-client';
 	import { reconnectDelayForAttempt, shouldGiveUpReconnect } from '$lib/reconnect-strategy';
 	import { captureClientError } from '$lib/error-report';
+	import { buildDiagnosticsReport, icePathLabel } from '$lib/diagnostics';
 	import { t, srv, i18n } from '$lib/i18n/index.svelte';
 	import { hasRated } from '$lib/feedback';
 	import RatingCard from '$lib/components/RatingCard.svelte';
@@ -20,6 +21,7 @@
 	import ViewerAuth from '$lib/components/ViewerAuth.svelte';
 	import ViewerStatus from '$lib/components/ViewerStatus.svelte';
 	import ViewerVideoStage from '$lib/components/ViewerVideoStage.svelte';
+	import type { QualityMode } from '$lib/components/ViewerVideoStage.svelte';
 	import ViewerChatPanel from '$lib/components/ViewerChatPanel.svelte';
 	import { MessageCircle } from 'lucide-svelte';
 
@@ -87,12 +89,75 @@
 	let autoConnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// --- Connection Stats ---
-	let connectionStats = $state({ resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 });
+	let connectionStats = $state({ resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' });
 	let statsInterval: ReturnType<typeof setInterval> | null = null;
 	let lastBytesReceived = 0;
 	let lastStatsTime = 0;
 	let lastPacketsLost = 0;
 	let lastPacketsReceived = 0;
+
+	// --- Viewer quality selector (layered producers: simulcast/SVC) ---
+	// The viewer caps which layer the SFU may send; the SFU still adapts DOWN
+	// under congestion and reports the active layer back via 'consumer-layers'.
+	let qualityMode = $state<QualityMode>('auto');
+	let layeredProducer = $state(false);
+	let activeLayers = $state<{ spatial: number | null; temporal: number | null }>({ spatial: null, temporal: null });
+	// "auto" and "high" both cap at the top layer — under simulcast there is
+	// no "lock" API, so auto simply means "let the SFU decide within the cap".
+	const QUALITY_TARGETS: Record<QualityMode, [number, number]> = {
+		auto: [2, 2],
+		high: [2, 2],
+		medium: [1, 2],
+		low: [0, 2],
+	};
+	const activeLayerLabel = $derived(
+		activeLayers.spatial === null
+			? null
+			: activeLayers.spatial >= 2
+				? t('vroom.qualityHigh')
+				: activeLayers.spatial === 1
+					? t('vroom.qualityMedium')
+					: t('vroom.qualityLow'),
+	);
+	function selectQuality(mode: QualityMode) {
+		qualityMode = mode;
+		const target = QUALITY_TARGETS[mode];
+		sfuClient?.setPreferredLayers?.(target[0], target[1]);
+	}
+
+	// --- Freeze last frame on reconnect ---
+	// When the connection drops the page used to swap to a full reconnect
+	// panel, unmounting the <video> → black screen. Instead, snapshot the
+	// last decoded frame and keep the live layout on screen until real
+	// frames resume.
+	let frozenFrame: string | null = $state(null);
+
+	function captureFrozenFrame() {
+		try {
+			if (!videoEl || videoEl.videoWidth === 0 || !videoEl.srcObject) return;
+			const c = document.createElement('canvas');
+			c.width = videoEl.videoWidth;
+			c.height = videoEl.videoHeight;
+			c.getContext('2d')?.drawImage(videoEl, 0, 0);
+			frozenFrame = c.toDataURL('image/jpeg', 0.85);
+		} catch {
+			/* best-effort — never block the reconnect flow */
+		}
+	}
+
+	// Once live again, clear the frozen frame only when a REAL new frame is
+	// presented (requestVideoFrameCallback), with a 5s safety so a stale
+	// snapshot can never stick forever.
+	$effect(() => {
+		if (status !== 'live' || !frozenFrame) return;
+		const el = videoEl;
+		if (!el) return;
+		let cleared = false;
+		const clear = () => { if (!cleared) { cleared = true; frozenFrame = null; } };
+		(el as any).requestVideoFrameCallback?.(() => clear());
+		const timer = setTimeout(clear, 5000);
+		return () => clearTimeout(timer);
+	});
 
 	// --- Reactions ---
 	let showEmotePicker = $state(false);
@@ -106,6 +171,27 @@
 	function toggleNotificationsMuted() {
 		notificationsMuted = !notificationsMuted;
 		setNotifMuted(notificationsMuted);
+	}
+
+	// --- Pre-connection quality hint (measured before joining) ---
+	let preConnRttMs = $state<number | null>(null);
+	let preConnQuality = $derived.by<'good' | 'ok' | 'poor' | 'unknown'>(() => {
+		if (preConnRttMs == null) return 'unknown';
+		if (preConnRttMs < 100) return 'good';
+		if (preConnRttMs < 250) return 'ok';
+		return 'poor';
+	});
+
+	async function measurePreConnection() {
+		try {
+			const samples: number[] = [];
+			for (let i = 0; i < 2; i++) {
+				const t0 = performance.now();
+				await fetch('/api/status', { method: 'HEAD', cache: 'no-store' });
+				samples.push(performance.now() - t0);
+			}
+			preConnRttMs = Math.round(Math.min(...samples));
+		} catch { /* hint stays unknown — never block joining */ }
 	}
 
 	// --- Derived ---
@@ -130,6 +216,29 @@
 		}];
 	}
 
+	/** Copy a full diagnostics report (stats + network path) to the clipboard. */
+	async function copyDiagnostics() {
+		const report = buildDiagnosticsReport('viewer', {
+			rol: 'viewer',
+			estado: status,
+			calidad: connectionQuality,
+			resolución: connectionStats.resolution || '—',
+			fps: connectionStats.fps || '—',
+			bitrate: connectionStats.bitrate || '—',
+			pérdida: connectionStats.lossRate ? `${(connectionStats.lossRate * 100).toFixed(1)}%` : '0%',
+			jitter: `${connectionStats.jitter} ms`,
+			rtt: connectionStats.rtt ? `${connectionStats.rtt} ms` : '—',
+			decoder: connectionStats.decoder || '—',
+			ruta_ice: connectionStats.icePath || '—',
+		});
+		try {
+			await copyText(report);
+			addSystemMessage(t('room.diagCopied'));
+		} catch {
+			addSystemMessage(report.replace(/\n/g, ' · '));
+		}
+	}
+
 	function sendChatMessage() {
 		const text = chatInput.trim();
 		if (!text || !socket) return;
@@ -143,6 +252,7 @@
 				return;
 			} else if (command === '/stats') {
 				addSystemMessage(t('room.cmdStatsViewer', { status, resolution: connectionStats.resolution || 'N/A', fps: connectionStats.fps || 'N/A', bitrate: connectionStats.bitrate || 'N/A' }));
+				void copyDiagnostics();
 				chatInput = '';
 				return;
 			} else if (command === '/clear') {
@@ -308,6 +418,7 @@
 			// Only escalate to error if we don't hear back within the grace
 			// window plus a safety margin.
 			errorMessage = t('vroom.hostReconnecting');
+			captureFrozenFrame();
 			status = 'reconnecting';
 			if (hostReconnectTimer) clearTimeout(hostReconnectTimer);
 			// HOST_RECONNECT_GRACE_MS on the server is 30s; give a 45s ceiling
@@ -375,7 +486,7 @@
 		assignedUsername = '';
 		chatMessages = [];
 		errorMessage = '';
-		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' };
 	}
 
 	function cleanupSocket() {
@@ -457,7 +568,12 @@
 	function toggleFullscreen() {
 		if (!videoContainer) return;
 		if (!document.fullscreenElement) {
-			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {});
+			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {
+				// iOS Safari rejects element fullscreen: fall back to the
+				// native video fullscreen (the primary landscape path there).
+				const v = videoEl as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+				v?.webkitEnterFullscreen?.();
+			});
 		} else {
 			document.exitFullscreen().then(() => { isFullscreen = false; }).catch(() => {});
 		}
@@ -499,9 +615,24 @@
 				reconnectAttempt = 0;
 				// Hand off to the $effect above, which attaches once videoEl exists.
 				pendingStream = stream;
+				layeredProducer = !!sfuClient?.isLayered;
+				// Re-apply a manual quality cap after a rejoin (the SFU consumer
+				// restarts at the top layer).
+				if (qualityMode !== 'auto') {
+					const target = QUALITY_TARGETS[qualityMode];
+					sfuClient?.setPreferredLayers?.(target[0], target[1]);
+				}
 				startStatsPolling();
 				showShortcutsOverlay();
-				if (window.innerWidth < 768) chatOpen = true;
+			});
+
+			sfuClient.on('consumer-layers', (data: any) => {
+				// Only the screen-video consumer's layer changes matter here.
+				const videoId = sfuClient?.videoConsumerId;
+				if (videoId && data?.consumerId && data.consumerId !== videoId) return;
+				if (data && data.spatialLayer !== undefined && data.spatialLayer !== null) {
+					activeLayers = { spatial: data.spatialLayer, temporal: data.temporalLayer ?? null };
+				}
 			});
 
 			sfuClient.on('error', (msg: string) => {
@@ -511,7 +642,10 @@
 			});
 
 			sfuClient.on('disconnected', () => {
-				if (status === 'live') status = 'reconnecting';
+				if (status === 'live') {
+					captureFrozenFrame();
+					status = 'reconnecting';
+				}
 			});
 
 			await sfuClient.joinRoom(roomId, pin, displayName, 'viewer');
@@ -536,12 +670,26 @@
 			let bitrate = connectionStats.bitrate;
 			let lossRate = 0;
 			let jitter = 0;
+			let rtt = connectionStats.rtt;
+			let decoder = connectionStats.decoder;
+			let icePath = connectionStats.icePath;
+			let nominatedPairId: string | null = null;
 
 			for (const report of stats as any[]) {
+				// Selected candidate pair → RTT + the local candidate id it rides on
+				// (resolved to a relay/direct label by the local-candidate reports).
+				if (report.type === 'candidate-pair' && (report.nominated || report.selected === true) && report.state === 'succeeded') {
+					nominatedPairId = report.localCandidateId || null;
+					rtt = report.currentRoundTripTime ? Math.round(report.currentRoundTripTime * 1000) : rtt;
+				}
+				if (report.type === 'local-candidate' && nominatedPairId !== null && report.id === nominatedPairId) {
+					icePath = icePathLabel(report.candidateType);
+				}
 				if (report.type === 'inbound-rtp' && report.kind === 'video') {
 					resolution = `${report.frameWidth || '?'}×${report.frameHeight || '?'}`;
 					fps = `${report.framesPerSecond || '?'}`;
 					jitter = report.jitter ? Math.round(report.jitter * 1000) : 0; // ms
+					decoder = report.decoderImplementation || decoder;
 					const now = Date.now();
 					const bytesReceived = report.bytesReceived || 0;
 					const packetsLost = report.packetsLost || 0;
@@ -562,12 +710,11 @@
 					lastStatsTime = now;
 					lastPacketsLost = packetsLost;
 					lastPacketsReceived = packetsReceived;
-					break;
 				}
 			}
 
-			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate || lossRate !== connectionStats.lossRate || jitter !== connectionStats.jitter) {
-				connectionStats = { resolution, fps, bitrate, lossRate, jitter };
+			if (resolution !== connectionStats.resolution || fps !== connectionStats.fps || bitrate !== connectionStats.bitrate || lossRate !== connectionStats.lossRate || jitter !== connectionStats.jitter || rtt !== connectionStats.rtt || decoder !== connectionStats.decoder || icePath !== connectionStats.icePath) {
+				connectionStats = { resolution, fps, bitrate, lossRate, jitter, rtt, decoder, icePath };
 			}
 		} catch {}
 	}
@@ -578,7 +725,7 @@
 		lastStatsTime = 0;
 		lastPacketsLost = 0;
 		lastPacketsReceived = 0;
-		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0 };
+		connectionStats = { resolution: '', fps: '', bitrate: '', lossRate: 0, jitter: 0, rtt: 0, decoder: '', icePath: '' };
 		// Poll every 5s (was 3s) — resolution/fps rarely change, reduces getStats overhead.
 		statsInterval = setInterval(updateStats, 5000);
 	}
@@ -592,6 +739,8 @@
 
 	// --- Keyboard Shortcuts ---
 	function showShortcutsOverlay() {
+		// The M/F// shortcuts need a keyboard: skip the hint on touch-only devices.
+		if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
 		showShortcuts = true;
 		if (shortcutsTimeout) clearTimeout(shortcutsTimeout);
 		shortcutsTimeout = setTimeout(() => { showShortcuts = false; }, 3000);
@@ -600,6 +749,12 @@
 	function handleKeydown(e: KeyboardEvent) {
 		const tag = document.activeElement?.tagName;
 		const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+		// Escape closes the mobile chat drawer first (below md it overlays the video).
+		if (e.key === 'Escape' && chatOpen && window.innerWidth < 768) {
+			chatOpen = false;
+			return;
+		}
 
 		if (e.key === '/' && !isInput && status === 'live') {
 			e.preventDefault();
@@ -663,6 +818,11 @@
 			if (info?.title) roomTitle = info.title;
 		}).catch(() => {});
 
+		// Pre-connection hint: best-of-2 HEAD round-trips to the same origin
+		// (through the CDN) — cheap and honest enough to set expectations
+		// before the user commits to joining.
+		void measurePreConnection();
+
 		try { username = localStorage.getItem(USERNAME_STORAGE_KEY) || ''; } catch { username = ''; }
 		document.addEventListener('visibilitychange', handleVisibilityChange);
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -681,6 +841,7 @@
 </script>
 
 <svelte:head>
+	<title>{t('room.viewerPageTitle')}</title>
 	<!-- Ephemeral private broadcast pages must never be indexed. -->
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
@@ -688,7 +849,11 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="min-h-screen bg-app">
-	{#if status !== 'live'}
+	<!-- While reconnecting with a frozen frame we keep the LIVE layout on
+	     screen (last frame + "reconnecting" pill) instead of unmounting the
+	     video to a black panel. Terminal states (error/ended/waiting) still
+	     take over via the first branch. -->
+	{#if status !== 'live' && !(status === 'reconnecting' && frozenFrame)}
 		<!-- Non-live states -->
 		<ViewerHeader notificationsMuted={notificationsMuted} onToggleNotifications={toggleNotificationsMuted} />
 
@@ -709,6 +874,17 @@
 							<p class="mb-4 max-w-sm text-center text-sm font-semibold text-[var(--brand)]" style="font-family: var(--font-display);">{roomTitle}</p>
 						{/if}
 						<ViewerAuth bind:username bind:pin onConnect={connect} />
+						{#if preConnQuality !== 'unknown'}
+							<p class="mt-2 flex items-center justify-center gap-1.5 text-xs text-[var(--text-subtle)]">
+								<span
+									class="inline-block h-2 w-2 rounded-full {preConnQuality === 'good' ? 'bg-[var(--success)]' : preConnQuality === 'ok' ? 'bg-[var(--warning)]' : 'bg-[var(--danger)]'}"
+									aria-hidden="true"
+								></span>
+								{t('viewer.preConnLabel')}:
+								{t(preConnQuality === 'good' ? 'viewer.preConnGood' : preConnQuality === 'ok' ? 'viewer.preConnOk' : 'viewer.preConnPoor')}
+								<span class="font-mono">({preConnRttMs}ms)</span>
+							</p>
+						{/if}
 				</div>
 			{:else if status === 'ended'}
 				<!-- Broadcast ended: dedicated screen with a rating prompt -->
@@ -735,16 +911,42 @@
 			{/if}
 		</main>
 	{:else}
-		<!-- LIVE layout -->
-		<div class="flex h-screen flex-col overflow-hidden md:flex-row">
+		<!-- LIVE layout: h-app tracks the dynamic viewport on mobile browsers -->
+		<div class="flex h-app flex-col overflow-hidden md:flex-row">
+			<h1 class="sr-only">{roomTitle || t('room.viewerPageTitle')}</h1>
+
+			<!-- Screen-reader announcements of connection-state changes -->
+			<div class="sr-only" role="status" aria-live="polite">
+				{#if status === 'reconnecting'}{t('comp.stReconnecting')}
+				{:else if errorMessage}{errorMessage}
+				{/if}
+			</div>
+
+			<!-- SFU errors mid-session (was previously only rendered off-live) -->
+			{#if errorMessage}
+				<div
+					class="fixed left-1/2 top-4 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl border border-[var(--danger)]/40 bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--danger)] shadow-xl animate-fade-in"
+					role="alert"
+					style="top: max(1rem, env(safe-area-inset-top));"
+				>
+					{errorMessage}
+				</div>
+			{/if}
+
 			<!-- Video -->
 			<ViewerVideoStage
 				muted={isMuted}
 				{volume}
 				fullscreen={isFullscreen}
 				{hostMuted}
-				assignedUsername={assignedUsername}
+				{assignedUsername}
 				reactions={floatingReactions}
+				layered={layeredProducer}
+				qualityMode={qualityMode}
+				activeLayerLabel={activeLayerLabel}
+				frozenFrame={frozenFrame}
+				reconnecting={status === 'reconnecting'}
+				onQualityChange={selectQuality}
 				onVideoMount={(el) => (videoEl = el)}
 				onContainerMount={(el) => (videoContainer = el)}
 				onToggleMute={toggleMute}
@@ -770,24 +972,11 @@
 				onSendReaction={sendReaction}
 				onToggleEmotePicker={() => (showEmotePicker = !showEmotePicker)}
 				onCloseEmotePicker={() => (showEmotePicker = false)}
+				onClose={toggleChat}
 			/>
 
-			<!-- Mobile chat toggle (FAB) -->
-			<button
-				onclick={toggleChat}
-				class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand"
-				title={chatOpen ? t('room.closeChat') : t('room.openChat')}
-				aria-label={chatOpen ? t('room.closeChat') : t('room.openChat')}
-			>
-				<MessageCircle class="h-6 w-6" />
-				{#if unreadCount > 0}
-					<span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-xs font-bold text-white">
-						{unreadCount > 9 ? '9+' : unreadCount}
-					</span>
-				{/if}
-			</button>
-
-			<!-- Mobile backdrop (no backdrop-filter: iOS compositor) -->
+			<!-- Mobile backdrop (no backdrop-filter: iOS compositor) — rendered
+			     BEFORE the FAB so the FAB stays clickable above it. -->
 			{#if chatOpen}
 				<button
 					class="fixed inset-0 z-40 bg-black/60 md:hidden"
@@ -796,6 +985,28 @@
 					tabindex="-1"
 				></button>
 			{/if}
+
+			<!-- Mobile chat toggle (FAB): docks LEFT while the drawer is open so
+			     it never sits under the drawer/emote row, and floats above the
+			     backdrop (z-45) to stay the primary "close" control. -->
+			<button
+				onclick={toggleChat}
+				class="fixed z-[45] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl transition-all hover:brightness-110 active:scale-95 md:hidden gradient-brand {chatOpen
+					? 'left-4'
+					: 'right-4'}"
+				style="bottom: max(1.5rem, env(safe-area-inset-bottom));"
+				title={chatOpen ? t('room.closeChat') : t('room.openChat')}
+				aria-label={chatOpen ? t('room.closeChat') : t('room.openChat')}
+				aria-expanded={chatOpen}
+			>
+				<MessageCircle class="h-6 w-6" aria-hidden="true" />
+				{#if unreadCount > 0}
+					<span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1 text-xs font-bold text-white" aria-hidden="true">
+						{unreadCount > 9 ? '9+' : unreadCount}
+					</span>
+					<span class="sr-only">{t('room.unreadMessages', { count: unreadCount })}</span>
+				{/if}
+			</button>
 
 			<!-- Shortcuts overlay -->
 			{#if showShortcuts}

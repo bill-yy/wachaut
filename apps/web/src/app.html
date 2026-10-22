@@ -2,7 +2,7 @@
 <html lang="es" style="color-scheme: dark;">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="description" content="Wachaut — Comparte tu pantalla con amigos al instante. Sin registro, sin descargas. Audio incluido y funciona en cualquier navegador." />
 
 		<!-- Icons & theme -->
@@ -31,7 +31,9 @@
 		<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
 		<link rel="preload" href="/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin />
 
-		<title>Wachaut</title>
+		<!-- No static title element here: every prerendered page sets its own
+		     via svelte:head and the SPA shell (room/admin) sets one client-side
+		     — a static title here produced duplicates on all content pages. -->
 
 		%sveltekit.head%
 	</head>

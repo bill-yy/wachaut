@@ -41,8 +41,9 @@
 </script>
 
 <button
-	class={cn('inline-flex items-center justify-center font-semibold transition-all', variantClass[variant], sizeClass[size], klass)}
+	class={cn('inline-flex items-center justify-center font-semibold', variantClass[variant], sizeClass[size], klass)}
 	disabled={disabled ?? loading}
+	aria-busy={loading || undefined}
 	{...rest}
 >
 	{#if loading}

@@ -21,6 +21,19 @@ const RTC_LISTEN_IP = process.env.RTC_LISTEN_IP || '0.0.0.0';
 const RTC_ANNOUNCED_IP = process.env.RTC_ANNOUNCED_IP || undefined;
 const NUM_WORKERS = parseInt(process.env.NUM_WORKERS || String(os.cpus().length));
 
+/**
+ * Video mode advertised to clients in the join-room ack. 'vp8-single' keeps
+ * today's proven pipeline; 'vp9-svc' / 'vp8-simulcast' switch the host client
+ * to layered encodings, enabling per-viewer adaptation without a host
+ * re-encode. Flippable per environment with a redeploy — the client bundle
+ * reads the mode at join time, so no rebuild is needed to change it.
+ */
+export type VideoMode = 'vp8-single' | 'vp8-simulcast' | 'vp9-svc';
+export function parseVideoMode(raw: string | undefined): VideoMode {
+  return raw === 'vp9-svc' || raw === 'vp8-simulcast' ? raw : 'vp8-single';
+}
+const SFU_VIDEO_MODE: VideoMode = parseVideoMode(process.env.SFU_VIDEO_MODE);
+
 // TURN server (coturn with use-auth-secret). When configured, the SFU issues
 // short-lived TURN credentials to clients so viewers behind symmetric NAT /
 // strict firewalls can get a relay path.
@@ -41,6 +54,9 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://wachaut.billyte
 const MAX_ROOMS = parseInt(process.env.MAX_ROOMS || '200');
 const MAX_PEERS_PER_ROOM = parseInt(process.env.MAX_PEERS_PER_ROOM || '21');
 const MAX_TOTAL_PEERS = parseInt(process.env.MAX_TOTAL_PEERS || '1200');
+// Ulink cap for host send transports (bps). The router codec ceilings and the
+// client "high" preset (8 Mbps) must fit under this, or the preset is undeliverable.
+const MAX_INCOMING_BITRATE = parseInt(process.env.MAX_INCOMING_BITRATE || String(10_000_000));
 // Grace period (ms) before destroying a room when the host disconnects,
 // giving them a chance to reconnect after a transient network blip.
 const HOST_RECONNECT_GRACE_MS = parseInt(process.env.HOST_RECONNECT_GRACE_MS || '30000');
@@ -170,16 +186,18 @@ const videoRtcpFeedback = [
   { type: 'transport-cc' },
 ];
 
+// NOTE: x-google-* bitrate knobs are deliberately ABSENT from every router
+// codec. Router codec parameters propagate verbatim into clients' sender
+// fmtp lines (observed as "VP9 profile-id=0;x-google-…" during the SVC
+// spike, 2026-10-21): non-standard for VP9/AV1 and useless server-side.
+// Bitrate ceilings are enforced via transport.setMaxIncomingBitrate() and
+// client-side per-encoding maxBitrate instead.
 const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
   // AV1 — best quality/bitrate for screen sharing on modern Chrome
   {
     kind: 'video',
     mimeType: 'video/AV1',
     clockRate: 90000,
-    parameters: {
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 8000,
-    },
     rtcpFeedback: videoRtcpFeedback,
   },
   {
@@ -188,8 +206,6 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
     clockRate: 90000,
     parameters: {
       'profile-id': 0, // profile 0 (4:2:0 8-bit) — what Chrome's SVC encoder produces
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 5000,
     },
     rtcpFeedback: videoRtcpFeedback,
   },
@@ -197,10 +213,6 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
     kind: 'video',
     mimeType: 'video/VP8',
     clockRate: 90000,
-    parameters: {
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 5000,
-    },
     rtcpFeedback: videoRtcpFeedback,
   },
   {
@@ -211,16 +223,22 @@ const mediaCodecs: mediasoup.types.RouterRtpCodecCapability[] = [
       'packetization-mode': 1,
       'profile-level-id': '42e01f',
       'level-asymmetry-allowed': 1,
-      'x-google-start-bitrate': 1000,
-      'x-google-max-bitrate': 5000,
     },
     rtcpFeedback: videoRtcpFeedback,
   },
   {
     kind: 'audio',
+    // Tab/system audio is music- and video-like content: stereo + high bitrate,
+    // DTX for silence gaps, in-band FEC for loss resilience.
     mimeType: 'audio/opus',
     clockRate: 48000,
     channels: 2,
+    parameters: {
+      stereo: 1,
+      usedtx: 1,
+      useinbandfec: 1,
+      maxaveragebitrate: 64000,
+    },
   },
 ];
 
@@ -288,12 +306,23 @@ fastify.register(cors, {
 // Security headers (HSTS, X-Frame-Options, etc.). CSP disabled for Socket.IO.
 await fastify.register(helmet, { contentSecurityPolicy: false });
 
-fastify.get('/health', { logLevel: 'error' }, async () => ({
-  status: 'ok',
-  workers: workers.length,
-  rooms: rooms.size,
-  totalPeers: Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0),
-}));
+// Capacity-aware health (W3.2): "ok" below 70% utilization of the configured
+// room/peer ceilings, "degraded" at 70%, "critical" at 90% — external
+// monitors and the signaling server's readiness probe read this.
+fastify.get('/health', { logLevel: 'error' }, async () => {
+  const activeRooms = rooms.size;
+  const totalPeers = Array.from(rooms.values()).reduce((acc, r) => acc + r.peers.size, 0);
+  const pct = Math.max(activeRooms / MAX_ROOMS, totalPeers / MAX_TOTAL_PEERS);
+  const status = pct >= 0.9 ? 'critical' : pct >= 0.7 ? 'degraded' : 'ok';
+  return {
+    status,
+    workers: workers.length,
+    rooms: activeRooms,
+    totalPeers,
+    utilization: Math.round(pct * 100),
+    limits: { rooms: MAX_ROOMS, peers: MAX_TOTAL_PEERS },
+  };
+});
 
 /**
  * Internal: the signaling server drains captured SFU errors from here every
@@ -339,6 +368,36 @@ function buildIceServers(): any[] {
   return servers;
 }
 
+/**
+ * Constant-time string comparison. Hashing both sides first gives
+ * timingSafeEqual fixed-length inputs (it throws on length mismatch, which
+ * would itself leak length information).
+ */
+export function safeEqual(a: string, b: string): boolean {
+  const ha = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const hb = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+// Failed-join limiter: after 5 failed PIN / host-secret attempts within 5
+// minutes an IP is rejected outright, mirroring the signaling server's join
+// limiter. Only failures count — successful joins don't accumulate.
+const JOIN_FAIL_WINDOW_MS = 5 * 60 * 1000;
+const JOIN_FAIL_MAX = 5;
+const joinFails = new Map<string, number[]>();
+
+/** Pure check (exported for unit tests). */
+export function isJoinBlocked(fails: number[], nowMs: number, windowMs: number = JOIN_FAIL_WINDOW_MS, max: number = JOIN_FAIL_MAX): boolean {
+  return fails.filter((ts) => nowMs - ts < windowMs).length >= max;
+}
+
+/** Pure recorder (exported for unit tests). */
+export function recordJoinFail(map: Map<string, number[]>, ip: string, nowMs: number, windowMs: number = JOIN_FAIL_WINDOW_MS): void {
+  const list = (map.get(ip) || []).filter((ts) => nowMs - ts < windowMs);
+  list.push(nowMs);
+  map.set(ip, list);
+}
+
 // ─── Socket.IO ─────────────────────────────────────────────────────────
 const io = new Server(fastify.server, {
   cors: {
@@ -347,6 +406,7 @@ const io = new Server(fastify.server, {
   },
   pingInterval: 25000,
   pingTimeout: 20000,
+  maxHttpBufferSize: 256 * 1024,
 });
 
 io.on('connection', (socket) => {
@@ -356,6 +416,12 @@ io.on('connection', (socket) => {
   socket.on('join-room', async ({ roomId, pin, displayName, role, hostSecret }, callback) => {
     try {
       console.log(`[sfu] join-room: ${displayName} (${role}) → ${roomId}`);
+
+      const clientIp = socket.handshake.address || 'unknown';
+      if (isJoinBlocked(joinFails.get(clientIp) || [], Date.now())) {
+        callback?.({ error: 'Too many attempts, try again later' });
+        return;
+      }
 
       let room = rooms.get(roomId);
       let createdRoom = false;
@@ -369,7 +435,8 @@ io.on('connection', (socket) => {
           // creator — otherwise any viewer (who knows roomId+PIN) could
           // hijack the host slot and its live producers.
           if (room.hostDisconnectTimer) {
-            if (!hostSecret || hostSecret !== room.hostSecret) {
+            if (!hostSecret || !safeEqual(String(hostSecret), room.hostSecret)) {
+              recordJoinFail(joinFails, clientIp, Date.now());
               callback?.({ error: 'Invalid host secret' });
               return;
             }
@@ -422,8 +489,9 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Viewers check PIN
-      if (role === 'viewer' && room.pin !== pin) {
+      // Viewers check PIN (timing-safe; a missing PIN fails closed)
+      if (role === 'viewer' && (typeof pin !== 'string' || !safeEqual(pin, room.pin))) {
+        recordJoinFail(joinFails, clientIp, Date.now());
         callback?.({ error: 'Invalid PIN' });
         return;
       }
@@ -499,6 +567,7 @@ io.on('connection', (socket) => {
       callback?.({
         rtpCapabilities: room.router.rtpCapabilities,
         roomId,
+        videoMode: SFU_VIDEO_MODE,
         ...(createdRoom ? { hostSecret: room.hostSecret } : {}),
         peers: Array.from(room.peers.values()).map((p) => ({
           id: p.id,
@@ -623,7 +692,7 @@ io.on('connection', (socket) => {
         if (direction === 'prod') {
           peer.sendTransport = transport;
           // Cap the host's uplink so the SFU has a congestion-control lever.
-          try { await transport.setMaxIncomingBitrate(5_000_000); } catch { /* ignore */ }
+          try { await transport.setMaxIncomingBitrate(MAX_INCOMING_BITRATE); } catch { /* ignore */ }
         }
         if (direction === 'cons') peer.recvTransport = transport;
       }
@@ -773,8 +842,33 @@ io.on('connection', (socket) => {
         callback?.({ error: 'Failed to resume consumer' });
         return;
       }
+      // Screen content is mostly static: the encoder emits keyframes rarely, so
+      // without an explicit request a freshly resumed consumer can show a grey
+      // frame for seconds until the next keyframe arrives. Fire-and-forget —
+      // the PLI goes out and the decoder recovers whenever the frame lands.
+      if (consumer.kind === 'video' && !consumer.closed) {
+        try { await consumer.requestKeyFrame(); } catch { /* producer may be paused */ }
+      }
     }
     callback?.({ ok: true });
+  });
+
+  // ── Viewer layer preference (quality selector / adaptation) ────────
+  socket.on('viewer:set-preferred-layers', async ({ consumerId, spatialLayer, temporalLayer }) => {
+    const peer = socketToPeer.get(socket.id);
+    const consumer = peer?.consumers.get(consumerId);
+    if (!consumer || consumer.kind !== 'video' || consumer.closed) return;
+    try {
+      const maxSpatial = Math.max(0, (Number((consumer as any).spatialLayers) || 1) - 1);
+      const maxTemporal = Math.max(0, (Number((consumer as any).temporalLayers) || 1) - 1);
+      const clamp = (v: unknown, max: number) => Math.min(max, Math.max(0, Number(v) || 0));
+      await consumer.setPreferredLayers({
+        spatialLayer: clamp(spatialLayer, maxSpatial),
+        temporalLayer: clamp(temporalLayer, maxTemporal),
+      });
+    } catch (err) {
+      captureSfuError(err, 'viewer:set-preferred-layers', peer?.roomId);
+    }
   });
 
   // ── Disconnect ─────────────────────────────────────────────────────
@@ -884,19 +978,42 @@ async function createConsumer(
     paused: true,
   });
 
-  // If the producer has SVC layers, start the viewer on the middle spatial
-  // layer for a balance of quality and bandwidth. Use the correct mediasoup
-  // API: setPreferredLayers (not setCurrentSpatialLayer which doesn't exist).
+  // Layered producers (SVC/simulcast): start every viewer on the TOP layer —
+  // the quality sprint's default is best picture, and congestion control
+  // (transport-cc) walks viewers down when their link degrades. Non-layered
+  // producers ignore setPreferredLayers, hence the try/catch. (Layer counts
+  // exist at runtime but are not in the mediasoup typings → cast.)
+  const layerCount = (c: mediasoup.types.Consumer) => ({
+    spatial: Number((c as any).spatialLayers) || 1,
+    temporal: Number((c as any).temporalLayers) || 1,
+  });
   if (consumer.kind === 'video') {
     try {
-      await consumer.setPreferredLayers({ spatialLayer: 1, temporalLayer: 2 });
-      console.log(`[sfu] Consumer ${consumer.id} preferred layers set: spatial=1, temporal=2`);
+      const { spatial, temporal } = layerCount(consumer);
+      if (spatial > 1 || temporal > 1) {
+        await consumer.setPreferredLayers({
+          spatialLayer: spatial - 1,
+          temporalLayer: temporal - 1,
+        });
+        console.log(`[sfu] Consumer ${consumer.id} starts at top layer ${spatial - 1}/${temporal - 1}`);
+      }
     } catch {
-      /* consumer may not support layer preferences (non-SVC producer) — ignore */
+      /* non-layered producer — nothing to pin */
     }
   }
 
   viewer.consumers.set(consumer.id, consumer);
+
+  // Forward layer switches (SFU-side adaptation or viewer requests) so the
+  // client can show the active layer in its stats/diagnostics.
+  consumer.on('layerschange', (layers) => {
+    const vs = io.sockets.sockets.get(viewer.socketId);
+    vs?.emit('consumer-layers', {
+      consumerId: consumer.id,
+      spatialLayer: layers?.spatialLayer ?? null,
+      temporalLayer: layers?.temporalLayer ?? null,
+    });
+  });
 
   console.log(`[sfu] Created consumer ${consumer.id} (${consumer.kind}) for ${viewer.displayName}`);
 
@@ -932,6 +1049,13 @@ async function main(): Promise<void> {
   setInterval(() => {
     const reaped = gcExpiredSfuRooms(rooms, new Date());
     for (const id of reaped) console.log(`[sfu] Reaped orphan room ${id} (idle TTL)`);
+    // Prune stale failed-join entries so the limiter map doesn't grow forever.
+    const nowMs = Date.now();
+    for (const [ip, list] of joinFails) {
+      const alive = list.filter((ts) => nowMs - ts < JOIN_FAIL_WINDOW_MS);
+      if (alive.length === 0) joinFails.delete(ip);
+      else if (alive.length !== list.length) joinFails.set(ip, alive);
+    }
   }, 5 * 60 * 1000);
 
   // Graceful shutdown — close routers/workers so clients aren't hard-disconnected.

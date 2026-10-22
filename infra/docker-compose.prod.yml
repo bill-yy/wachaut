@@ -38,6 +38,10 @@ services:
       - PORT=3001
       - HOST=0.0.0.0
       - ALLOWED_ORIGINS=https://wachaut.billytech.es
+    volumes:
+      # SQLite lives at /app/data — without an explicit volume a container
+      # recreation silently loses the whole database.
+      - wachaut-server-data:/app/data
     mem_limit: 768m
     cpus: 1
     logging:
@@ -75,6 +79,9 @@ services:
       - "10000-11000:10000-11000/udp"
     networks:
       - dokploy-network
+
+volumes:
+  wachaut-server-data:
 
 networks:
   dokploy-network:

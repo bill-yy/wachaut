@@ -38,9 +38,14 @@
 </svelte:head>
 
 <div class="relative min-h-screen bg-app">
-	<nav class="mx-auto flex max-w-3xl items-center justify-between px-4 py-5">
+	<nav class="mx-auto flex max-w-3xl items-center justify-between px-4 py-4" aria-label="Main">
 		<a href="/en/" aria-label="Wachaut"><Brand size="md" /></a>
-		<a href="/blog/" class="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]">ES</a>
+		<a
+			href="/blog/"
+			class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] px-3.5 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]"
+			aria-label="Cambiar a español"
+			translate="no"
+		>ES</a>
 	</nav>
 
 	<div class="pointer-events-none fixed inset-0 -z-10" aria-hidden="true">
@@ -62,7 +67,7 @@
 					<span class="mb-2 inline-block rounded-full bg-[var(--brand)]/12 px-2.5 py-0.5 text-[11px] font-bold text-[var(--brand)]">{post.lang}</span>
 					<h2 class="mb-1 text-lg font-bold text-[var(--text)]">{post.title}</h2>
 					<p class="text-sm text-[var(--text-muted)]">{post.description}</p>
-					<span class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand)] opacity-0 transition-opacity group-hover:opacity-100">
+					<span class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand)] [@media(min-width:640px)_and_(hover:hover)]:opacity-0 [@media(min-width:640px)_and_(hover:hover)]:transition-opacity group-hover:[@media(min-width:640px)_and_(hover:hover)]:opacity-100 group-focus-within:[@media(min-width:640px)_and_(hover:hover)]:opacity-100">
 						Read <ArrowRight size={14} aria-hidden="true" />
 					</span>
 				</a>
@@ -70,7 +75,7 @@
 		</div>
 
 		<p class="mt-8 text-sm text-[var(--text-subtle)]">
-			<a href="/en/" class="transition-colors hover:text-[var(--brand)]">{L['blog.back']}</a>
+			<a href="/en/" class="inline-flex min-h-[44px] items-center px-2 transition-colors hover:text-[var(--brand)]">{L['blog.back']}</a>
 		</p>
 	</main>
 </div>

@@ -22,10 +22,13 @@
 
 <span class="relative inline-flex group/tt">
 	{@render children()}
+	<!-- Visual-only hint: hover/focus styled copy of the control's own
+	     accessible name. Hidden from AT (it would duplicate the label) and
+	     allowed to wrap so long texts never overflow small viewports. -->
 	<span
-		role="tooltip"
+		aria-hidden="true"
 		class={cn(
-			'pointer-events-none absolute z-50 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
+			'pointer-events-none absolute z-50 max-w-[min(16rem,80vw)] rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-0 shadow-lg transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
 			sideClass[side],
 			klass,
 		)}

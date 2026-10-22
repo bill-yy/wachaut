@@ -16,6 +16,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import geoip from 'geoip-country';
 import { db } from './db.js';
 import { notifyAdmin } from './mailer.js';
+import { toSafeHttpUrl } from './security.js';
 
 const ERRORS_SECRET = process.env.ERRORS_SECRET || '';
 const IP_HASH_SALT = process.env.ADMIN_JWT_SECRET || 'errors-salt';
@@ -26,9 +27,12 @@ const IP_HASH_SALT = process.env.ADMIN_JWT_SECRET || 'errors-salt';
  * probe). Unreachable SFU keeps its buffer for the next pass.
  */
 export async function drainSfuErrors(baseUrl: string, secret: string): Promise<void> {
-  if (!baseUrl || !secret) return;
+  // Defense in depth on top of the caller's SSRF gate: only public http(s)
+  // targets are ever fetched, whatever reaches this function.
+  const safeUrl = toSafeHttpUrl(baseUrl);
+  if (!safeUrl || !secret) return;
   try {
-    const res = await fetch(`${baseUrl}/internal/errors`, {
+    const res = await fetch(`${safeUrl}/internal/errors`, {
       headers: { 'x-errors-secret': secret },
       signal: AbortSignal.timeout(5000),
     });

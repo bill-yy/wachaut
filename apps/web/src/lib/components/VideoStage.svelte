@@ -71,6 +71,7 @@
 			muted
 			bind:this={videoEl}
 			class="h-full w-full bg-black object-contain"
+			aria-label={t('room.previewVideo')}
 		></video>
 	{:else}
 		<!-- Idle placeholder: protagonista, guía al host a compartir -->
@@ -83,23 +84,23 @@
 
 			<!-- Glow + icon -->
 			<div class="relative mb-7">
-				<div class="absolute inset-0 rounded-full opacity-50 blur-3xl gradient-brand"></div>
+				<div class="absolute inset-0 rounded-full opacity-50 blur-3xl gradient-brand" aria-hidden="true"></div>
 				<div class="relative flex h-24 w-24 animate-float items-center justify-center rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-glow">
-					<Monitor class="h-12 w-12 text-[var(--brand)]" />
+					<Monitor class="h-12 w-12 text-[var(--brand)]" aria-hidden="true" />
 				</div>
 			</div>
 
-			<!-- Heading -->
-			<h3 class="mb-2 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
+			<!-- Heading (h2: the sr-only h1 lives on the room page) -->
+			<h2 class="mb-2 text-2xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
 				{t('room.readyToShare')}
-			</h3>
+			</h2>
 			<p class="mb-6 max-w-xs text-center text-sm text-[var(--text-muted)]">
 				{t('room.readyToShareBody')}
 			</p>
 
 			<!-- Waiting indicator -->
-			<div class="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-1.5">
-				<span class="relative flex h-2 w-2">
+			<div class="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-1.5" role="status">
+				<span class="relative flex h-2 w-2" aria-hidden="true">
 					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--brand)] opacity-75"></span>
 					<span class="relative inline-flex h-2 w-2 rounded-full bg-[var(--brand)]"></span>
 				</span>
@@ -108,68 +109,69 @@
 		</div>
 	{/if}
 
-	<!-- Floating controls: glass bar, hover-reveal on desktop, always visible on mobile -->
+	<!-- Floating controls: glass bar — always visible on touch/narrow
+	     viewports; hover-reveal only on fine-pointer devices. -->
 	{#if sharing}
 		<div
-			class="group absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 p-1.5 transition-all duration-300 focus-within:opacity-100 hover:opacity-100 sm:opacity-0 sm:hover:-translate-y-0.5"
+			class="group absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/10 p-1.5 transition-all duration-300 focus-within:opacity-100 hover:opacity-100 [@media(min-width:640px)_and_(hover:hover)]:opacity-0 [@media(min-width:640px)_and_(hover:hover)]:hover:-translate-y-0.5"
 			style="background: color-mix(in srgb, var(--ink-950) 80%, transparent); backdrop-filter: blur(16px) saturate(140%);"
 		>
 			<button
 				onclick={onToggleMute}
-				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
+				class="flex h-11 w-11 items-center justify-center rounded-xl transition-[background-color,transform] hover:bg-white/15 active:scale-95"
 				title={muted ? t('room.unmuteAudio') : t('room.muteAudio')}
 				aria-label={muted ? t('room.unmuteAudio') : t('room.muteAudio')}
 			>
 				{#if muted}
-					<VolumeX class="h-5 w-5 text-[var(--danger)]" />
+					<VolumeX class="h-5 w-5 text-[var(--danger)]" aria-hidden="true" />
 				{:else}
-					<Volume2 class="h-5 w-5 text-white" />
+					<Volume2 class="h-5 w-5 text-white" aria-hidden="true" />
 				{/if}
 			</button>
 
 			<button
 				onclick={onToggleFullscreen}
-				class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
+				class="flex h-11 w-11 items-center justify-center rounded-xl transition-[background-color,transform] hover:bg-white/15 active:scale-95"
 				title={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
 				aria-label={fullscreen ? t('room.exitFullscreen') : t('room.fullscreen')}
 			>
 				{#if fullscreen}
-					<Minimize class="h-5 w-5 text-white" />
+					<Minimize class="h-5 w-5 text-white" aria-hidden="true" />
 				{:else}
-					<Maximize class="h-5 w-5 text-white" />
+					<Maximize class="h-5 w-5 text-white" aria-hidden="true" />
 				{/if}
 			</button>
 
 			{#if recording}
 				<button
 					onclick={onStopRecording}
-					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-all hover:bg-[var(--danger)] active:scale-95"
+					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-[background-color,transform] hover:bg-[var(--danger)] active:scale-95"
 					title={t('room.stopRecording')}
 					aria-label={t('room.stopRecording')}
 				>
-					<span class="h-2.5 w-2.5 rounded-full bg-white" style="animation: pulseRecord 1s ease-in-out infinite;"></span>
+					<span class="h-2.5 w-2.5 rounded-full bg-white" style="animation: pulseRecord 1s ease-in-out infinite;" aria-hidden="true"></span>
 					<span class="font-mono text-xs font-semibold text-white">{formatDuration(recordingDuration)}</span>
 				</button>
 			{:else}
 				<button
 					onclick={onStartRecording}
-					class="flex h-11 w-11 items-center justify-center rounded-xl transition-all hover:bg-white/15 active:scale-95"
+					class="flex h-11 w-11 items-center justify-center rounded-xl transition-[background-color,transform] hover:bg-white/15 active:scale-95"
 					title={t('room.recordSession')}
 					aria-label={t('room.recordSession')}
 				>
-					<Circle class="h-5 w-5 text-[var(--danger)]" />
+					<Circle class="h-5 w-5 text-[var(--danger)]" aria-hidden="true" />
 				</button>
 			{/if}
 
-			<div class="mx-0.5 h-6 w-px bg-white/10"></div>
+			<div class="mx-0.5 h-6 w-px bg-white/10" aria-hidden="true"></div>
 
 			<button
 				onclick={onStopSharing}
-				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-all hover:bg-[var(--danger)] active:scale-95"
+				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-[background-color,transform] hover:bg-[var(--danger)] active:scale-95"
 				title={t('room.stopSharing')}
 				aria-label={t('room.stopSharing')}
 			>
-				<StopCircle class="h-5 w-5 text-white" />
+				<StopCircle class="h-5 w-5 text-white" aria-hidden="true" />
 			</button>
 		</div>
 	{/if}

@@ -9,11 +9,14 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Install all dependencies (dev included — tsc is needed to compile)
-COPY apps/sfu/package.json ./
+# Install all dependencies (dev included — tsc is needed to compile).
+# npm ci against the committed lockfile keeps builds reproducible: an
+# unpinned install once resolved a newer mediasoup whose prebuilt worker
+# failed verification mid-build.
+COPY apps/sfu/package.json apps/sfu/package-lock.json ./
 COPY apps/sfu/tsconfig.json ./
 ENV MEDIASOUP_DOWNLOAD_BIN=1
-RUN npm install
+RUN npm ci
 
 # Compile TypeScript → dist/
 COPY apps/sfu/src ./src
@@ -31,10 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install production dependencies only (no build toolchain)
+# Reuse the builder's node_modules — it already contains the mediasoup
+# worker that passed verification with the full toolchain available. A
+# fresh `npm install` here would need python/g++ (absent in this minimal
+# stage) whenever the prebuilt worker check fails.
+COPY --from=builder /app/node_modules ./node_modules
 COPY apps/sfu/package.json ./
-ENV MEDIASOUP_DOWNLOAD_BIN=1 NODE_ENV=production
-RUN npm install --omit=dev
+ENV NODE_ENV=production
 
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist

@@ -155,7 +155,25 @@ export function getStats(): Promise<AdminStats> {
 
 // ── Analytics (SEO/SEM) ──────────────────────────────────────────────
 
+export interface AnalyticsFilters {
+  path?: string;
+  lang?: string;
+  device?: string;
+  country?: string;
+  /** referrer_host, or the special value 'directo' for no-referrer traffic. */
+  referrer?: string;
+  campaign?: string;
+}
+
+export type AnalyticsQueryParams = {
+  days?: number;
+  from?: string;
+  to?: string;
+  limit?: number;
+} & AnalyticsFilters;
+
 export interface AdminAnalytics {
+  range: { from: string; to: string; granularity: 'hour' | 'day' };
   today: {
     visitors: number;
     sessions: number;
@@ -164,16 +182,64 @@ export interface AdminAnalytics {
     viewers: number;
     delta: Record<'visitors' | 'sessions' | 'pageviews' | 'rooms' | 'viewers', number | null>;
   };
-  series: { date: string; visitors: number; sessions: number; pageviews: number; rooms: number; viewers: number }[];
+  series: { bucket: string; visitors: number; sessions: number; pageviews: number; rooms: number; viewers: number }[];
   referrers: { host: string; sessions: number; visitors: number }[];
   pages: { path: string; views: number; visitors: number }[];
   campaigns: { source: string; medium: string | null; campaign: string | null; sessions: number; visitors: number }[];
   countries: { country: string; visitors: number }[];
   devices: { device: string; sessions: number }[];
+  langs: { lang: string; sessions: number }[];
+  funnel: { landingSessions: number; roomsCreated: number; roomsWithViewers: number; viewerJoins: number };
+  reliability: {
+    hostDrops: number;
+    hostRecovered: number;
+    recoveryRatePct: number | null;
+    avgRecoveryMs: number | null;
+    viewerDrops: number;
+    viewerNetworkDrops: number;
+    avgWatchMs: number | null;
+  };
 }
 
-export function getAnalytics(days = 7): Promise<AdminAnalytics> {
-  return request<AdminAnalytics>(`/analytics?days=${days}`);
+function analyticsParamsToQuery(params: AnalyticsQueryParams): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+export function getAnalytics(params: AnalyticsQueryParams = {}): Promise<AdminAnalytics> {
+  return request<AdminAnalytics>(`/analytics${analyticsParamsToQuery(params)}`);
+}
+
+/**
+ * Download a CSV export of one analytics section. The endpoint needs the
+ * Authorization header, so a plain <a href> won't do — fetch as blob and
+ * trigger a browser download.
+ */
+export async function downloadAnalyticsExport(section: string, params: AnalyticsQueryParams = {}): Promise<void> {
+  const qs = new URLSearchParams({ section });
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value));
+  }
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/analytics/export?${qs}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError('No se pudo exportar el CSV', res.status, null);
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = match?.[1] || `wachaut_${section}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ── Security + audit ─────────────────────────────────────────────────

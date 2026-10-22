@@ -14,23 +14,27 @@
 	let { reactions, celebrate, confetti }: Props = $props();
 </script>
 
-<!-- Floating emoji reactions -->
-{#each reactions as reaction (reaction.id)}
-	<div
-		class="pointer-events-none absolute z-10 select-none text-4xl"
-		style:left="{reaction.x}%"
-		style:bottom="{reaction.bottom}px"
-		style:font-size="{reaction.fontSize}rem"
-		style:transform="translateX({reaction.xOffset}) rotate({reaction.rotation})"
-		style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
-	>
-		{reaction.emoji}
-	</div>
-{/each}
+<!-- Floating emoji reactions: purely decorative → hidden from screen readers
+     (every reaction would otherwise be announced as raw emoji text). -->
+<div aria-hidden="true">
+	{#each reactions as reaction (reaction.id)}
+		<div
+			class="pointer-events-none absolute z-10 select-none text-4xl"
+			style:left="{reaction.x}%"
+			style:bottom="{reaction.bottom}px"
+			style:font-size="{reaction.fontSize}rem"
+			style:transform="translateX({reaction.xOffset}) rotate({reaction.rotation})"
+			style:animation="floatUp {reaction.duration}s ease-out {reaction.delay}s both"
+		>
+			{reaction.emoji}
+		</div>
+	{/each}
+</div>
 
-<!-- First-viewer celebration -->
+<!-- First-viewer celebration: visual only; the milestone itself is announced
+     by the host chat's system message. -->
 {#if celebrate}
-	<div class="pointer-events-none fixed inset-0 z-[60] animate-fade-in">
+	<div class="pointer-events-none fixed inset-0 z-[60] animate-fade-in" aria-hidden="true">
 		{#each confetti as p (p.id)}
 			<div
 				class="absolute"
@@ -56,10 +60,10 @@
 				class="glass rounded-3xl border border-[var(--border)] px-8 py-6 text-center shadow-2xl"
 				style="animation: celebrationPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275);"
 			>
-				<div class="mb-3 text-5xl">🎉</div>
-				<h2 class="mb-1 text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
+				<div class="mb-3 text-5xl" aria-hidden="true">🎉</div>
+				<p class="text-xl font-bold text-[var(--text)]" style="font-family: var(--font-display);">
 					{t('room.firstViewer')}
-				</h2>
+				</p>
 				<p class="text-sm text-[var(--text-muted)]">{t('room.firstViewerBody')}</p>
 				<div class="mt-3 flex items-center justify-center gap-1.5">
 					<span class="relative flex h-2 w-2">

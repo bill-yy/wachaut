@@ -7,7 +7,7 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/"/>
     <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <priority>1</priority>
   </url>
   <url>
     <loc>https://wachaut.com/en/</loc>
@@ -15,25 +15,37 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/"/>
     <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <priority>1</priority>
   </url>
   <url>
     <loc>https://wachaut.com/contacto/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/contacto/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/contacto/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/contacto/"/>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://wachaut.com/en/contacto/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/contacto/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/contacto/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/contacto/"/>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://wachaut.com/privacidad/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/privacidad/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/privacidad/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/privacidad/"/>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
     <loc>https://wachaut.com/en/privacidad/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/privacidad/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/privacidad/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/privacidad/"/>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
@@ -41,6 +53,7 @@
     <loc>https://wachaut.com/blog/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/"/>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -48,21 +61,24 @@
     <loc>https://wachaut.com/en/blog/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/"/>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
     <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/</loc>
+    <loc>https://wachaut.com/en/blog/how-to-share-your-screen-on-whatsapp/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/how-to-share-your-screen-on-whatsapp/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/como-compartir-pantalla-por-whatsapp/"/>
     <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -70,15 +86,17 @@
   <url>
     <loc>https://wachaut.com/blog/compartir-pantalla-online-gratis/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/free-online-screen-sharing/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/free-online-screen-sharing/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
     <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://wachaut.com/blog/free-online-screen-sharing/</loc>
+    <loc>https://wachaut.com/en/blog/free-online-screen-sharing/</loc>
     <xhtml:link rel="alternate" hreflang="es" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/blog/free-online-screen-sharing/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://wachaut.com/en/blog/free-online-screen-sharing/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://wachaut.com/blog/compartir-pantalla-online-gratis/"/>
     <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

@@ -51,9 +51,12 @@
 </svelte:head>
 
 <div class="relative z-10 flex min-h-screen flex-col overflow-hidden">
-	<nav class="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-5">
+	<nav class="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-4" aria-label={locale === 'es' ? 'Principal' : 'Main'}>
 		<a href={locale === 'es' ? '/' : '/en/'} aria-label="Wachaut"><Brand size="md" /></a>
-		<a href={locale === 'es' ? '/' : '/en/'} class="text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]">
+		<a
+			href={locale === 'es' ? '/' : '/en/'}
+			class="flex min-h-[44px] items-center px-2 text-sm text-[var(--text-subtle)] transition-colors hover:text-[var(--brand)]"
+		>
 			{locale === 'es' ? '← Inicio' : '← Home'}
 		</a>
 	</nav>
@@ -96,9 +99,13 @@
 						maxlength="2000"
 						rows="5"
 						required
-						class="input-field resize-none text-sm"
+						aria-invalid={message.trim().length > 0 && message.trim().length < 5 ? 'true' : undefined}
+						class="input-field resize-none text-[16px] sm:text-sm"
 						placeholder={L['contacto.messagePlaceholder']}
 					></textarea>
+					{#if message.trim().length > 0 && message.trim().length < 5}
+						<p class="mt-1.5 text-xs font-medium text-[var(--danger)]" role="alert">{L['contacto.messageTooShort']}</p>
+					{/if}
 				</div>
 				<Button type="submit" loading={sending} class="w-full justify-center" disabled={message.trim().length < 5}>
 					<Send size={16} aria-hidden="true" />

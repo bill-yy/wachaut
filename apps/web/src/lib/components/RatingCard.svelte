@@ -128,7 +128,7 @@
           onclick={() => (rating = n)}
           onmouseenter={() => (hovered = n)}
           onmouseleave={() => (hovered = 0)}
-          class="rounded p-1 transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
+          class="rounded p-1.5 transition-transform hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--brand)]"
           role="radio"
           aria-checked={rating === n}
           aria-label="{n} {n === 1 ? t('rating.starLabel') : t('rating.starsLabel')}"
@@ -152,7 +152,7 @@
               <button
                 type="button"
                 onclick={() => selectAnswer(q.key, opt.value)}
-                class="rounded-full border px-3 py-1 text-xs transition-colors {answers[q.key] === opt.value
+                class="min-h-[36px] rounded-full border px-3 py-1.5 text-xs transition-colors {answers[q.key] === opt.value
                   ? 'border-[var(--brand)] bg-[var(--brand)]/15 text-[var(--brand)]'
                   : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--brand)]/40'}"
                 aria-pressed={answers[q.key] === opt.value}
@@ -171,7 +171,7 @@
           bind:value={comment}
           maxlength="500"
           rows="2"
-          class="input-field resize-none text-sm"
+          class="input-field resize-none text-[16px] sm:text-sm"
           placeholder={t('rating.commentPlaceholder')}
         ></textarea>
       </div>

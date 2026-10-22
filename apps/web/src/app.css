@@ -168,7 +168,8 @@
 @layer utilities {
   /* ── Buttons (semantic, theme-aware) ── */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold;
+    transition: transform var(--duration-base) var(--ease-out-soft), filter var(--duration-base) var(--ease-out-soft), box-shadow var(--duration-base) var(--ease-out-soft), opacity var(--duration-base) var(--ease-out-soft);
     background: linear-gradient(135deg, var(--color-indigo-500), var(--color-indigo-600));
     color: #ffffff;
     box-shadow: var(--shadow-glow);
@@ -181,7 +182,8 @@
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold;
+    transition: transform var(--duration-base) var(--ease-out-soft), background-color var(--duration-base) var(--ease-out-soft), border-color var(--duration-base) var(--ease-out-soft), opacity var(--duration-base) var(--ease-out-soft);
     background-color: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);
@@ -191,7 +193,8 @@
   .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium transition-all;
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium;
+    transition: background-color var(--duration-base) var(--ease-out-soft), color var(--duration-base) var(--ease-out-soft), transform var(--duration-fast) var(--ease-out-soft);
     color: var(--text-muted);
   }
   .btn-ghost:hover { background-color: var(--surface-2); color: var(--text); }
@@ -203,7 +206,8 @@
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition-all;
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold;
+    transition: background-color var(--duration-base) var(--ease-out-soft), border-color var(--duration-base) var(--ease-out-soft), transform var(--duration-fast) var(--ease-out-soft);
     background-color: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
     border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
@@ -216,7 +220,8 @@
      input rendered below 16px — a zoom forces every composited layer
      (incl. any remaining blurs) to re-rasterize and can kill the tab. */
   .input-field {
-    @apply w-full rounded-xl px-4 py-3.5 text-[16px] transition-all sm:text-sm;
+    @apply w-full rounded-xl px-4 py-3.5 text-[16px] sm:text-sm;
+    transition: border-color var(--duration-base) var(--ease-out-soft), box-shadow var(--duration-base) var(--ease-out-soft);
     background-color: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border);
@@ -230,7 +235,8 @@
   .input-field:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .card {
-    @apply rounded-2xl p-6 transition-all;
+    @apply rounded-2xl p-6;
+    transition: transform var(--duration-base) var(--ease-out-soft), box-shadow var(--duration-base) var(--ease-out-soft), border-color var(--duration-base) var(--ease-out-soft);
     background-color: var(--surface);
     border: 1px solid var(--border);
   }
@@ -253,6 +259,28 @@
     .glass {
       background-color: color-mix(in srgb, var(--surface) 88%, transparent);
       backdrop-filter: none;
+    }
+  }
+
+  /* ── Safe areas: keep touch bars clear of the iOS home indicator ── */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pb-safe-lg {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .bottom-safe {
+    bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ── Full-height app shell: 100vh includes the area under mobile
+     browsers' dynamic toolbars; dvh tracks the visible viewport. ── */
+  .h-app {
+    height: 100vh;
+  }
+  @supports (height: 100dvh) {
+    .h-app {
+      height: 100dvh;
     }
   }
 

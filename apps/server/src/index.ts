@@ -13,9 +13,9 @@ import { rollupTrafficStats } from './stats.js';
 import { recordDisconnect, recordHostRecovery, clearPendingHostDrop } from './connection-telemetry.js';
 import { registerFeedbackRoutes, cleanupFeedbackRateLimits } from './feedback.js';
 import { initPush, registerPushRoutes, notifyHostViewersJoined, dropRoomSubscriptions, cleanupPushRateLimits } from './push.js';
-import { initMailer, flushMailer } from './mailer.js';
+import { initMailer, flushMailer, notifyAdmin } from './mailer.js';
 import { runDailyBackup } from './backup.js';
-import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews } from './analytics.js';
+import { registerAnalyticsRoutes, cleanupTrackRateLimits, purgeOldPageviews, hashIp } from './analytics.js';
 import {
   registerErrorRoutes, registerProcessErrorHandlers, captureError, drainSfuErrors,
   cleanupErrorRateLimits, purgeOldErrors,
@@ -26,6 +26,7 @@ import {
   sanitizeChatText,
   sanitizeUsername,
   clientIpFromHeaders,
+  toSafeHttpUrl,
   VALID_EMOJIS,
   MAX_CHAT_LENGTH as SECURITY_MAX_CHAT,
   MAX_USERNAME_LENGTH as SECURITY_MAX_USERNAME,
@@ -52,7 +53,9 @@ export type { Room, ViewerInfo, ChatMessage };
 function logRoomEvent(eventType: string, roomId: string, viewerCount = 0, ip?: string): void {
   try {
     db.prepare('INSERT INTO room_events (event_type, room_id, host_ip, country, viewer_count) VALUES (?, ?, ?, ?, ?)').run(
-      eventType, roomId, ip ?? null, ip ? (geoip.lookup(ip)?.country || null) : null, viewerCount
+      // Privacy model: salted hash, never the raw IP (historical raw values
+      // were nulled by a one-time migration in db.ts).
+      eventType, roomId, ip ? hashIp(ip) : null, ip ? (geoip.lookup(ip)?.country || null) : null, viewerCount
     );
   } catch (err) {
     captureError(err, { source: 'server', component: 'db.roomEvent', severity: 'warning' });
@@ -142,6 +145,10 @@ const MAX_USERNAME_LENGTH = SECURITY_MAX_USERNAME;
 const MAX_VIEWERS_PER_ROOM = 20;
 const MAX_PIN_ATTEMPTS = 5;        // per IP, per 5-min window
 const PIN_ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
+
+// Shape every room ID must match, wherever it comes from (server-minted UUIDs
+// always do; caller-supplied IDs via host:create-room are validated against it).
+const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 // Idle TTL for abandoned rooms. A room is only reaped if it has had no activity
 // (no joins, no chat, no reactions) for this long. Active rooms (e.g. a long
@@ -233,6 +240,13 @@ setInterval(() => {
         joinAttempts.delete(key);
       }
     }
+    // Cleanup room-info preview rate limits (keyed by IP; without this the
+    // map grows unboundedly — every unique visitor leaves an entry behind).
+    for (const [key, entry] of roomInfoCalls) {
+      if (nowMs > entry.resetAt) {
+        roomInfoCalls.delete(key);
+      }
+    }
     // Cleanup admin login rate limit entries (slow memory leak otherwise —
     // entries keyed by attacker-controlled IPs were never deleted).
     cleanupLoginAttempts(nowMs);
@@ -248,6 +262,8 @@ setInterval(() => {
     rollupTrafficStats(now);
     // Pull captured SFU errors into the central error store.
     drainSfuErrorsNow();
+    // Capacity alert email on overload (no-op when mail is not configured).
+    checkCapacity(nowMs);
     // Send aggregated admin alert emails (no-op when mail is not configured).
     flushMailer(nowMs);
     // Daily DB backup: idempotent per UTC day, rotated, mailed offsite.
@@ -272,6 +288,9 @@ const io = new Server(fastify.server, {
   },
   pingInterval: 25000,
   pingTimeout: 20000,
+  // Explicit ceiling for polling payloads — the default (1 MB) is far more
+  // than any legitimate event in this app needs.
+  maxHttpBufferSize: 256 * 1024,
 });
 
 io.use((socket, next) => {
@@ -409,6 +428,12 @@ io.on('connection', (socket) => {
     // (Socket.IO auto-reconnect after a blip) would silently generate a new
     // roomId and orphan all viewers — the original Bug 2.
     if (requestedRoomId) {
+      // A caller-supplied roomId must match the shape every other entry point
+      // already enforces, or it's rejected outright.
+      if (typeof requestedRoomId !== 'string' || !ROOM_ID_RE.test(requestedRoomId)) {
+        socket.emit('room:error', { message: 'Formato de roomId inválido.' });
+        return;
+      }
       const existingRoom = rooms.get(requestedRoomId);
       if (existingRoom) {
         // The claimant must prove they created the room: PIN + host secret.
@@ -718,16 +743,61 @@ io.on('connection', (socket) => {
 });
 
 // Health check endpoint
+// ── Capacity health (W3.2) + email alerts (W3.3) ──────────────────────
+// Utilization ceilings for /health status + alerting. Defaults mirror the
+// SFU's own limits; the load test report calibrates real numbers per
+// environment (raise via HEALTH_MAX_ROOMS / HEALTH_MAX_CONNECTIONS).
+const HEALTH_MAX_ROOMS = parseInt(process.env.HEALTH_MAX_ROOMS || '200');
+const HEALTH_MAX_CONNECTIONS = parseInt(process.env.HEALTH_MAX_CONNECTIONS || '1200');
+/** Utilization fraction that flips /health to "degraded" / "critical". */
+const CAPACITY_DEGRADED_AT = 0.7;
+const CAPACITY_CRITICAL_AT = 0.9;
+
+function capacityLevel(): { level: 'ok' | 'degraded' | 'critical'; rooms: number; connections: number; pct: number } {
+  const activeRooms = rooms.size;
+  const connections = io.engine.clientsCount;
+  const pct = Math.max(activeRooms / HEALTH_MAX_ROOMS, connections / HEALTH_MAX_CONNECTIONS);
+  const level = pct >= CAPACITY_CRITICAL_AT ? 'critical' : pct >= CAPACITY_DEGRADED_AT ? 'degraded' : 'ok';
+  return { level, rooms: activeRooms, connections, pct };
+}
+
+// Alert on level TRANSITIONS and at most every 30 min while overloaded —
+// notifyAdmin's own cooldown handles any residual churn.
+let lastCapacityLevel: 'ok' | 'degraded' | 'critical' = 'ok';
+let lastCapacityAlertAt = 0;
+function checkCapacity(nowMs = Date.now()): void {
+  const { level, pct, rooms: activeRooms, connections } = capacityLevel();
+  if (level === 'ok') {
+    lastCapacityLevel = 'ok';
+    return;
+  }
+  const changed = level !== lastCapacityLevel;
+  const due = nowMs - lastCapacityAlertAt > 30 * 60 * 1000;
+  if (changed || due) {
+    lastCapacityAlertAt = nowMs;
+    notifyAdmin('capacity', `Capacidad del servidor: ${level.toUpperCase()} (${Math.round(pct * 100)}%)`, [
+      `Nivel: ${level} — ${Math.round(pct * 100)}% de los límites configurados.`,
+      `Salas activas: ${activeRooms}/${HEALTH_MAX_ROOMS} · Conexiones socket: ${connections}/${HEALTH_MAX_CONNECTIONS}`,
+      `Umbrales: degradado al ${Math.round(CAPACITY_DEGRADED_AT * 100)}%, crítico al ${Math.round(CAPACITY_CRITICAL_AT * 100)}% (HEALTH_MAX_ROOMS / HEALTH_MAX_CONNECTIONS ajustan los límites).`,
+    ], { nowMs });
+  }
+  lastCapacityLevel = level;
+}
+
 fastify.get('/health', { logLevel: 'error' }, async () => {
+  const { level, rooms: activeRooms, connections, pct } = capacityLevel();
   return {
-    status: 'ok',
-    rooms: rooms.size,
-    connections: io.engine.clientsCount
+    status: level,
+    rooms: activeRooms,
+    connections,
+    utilization: Math.round(pct * 100),
+    limits: { rooms: HEALTH_MAX_ROOMS, connections: HEALTH_MAX_CONNECTIONS },
   };
 });
 
 // Readiness probe: checks that Socket.IO is accepting connections.
 // Use this for Traefik/Docker load-balancer routing decisions.
+let lastSfuCapacityAlertAt = 0;
 async function readinessHandler(_req: any, reply: any) {
   // Maintenance mode: return 503 so Traefik shows the maintenance page.
   if (isMaintenanceMode()) {
@@ -736,13 +806,31 @@ async function readinessHandler(_req: any, reply: any) {
   const sfuUrl = process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '';
   let sfuReachable = false;
   if (sfuUrl) {
-    try {
-      const httpUrl = sfuUrl.replace(/^ws/, 'http').replace(/\?.*$/, '');
-      const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(2000) });
-      sfuReachable = res.ok;
-    } catch (err) {
-      sfuReachable = false;
-      captureError(err, { source: 'server', component: 'sfuHealth', severity: 'warning' });
+    // SSRF gate: only public http(s) targets are ever fetched.
+    const httpUrl = toSafeHttpUrl(sfuUrl);
+    if (httpUrl) {
+      try {
+        const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(2000) });
+        sfuReachable = res.ok;
+        // Surface SFU capacity states as admin mail (30-min throttle so the
+        // status page's polling can't burn the quota).
+        const body = await res.json().catch(() => null as any);
+        if (body && (body.status === 'degraded' || body.status === 'critical')) {
+          const nowMs = Date.now();
+          if (nowMs - lastSfuCapacityAlertAt > 30 * 60 * 1000) {
+            lastSfuCapacityAlertAt = nowMs;
+            notifyAdmin('capacity', `Capacidad del SFU: ${String(body.status).toUpperCase()} (${body.utilization ?? '?'}%)`, [
+              `El SFU informa estado "${body.status}" (${body.utilization ?? '?'}% de utilización).`,
+              `Salas: ${body.rooms ?? '?'}/${body.limits?.rooms ?? '?'} · Peers: ${body.totalPeers ?? '?'}/${body.limits?.peers ?? '?'}`,
+            ], { nowMs });
+          }
+        }
+      } catch (err) {
+        sfuReachable = false;
+        captureError(err, { source: 'server', component: 'sfuHealth', severity: 'warning' });
+      }
+    } else {
+      captureError(new Error(`unsafe SFU url rejected: ${sfuUrl}`), { source: 'server', component: 'sfuHealth', severity: 'warning' });
     }
   }
   // Return 503 when the SFU is unreachable so Traefik can failover.
@@ -759,7 +847,6 @@ fastify.get('/api/ready', { logLevel: 'error' }, readinessHandler);
 // responses, so links shared on WhatsApp/Telegram show "en directo" with the
 // host's title instead of the generic site card. Returns NO secrets: just
 // existence, liveness, viewer count and the public title.
-const ROOM_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const roomInfoCalls = new Map<string, { count: number; resetAt: number }>();
 function roomInfoRateOk(ip: string): boolean {
   const now = Date.now();
@@ -792,9 +879,10 @@ fastify.get('/api/room-info/:roomId', { logLevel: 'error' }, async (req, reply) 
 });
 
 // ── Admin API ────────────────────────────────────────────────────────
-// Register admin routes with access to live server state.
-const sfuHealthUrl = (process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '')
-  .replace(/^ws/, 'http').replace(/\?.*$/, '');
+// Register admin routes with access to live server state. The SFU URL goes
+// through the SSRF gate (toSafeHttpUrl): unsafe targets degrade to "no SFU"
+// instead of being fetched.
+const sfuHealthUrl = toSafeHttpUrl(process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '') || '';
 const adminState: ServerState = { rooms, viewerToRoom, hostToRoom, io, connectionCounts, sfuHealthUrl };
 // Encapsulated scope so the rate limiter applies ONLY to the admin API —
 // signaling rides Socket.IO (not HTTP routes) and must not be throttled.
@@ -825,10 +913,10 @@ initMailer();
 
 // Drain the SFU's in-memory error ring into the central store. Called from
 // the 5-min sweeper — if the SFU is unreachable the buffer simply waits.
-const sfuInternalUrl = (process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '')
-  .replace(/^ws/, 'http').replace(/\?.*$/, '');
+const sfuInternalUrl = toSafeHttpUrl(process.env.VITE_SFU_URL || process.env.SFU_HEALTH_URL || '') || '';
 const sfuDrainSecret = process.env.ERRORS_SECRET || '';
 function drainSfuErrorsNow(): void {
+  if (!sfuInternalUrl) return; // unset or failed the SSRF gate — never fetched
   void drainSfuErrors(sfuInternalUrl, sfuDrainSecret);
 }
 

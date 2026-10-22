@@ -1,0 +1,16 @@
+fix(web): never trade resolution for framerate on screen shares
+
+Live-room probe against production (2026-10-22): the viewer received the
+TOP simulcast layer at full width but only ~1.8 Mbps of the 4.5 Mbps
+budget, with visibly blocky text. Chrome's default sender degradation
+("balanced") drops RESOLUTION before framerate the moment bandwidth
+tightens — the worst possible trade for reading text on a shared screen.
+
+The video producer's sender now sets degradationPreference =
+"maintain-resolution" (frames drop under pressure, resolution never
+does). Applied on every produce path (layered and vp8-single fallback);
+verified live against the test SFU (devlog confirms the sender parameter,
+spike still green: 187 frames encoded / 129 decoded).
+
+Dev harness: apps/web/.env.local (gitignored) pins the dev server to the
+test env URLs — shell env vars are flaky on Windows.

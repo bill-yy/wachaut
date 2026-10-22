@@ -16,14 +16,14 @@
 	<Brand size="sm" />
 		<IconButton
 			label={notificationsMuted ? t('comp.unmuteNotif') : t('comp.muteNotif')}
-		onclick={onToggleNotifications}
-		variant="ghost"
-		size="sm"
-	>
-		{#if notificationsMuted}
-			<BellOff class="h-4 w-4 text-[var(--text-subtle)]" />
-		{:else}
-			<Bell class="h-4 w-4" />
-		{/if}
-	</IconButton>
-</header>
+			onclick={onToggleNotifications}
+			variant="ghost"
+			size="md"
+		>
+			{#if notificationsMuted}
+				<BellOff class="h-4 w-4 text-[var(--text-subtle)]" aria-hidden="true" />
+			{:else}
+				<Bell class="h-4 w-4" aria-hidden="true" />
+			{/if}
+		</IconButton>
+	</header>

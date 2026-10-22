@@ -29,6 +29,10 @@ export class SfuClient {
   #pendingConsumers: Array<any> = [];
   #stream: MediaStream | null = null;
   #iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+  /** Video mode negotiated with the SFU at join time (SFU_VIDEO_MODE env). */
+  #videoMode: "vp8-single" | "vp8-simulcast" | "vp9-svc" = "vp8-single";
+  /** Consumer id of the (single) screen-video stream — the quality selector's target. */
+  #videoConsumerId: string | null = null;
   /** Stashed join params so we can re-emit join-room on every reconnect. */
   #joinParams: {
     roomId: string;
@@ -63,6 +67,22 @@ export class SfuClient {
   on(event: string, fn: Function) {
     if (!this.#listeners.has(event)) this.#listeners.set(event, []);
     this.#listeners.get(event)!.push(fn);
+  }
+
+  /** Video mode negotiated with the SFU ("vp8-single" until the SFU says otherwise). */
+  get videoMode(): "vp8-single" | "vp8-simulcast" | "vp9-svc" {
+    return this.#videoMode;
+  }
+
+  /** True when the negotiated producer is layered (SVC/simulcast) and the
+   *  viewer quality selector is meaningful. */
+  get isLayered(): boolean {
+    return this.#videoMode !== "vp8-single";
+  }
+
+  /** Consumer id of the screen-video stream (null until the host produces). */
+  get videoConsumerId(): string | null {
+    return this.#videoConsumerId;
   }
 
   off(event: string, fn: Function) {
@@ -121,6 +141,9 @@ export class SfuClient {
 
             if (response.hostSecret) this.#hostSecret = response.hostSecret;
             this.#rtpCapabilities = response.rtpCapabilities;
+            // Video mode negotiated per deployment (SFU_VIDEO_MODE): the
+            // produce() call below shapes its encodings accordingly.
+            this.#videoMode = response.videoMode || "vp8-single";
 
             // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
             if (
@@ -187,6 +210,10 @@ export class SfuClient {
 
       this.#socket.on("peer-left", (data) => {
         this.#emit("peer-left", data);
+      });
+
+      this.#socket.on("consumer-layers", (data) => {
+        this.#emit("consumer-layers", data);
       });
 
       this.#socket.on("connect_error", (err) => {
@@ -281,22 +308,124 @@ export class SfuClient {
 
     this.#monitorIce(this.#sendTransport, "send");
 
-    // ── Video producer — single encode, default codec ───────────────────
-    // Uses Chrome's default codec (VP8). VP9 was tested but caused the same
-    // ICE stall as SVC — the transport never connects. VP8 single encode is
-    // the only configuration confirmed working end-to-end in production.
-    // Quality is controlled via maxBitrate from the preset.
+    // ── Video producer ─────────────────────────────────────────────────
+    // Encoding shape is negotiated with the SFU (SFU_VIDEO_MODE):
+    //  - "vp8-single"    — proven default: one VP8 encode, bitrate from preset.
+    //  - "vp8-simulcast" — three VP8 encodings (¼, ½, full): the VALIDATED
+    //                      layered path (spike 2026-10-21: media flows E2E).
+    //  - "vp9-svc"       — one VP9 encode with L3T3 SVC layers. MEASUREDED
+    //                      DEAD on current Chromium (155/156 Win, headless,
+    //                      headed and system Chrome): the encoder produces
+    //                      0 bytes / 0 frames, silently, while VP9 without
+    //                      scalabilityMode encodes fine. Kept behind the
+    //                      server flag for re-testing on future Chrome, but
+    //                      NOT enabled anywhere.
+    // The pre-sprint "VP9 stalled ICE" note was this same encoder stall seen
+    // through a black screen, not an ICE problem (a codec cannot stall ICE).
     const videoTrack = screenStream.getVideoTracks()[0];
     if (videoTrack) {
-      this.#producer = await this.#sendTransport.produce({
-        track: videoTrack,
-        appData: { mediaTag: "screen-video" },
-        codecOptions: {
-          videoGoogleStartBitrate: Math.max(startBitrate, 100),
-          videoGoogleMaxBitrate: maxBitrate,
-        },
-      });
-      devlog("[sfu] Video producer created:", this.#producer.id);
+      let encodings: Array<Record<string, unknown>> | undefined;
+      let codec: any;
+      if (this.#videoMode === "vp9-svc") {
+        // Router codec parameters propagate into the device caps at load()
+        // and from there into the sender's VP9 fmtp — and x-google-* entries
+        // there stop Chromium's VP9 encoder from ever starting (0 bytes /
+        // 0 frames, zero errors; found during the SVC spike, 2026-10-21).
+        // Sanitize the local caps before producing. (The router-side source
+        // of these knobs is also removed for the next SFU image.)
+        try {
+          for (const c of this.#device?.rtpCapabilities?.codecs ?? []) {
+            if (String(c.mimeType).toLowerCase() === "video/vp9" && c.parameters) {
+              for (const k of Object.keys(c.parameters)) {
+                if (k.startsWith("x-google-")) delete c.parameters[k];
+              }
+            }
+          }
+        } catch {
+          /* caps sanitation is best-effort */
+        }
+        encodings = [{ scalabilityMode: "L3T3", maxBitrate }];
+        codec = this.#findCodec("video/VP9");
+      } else if (this.#videoMode === "vp8-simulcast") {
+        encodings = [
+          { maxBitrate: Math.round(maxBitrate / 4), scaleResolutionDownBy: 4 },
+          { maxBitrate: Math.round(maxBitrate / 2), scaleResolutionDownBy: 2 },
+          { maxBitrate, scaleResolutionDownBy: 1 },
+        ];
+        // Pin VP8: without an explicit codec the browser sends its default
+        // (AV1 on current Chrome), which mediasoup rejects for simulcast.
+        codec = this.#findCodec("video/VP8");
+      }
+      // Legacy Google bitrate knobs only on the proven VP8 path: they end
+      // up baked into the sender's codec fmtp line, which is fine for VP8
+      // but non-standard noise for the layered codecs. Layered modes carry
+      // their bitrate per encoding instead.
+      const googleCodecOptions =
+        this.#videoMode === "vp8-single"
+          ? {
+              codecOptions: {
+                videoGoogleStartBitrate: Math.max(startBitrate, 100),
+                videoGoogleMaxBitrate: maxBitrate,
+              },
+            }
+          : {};
+      try {
+        this.#producer = await this.#sendTransport.produce({
+          track: videoTrack,
+          appData: { mediaTag: "screen-video" },
+          ...(encodings ? { encodings } : {}),
+          ...(codec ? { codec } : {}),
+          ...googleCodecOptions,
+        });
+        devlog(
+          `[sfu] Video producer created (${this.#videoMode}${encodings ? ", layered" : ""}):`,
+          this.#producer.id,
+        );
+      } catch (err: any) {
+        // A layered produce can be rejected by the SFU for codec reasons the
+        // client can't foresee — e.g. a stale cached bundle that doesn't pin
+        // VP8 sends AV1 under simulcast and mediasoup refuses ("video/AV1
+        // codec not supported for simulcast"). Clients and SFU versions mix
+        // in the wild, so degrade to a plain VP8 single encode instead of
+        // killing the whole share: viewers still get video, just without
+        // per-layer adaptation.
+        if (!encodings) throw err;
+        devwarn(
+          `[sfu] layered produce failed (${err?.message ?? err}); falling back to VP8 single`,
+        );
+        this.#producer = await this.#sendTransport.produce({
+          track: videoTrack,
+          appData: { mediaTag: "screen-video" },
+          codec: this.#findCodec("video/VP8"),
+          codecOptions: {
+            videoGoogleStartBitrate: Math.max(startBitrate, 100),
+            videoGoogleMaxBitrate: maxBitrate,
+          },
+        });
+        devlog("[sfu] Video producer created (vp8-single fallback):", this.#producer.id);
+      }
+
+      // Screen text must never trade RESOLUTION for framerate. Chrome's
+      // default degradation ("balanced") drops resolution first the moment
+      // bandwidth tightens — text turns into pixel mush while fps stays
+      // high. "maintain-resolution" drops frames instead, which is the
+      // right trade for reading a shared screen. (Live-room probe
+      // 2026-10-22: top layer served at ~1.8 Mbps of a 4.5 Mbps budget
+      // with visibly blocky text; resolution-degradation was the cause.)
+      try {
+        const pc = this.#sendTransport?._handler?._pc;
+        const sender = pc?.getSenders?.().find(
+          (s: RTCRtpSender) => s.track === videoTrack,
+        );
+        if (sender) {
+          const params = sender.getParameters();
+          (params as any).degradationPreference = "maintain-resolution";
+          await sender.setParameters(params);
+          devlog("[sfu] sender degradationPreference: maintain-resolution");
+        }
+      } catch (e) {
+        devwarn("[sfu] degradationPreference not applied:", e);
+      }
     }
 
     const audioTrack = screenStream.getAudioTracks()[0];
@@ -304,6 +433,12 @@ export class SfuClient {
       this.#audioProducer = await this.#sendTransport.produce({
         track: audioTrack,
         appData: { mediaTag: "screen-audio" },
+        // Tab audio is stereo content: enable stereo + DTX (matches the
+        // router-level Opus parameters).
+        codecOptions: {
+          opusStereo: true,
+          opusDtx: true,
+        },
       });
       devlog("[sfu] Audio producer created:", this.#audioProducer.id);
     }
@@ -513,6 +648,8 @@ export class SfuClient {
     });
 
     this.#consumers.set(consumer.id, consumer);
+    // The viewer's quality selector targets the video consumer's layers.
+    if (consumer.kind === "video") this.#videoConsumerId = consumer.id;
 
     // Clean up when the host stops producing or the transport closes.
     consumer.on("producerclose", () => {
@@ -593,6 +730,37 @@ export class SfuClient {
     } catch (err) {
       console.error("[sfu] Failed to set bitrate:", err);
     }
+  }
+
+  /**
+   * Resolve a router codec (e.g. "video/VP9") from the device's negotiated
+   * capabilities for explicit codec selection in produce(). Undefined keeps
+   * the browser default (VP8).
+   */
+  #findCodec(mimeType: string): any {
+    try {
+      const device = this.#device;
+      if (!device?.loaded) return undefined;
+      return (
+        device.rtpCapabilities.codecs.find(
+          (c: any) => String(c.mimeType).toLowerCase() === mimeType.toLowerCase(),
+        ) ?? undefined
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Viewer-side layer preference (only meaningful on layered producers —
+   * SVC/simulcast). The SFU clamps to the available layers; layer changes
+   * arrive back via the "consumer-layers" event. Defaults to the tracked
+   * screen-video consumer.
+   */
+  setPreferredLayers(spatialLayer: number, temporalLayer: number, consumerId?: string): void {
+    const id = consumerId ?? this.#videoConsumerId;
+    if (!id) return;
+    this.#socket?.emit("viewer:set-preferred-layers", { consumerId: id, spatialLayer, temporalLayer });
   }
 
   stopProducing() {

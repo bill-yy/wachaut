@@ -83,8 +83,15 @@
 	let lastShootingStar = 0;
 	let frameCount = 0;
 
-	function draw() {
+	function draw(force = false) {
 		if (!ctx || !canvas) return;
+		// Stop the loop entirely when the tab is hidden or the user prefers
+		// reduced motion — repainting a frozen scene only burns battery.
+		// ensureLoop() restarts it; force=true paints one static frame.
+		if (!force && (document.hidden || prefersReducedMotion)) {
+			animationFrame = 0;
+			return;
+		}
 		const width = window.innerWidth;
 		const height = window.innerHeight;
 
@@ -170,7 +177,13 @@
 			ctx.stroke();
 		}
 
-		animationFrame = requestAnimationFrame(draw);
+		animationFrame = requestAnimationFrame(() => draw());
+	}
+
+	function ensureLoop() {
+		if (!animationFrame && !document.hidden && !prefersReducedMotion) {
+			animationFrame = requestAnimationFrame(() => draw());
+		}
 	}
 
 	function updatePositions() {
@@ -201,15 +214,32 @@
 
 		resize();
 		init();
-		draw();
+		// One forced static frame covers the reduced-motion case (the loop
+		// never starts there); otherwise draw() starts the animation loop.
+		draw(true);
 
 		if (!prefersReducedMotion) {
 			motionTimer = setInterval(updatePositions, 16);
 		}
 
+		let resizeTimer: ReturnType<typeof setTimeout>;
 		const handleResize = () => {
-			resize();
-			init();
+			// Debounce: mobile URL-bar show/hide fires a burst of resize
+			// events; re-initializing particles on each one is wasteful.
+			clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(() => {
+				resize();
+				init();
+				// One forced frame covers the reduced-motion case (no loop)
+				// and refreshes the frozen scene after resizing.
+				draw(true);
+				ensureLoop();
+			}, 150);
+		};
+		const handleVisibility = () => {
+			if (!document.hidden) {
+				ensureLoop();
+			}
 		};
 		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 		const handleMotionChange = (e: MediaQueryListEvent) => {
@@ -220,14 +250,22 @@
 			} else if (!prefersReducedMotion && !motionTimer) {
 				motionTimer = setInterval(updatePositions, 16);
 			}
+			if (prefersReducedMotion) {
+				draw(true); // leave a static frame on screen
+			} else {
+				ensureLoop();
+			}
 		};
 
 		window.addEventListener('resize', handleResize);
+		window.addEventListener('visibilitychange', handleVisibility);
 		mediaQuery.addEventListener('change', handleMotionChange);
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
+			window.removeEventListener('visibilitychange', handleVisibility);
 			mediaQuery.removeEventListener('change', handleMotionChange);
+			clearTimeout(resizeTimer);
 		};
 	});
 

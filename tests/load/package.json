@@ -1,0 +1,13 @@
+{
+  "name": "wachaut-load-tests",
+  "private": true,
+  "description": "Capacity load suite — real-browser viewers against a deployed environment. See README.md.",
+  "type": "module",
+  "scripts": {
+    "load": "node run.mjs",
+    "report": "node report.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

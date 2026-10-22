@@ -30,7 +30,7 @@ import {
 import { verifyTotp, generateTotpSecret, totpUri } from './totp.js';
 import { notifyAdmin, mailerStatus } from '../mailer.js';
 import { findViewerInRoom, removeViewer } from '../room-store.js';
-import { queryAnalytics } from '../analytics.js';
+import { queryAnalytics, parseAnalyticsQuery, exportAnalyticsCsv, AnalyticsQueryError } from '../analytics.js';
 import { queryFeedback } from '../feedback.js';
 import { db, getSetting, setSetting } from '../db.js';
 
@@ -447,18 +447,63 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   });
 
   // ── GET /analytics — traffic analytics (SEO/SEM) ──────────────────
+  // Shared querystring: range (days OR from/to), ranking limit and
+  // cross-dimension filters (any combination).
+  const analyticsQuerystring = {
+    type: 'object',
+    properties: {
+      days: { type: 'integer', minimum: 1, maximum: 90 },
+      from: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      to: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      path: { type: 'string', maxLength: 128 },
+      lang: { type: 'string', maxLength: 12 },
+      device: { type: 'string', maxLength: 16 },
+      country: { type: 'string', maxLength: 8 },
+      referrer: { type: 'string', maxLength: 128 },
+      campaign: { type: 'string', maxLength: 128 },
+    },
+    additionalProperties: false,
+  };
+
   app.get('/api/admin/analytics', {
+    preHandler: requireAuth,
+    schema: { querystring: analyticsQuerystring },
+  }, async (req: FastifyRequest, reply) => {
+    try {
+      return queryAnalytics(parseAnalyticsQuery(req.query as Record<string, unknown>));
+    } catch (err) {
+      if (err instanceof AnalyticsQueryError) return reply.code(400).send({ error: err.message });
+      throw err;
+    }
+  });
+
+  // ── GET /analytics/export — CSV download per section ──────────────
+  app.get('/api/admin/analytics/export', {
     preHandler: requireAuth,
     schema: {
       querystring: {
         type: 'object',
-        properties: { days: { type: 'integer', minimum: 1, maximum: 90, default: 7 } },
+        properties: { ...analyticsQuerystring.properties, section: { type: 'string', maxLength: 16 } },
+        required: ['section'],
         additionalProperties: false,
       },
     },
-  }, async (req: FastifyRequest) => {
-    const { days } = req.query as { days: number };
-    return queryAnalytics(days);
+  }, async (req: FastifyRequest, reply) => {
+    const { section } = req.query as { section: string };
+    try {
+      const { filename, csv } = exportAnalyticsCsv(
+        section,
+        parseAnalyticsQuery(req.query as Record<string, unknown>)
+      );
+      return reply
+        .type('text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(csv);
+    } catch (err) {
+      if (err instanceof AnalyticsQueryError) return reply.code(400).send({ error: err.message });
+      throw err;
+    }
   });
 
   // ── Errors: list / detail / status / delete ────────────────────────

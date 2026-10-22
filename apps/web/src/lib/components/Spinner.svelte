@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn } from '$lib/utils/cn';
+	import { t } from '$lib/i18n/index.svelte';
 
 	interface Props {
 		size?: 'sm' | 'md' | 'lg';
@@ -18,5 +19,5 @@
 <span
 	class={cn('inline-block animate-spin rounded-full border-[var(--border)] border-t-[var(--brand)]', px[size], klass)}
 	role="status"
-	aria-label="Cargando"
+	aria-label={t('comp.loading')}
 ></span>

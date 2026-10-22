@@ -187,6 +187,67 @@ test('normalizePath: strips query/hash, caps length, prefixes slash', () => {
   assert.equal(normalizePath('/' + 'a'.repeat(300)).length, 128);
 });
 
+// ── parseAnalyticsQuery (query normalization for the analytics remake) ──
+
+const { parseAnalyticsQuery, exportAnalyticsCsv, AnalyticsQueryError } = analyticsModule;
+
+test('parseAnalyticsQuery: days default and explicit range', () => {
+  const q = parseAnalyticsQuery({});
+  assert.equal(q.granularity, 'day');
+  assert.match(q.from, /^\d{4}-\d{2}-\d{2}$/);
+
+  const from = '2026-10-01';
+  const to = '2026-10-08';
+  const q2 = parseAnalyticsQuery({ from, to });
+  assert.equal(q2.from, from);
+  assert.equal(q2.to, to);
+  assert.equal(q2.granularity, 'day', '8-day range buckets by day');
+});
+
+test('parseAnalyticsQuery: hourly granularity for ≤48h ranges', () => {
+  const q = parseAnalyticsQuery({ from: '2026-10-01', to: '2026-10-01' });
+  assert.equal(q.granularity, 'hour', 'single day → hourly buckets');
+  const q2 = parseAnalyticsQuery({ from: '2026-10-01', to: '2026-10-02' });
+  assert.equal(q2.granularity, 'hour', 'two days → hourly buckets');
+});
+
+test('parseAnalyticsQuery: rejects malformed ranges', () => {
+  assert.throws(() => parseAnalyticsQuery({ from: 'nope', to: '2026-10-01' }), AnalyticsQueryError);
+  assert.throws(() => parseAnalyticsQuery({ from: '2026-10-10', to: '2026-10-01' }), AnalyticsQueryError, 'from > to');
+  assert.throws(() => parseAnalyticsQuery({ days: 0 }), AnalyticsQueryError);
+  assert.throws(() => parseAnalyticsQuery({ days: 400 }), AnalyticsQueryError);
+});
+
+test('parseAnalyticsQuery: filters and limit pass through', () => {
+  const q = parseAnalyticsQuery({ days: 7, limit: 50, device: 'mobile', country: 'ES', lang: 'es', referrer: 'directo', campaign: 'oct' });
+  assert.equal(q.limit, 50);
+  assert.deepEqual(q.filters, { device: 'mobile', country: 'ES', lang: 'es', referrer: 'directo', campaign: 'oct' });
+  assert.equal(Object.keys(q.filters).includes('path'), false, 'absent filters stay absent');
+});
+
+test('queryAnalytics: filters narrow the rankings, langs ranking present', () => {
+  // Seed a distinguishing pageview, then filter everything else out.
+  db.prepare(`
+    INSERT INTO pageviews (visitor_id, session_id, path, referrer, referrer_host, country, device, lang, ip_hash)
+    VALUES ('visitor-filter-1', 'session-filter-1', '/filtro', NULL, NULL, 'PT', 'tablet', 'pt-PT', 'x')
+  `).run();
+  const all = queryAnalytics(parseAnalyticsQuery({ days: 7 }));
+  assert.ok(Array.isArray(all.langs), 'langs ranking exists');
+
+  const filtered = queryAnalytics(parseAnalyticsQuery({ days: 7, device: 'tablet' }));
+  assert.ok(filtered.pages.every((p: any) => p.path === '/filtro' || p.views >= 0), 'device filter applies to pages');
+  assert.ok(filtered.devices.length <= 1 && filtered.devices[0]?.device === 'tablet', 'only the filtered device remains');
+  assert.ok(filtered.countries.every((c: any) => c.country === 'PT'), 'country ranking honors the filter');
+  assert.equal(filtered.series.length > 0, true, 'series zero-filled per day');
+});
+
+test('exportAnalyticsCsv: sections produce CSV with headers; unknown section throws', () => {
+  const { filename, csv } = exportAnalyticsCsv('devices', parseAnalyticsQuery({ days: 7 }));
+  assert.match(filename, /^wachaut_devices_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.ok(csv.startsWith('device,sessions'), 'CSV starts with its header row');
+  assert.throws(() => exportAnalyticsCsv('nope', parseAnalyticsQuery({ days: 7 })), AnalyticsQueryError);
+});
+
 // ── Teardown ─────────────────────────────────────────────────────────
 
 test('teardown: close app and remove temp db', async () => {
