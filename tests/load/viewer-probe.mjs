@@ -51,6 +51,24 @@ await page.waitForFunction(
 );
 console.log('[probe] joined, track attached — sampling…');
 
+// Read the quality selector's "active layer" footer (what the SFU is
+// actually serving THIS viewer) — same info the user sees in the gear.
+async function readActiveLayer() {
+  try {
+    const btn = page.locator('button[aria-label="Calidad"], button[aria-label="Quality"]');
+    if (!(await btn.count())) return '(no gear)';
+    await btn.first().click({ timeout: 3000 });
+    const txt = await page
+      .locator('div[role="menu"]')
+      .last()
+      .innerText({ timeout: 3000 });
+    await btn.first().click().catch(() => {});
+    return txt.split('\n').filter((l) => !/^(Auto|Alta|Media|Baja|High|Medium|Low|Auto)$/.test(l.trim())).join(' | ');
+  } catch (e) {
+    return `(gear read failed: ${e.message.split('\n')[0]})`;
+  }
+}
+
 let lastBytes = 0;
 let lastTs = 0;
 let lastFrames = 0;
@@ -86,6 +104,7 @@ for (let i = 0; i < SECONDS / 5; i++) {
     };
   });
   if (!s) { console.log('[probe] no video'); continue; }
+  const layerTxt = await readActiveLayer();
   const now = Date.now();
   let line = `[probe] t+${(i + 1) * 5}s res=${s.videoW}x${s.videoH} elFrames=${s.elFrames}`;
   if (s.inbound) {
@@ -98,6 +117,7 @@ for (let i = 0; i < SECONDS / 5; i++) {
     lastFrames = s.inbound.frames;
     lastTs = now;
   }
+  line += ` | gear: ${layerTxt}`;
   console.log(line);
 }
 await browser.close();
