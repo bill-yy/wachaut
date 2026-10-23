@@ -28,9 +28,11 @@ const NUM_WORKERS = parseInt(process.env.NUM_WORKERS || String(os.cpus().length)
  * re-encode. Flippable per environment with a redeploy — the client bundle
  * reads the mode at join time, so no rebuild is needed to change it.
  */
-export type VideoMode = 'vp8-single' | 'vp8-simulcast' | 'vp9-svc';
+export type VideoMode = 'vp8-single' | 'vp8-simulcast' | 'vp9-svc' | 'vp9-single';
 export function parseVideoMode(raw: string | undefined): VideoMode {
-  return raw === 'vp9-svc' || raw === 'vp8-simulcast' ? raw : 'vp8-single';
+  return raw === 'vp9-svc' || raw === 'vp8-simulcast' || raw === 'vp9-single'
+    ? raw
+    : 'vp8-single';
 }
 const SFU_VIDEO_MODE: VideoMode = parseVideoMode(process.env.SFU_VIDEO_MODE);
 

@@ -120,4 +120,7 @@ for (let i = 0; i < SECONDS / 5; i++) {
   line += ` | gear: ${layerTxt}`;
   console.log(line);
 }
+// Visual evidence: screenshot the video element as the viewer sees it.
+await page.screenshot({ path: 'probe-view.png' });
+console.log('[probe] screenshot → probe-view.png');
 await browser.close();
