@@ -4,7 +4,14 @@
 
 	export interface QualityPreset {
 		label: string;
-		resolution: { width: number; height: number };
+		/** Omitted on native-resolution presets — capture is not capped. */
+		resolution?: { width: number; height: number };
+		/** Capture at the source's native resolution (no width/height
+		 *  constraints). Any `ideal` size makes Chrome resample the screen
+		 *  before encoding, which destroys text sharpness on high-res hosts
+		 *  (a 2560×1440 screen crushed to 1920×1080, then upscaled back by
+		 *  the viewer — measured as the root cause of "pixelated text"). */
+		native?: boolean;
 		fps: number;
 		bitrate: number;
 		desc: string;
@@ -148,7 +155,7 @@
 				</div>
 				<p class="mb-1.5 text-xs text-[var(--text-muted)]">{preset.desc}</p>
 				<div class="flex items-center gap-2 font-mono text-[10px] text-[var(--text-subtle)]">
-					<span>{preset.resolution.width}×{preset.resolution.height}</span>
+					<span>{preset.native ? t('room.presetNative') : `${preset.resolution?.width ?? '—'}×${preset.resolution?.height ?? '—'}`}</span>
 					<span aria-hidden="true">·</span>
 					<span>{preset.fps} FPS</span>
 					<span aria-hidden="true">·</span>

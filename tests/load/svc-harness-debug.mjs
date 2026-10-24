@@ -17,6 +17,23 @@ const PC_HOOK = `
   }
   Patched.prototype = Orig.prototype;
   window.RTCPeerConnection = Patched;
+  // Log any socket payload mentioning videoMode — proves what the SFU
+  // told THIS page (join ack) without touching app internals.
+  const OrigWS = window.WebSocket;
+  function PatchedWS(...args) {
+    const ws = new OrigWS(...args);
+    ws.addEventListener('message', (ev) => {
+      try {
+        if (typeof ev.data === 'string' && ev.data.includes('videoMode')) {
+          const m = ev.data.match(/"videoMode":"[a-z0-9-]+"/);
+          console.log('[ws-ack]', m ? m[0] : ev.data.slice(0, 200));
+        }
+      } catch {}
+    });
+    return ws;
+  }
+  PatchedWS.prototype = OrigWS.prototype;
+  window.WebSocket = PatchedWS;
 })();
 `;
 

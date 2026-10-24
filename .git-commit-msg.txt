@@ -1,16 +1,23 @@
-fix(web): never trade resolution for framerate on screen shares
+feat(video): vp9-single mode — the quality-first encode for text-heavy shares
 
-Live-room probe against production (2026-10-22): the viewer received the
-TOP simulcast layer at full width but only ~1.8 Mbps of the 4.5 Mbps
-budget, with visibly blocky text. Chrome's default sender degradation
-("balanced") drops RESOLUTION before framerate the moment bandwidth
-tightens — the worst possible trade for reading text on a shared screen.
+Evidence trail from the live-room sharpness investigation (all measured
+against real shares):
 
-The video producer's sender now sets degradationPreference =
-"maintain-resolution" (frames drop under pressure, resolution never
-does). Applied on every produce path (layered and vp8-single fallback);
-verified live against the test SFU (devlog confirms the sender parameter,
-spike still green: 187 frames encoded / 129 decoded).
+- Layer/bitrate plumbing is healthy: viewers get the TOP layer, and the
+  maintain-resolution fix doubled the encoder's motion-time bitrate
+  (1.8 -> 3.7 Mbps peaks).
+- Yet text stays blocky: VP8's rate control settles very low on mostly-
+  static screens (~1-1.5 Mbps average), and even the keyframe refresher's
+  keyframes are encoded at that low target — refreshed, but still mushy.
+- Plain VP9 (validated in the codec spike: Chrome encodes it fine; only
+  SVC-on-VP9 is dead) is markedly sharper than VP8 for text at the same
+  bitrate — the standard quality-first choice for screen content.
 
-Dev harness: apps/web/.env.local (gitignored) pins the dev server to the
-test env URLs — shell env vars are flaky on Windows.
+New SFU_VIDEO_MODE=vp9-single: one full-resolution VP9 encode at the
+preset bitrate, no layers (weak viewers ride BWE drops instead of a
+smaller layer). Client picks VP9 explicitly (no AV1-by-default surprise),
+the quality selector hides itself (isLayered=false), and the keyframe
+refresher keeps static screens crisp.
+
+Deploy plan: test env flips to vp9-single for a real A/B against prod's
+vp8-simulcast before deciding production.
