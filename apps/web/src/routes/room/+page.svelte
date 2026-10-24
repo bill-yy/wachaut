@@ -155,7 +155,7 @@
       // Auto-adapt: dynamically scale the producer bitrate based on connection
       // health. This replaces the old host:set-spatial-layer approach (which
       // did nothing on a single-encode producer). Now we directly adjust the
-      // encoder's max bitrate via mediasoup's setMaxBitrate().
+      // encoder's max bitrate through the sender's encodings.
       if (autoAdaptQuality && newState !== lastHealthState) {
         if (newState === 'poor') {
           // Severe packet loss — cut bitrate to 40% to stop the bleeding.
@@ -262,6 +262,27 @@
   // Safe label lookup that handles the 'custom' preset (not in the presets map).
   function presetLabel(key: string): string {
     return key === 'custom' ? t('room.presetCustom') : presets[key]?.label ?? '—';
+  }
+
+  // Capture parameters for the currently selected preset. Shared by
+  // startSharing and the live preset-change effect so the two paths can
+  // never drift apart.
+  function captureParams(): { width: number; height: number; fps: number; bitrate: number } {
+    if (qualityPreset === 'custom') {
+      return {
+        height: customRes,
+        width: Math.round(customRes * 16 / 9), // assume 16:9
+        fps: customFps,
+        bitrate: customBitrate,
+      };
+    }
+    const preset = presets[qualityPreset];
+    return {
+      width: preset.resolution.width,
+      height: preset.resolution.height,
+      fps: preset.fps,
+      bitrate: preset.bitrate,
+    };
   }
 
   // Audio toggle for screen share
@@ -653,19 +674,7 @@
     }
     try {
       // Build capture constraints from preset or custom settings.
-      let captureWidth: number, captureHeight: number, captureFps: number, captureBitrate: number;
-      if (qualityPreset === 'custom') {
-        captureHeight = customRes;
-        captureWidth = Math.round(customRes * 16 / 9); // assume 16:9
-        captureFps = customFps;
-        captureBitrate = customBitrate;
-      } else {
-        const preset = presets[qualityPreset];
-        captureWidth = preset.resolution.width;
-        captureHeight = preset.resolution.height;
-        captureFps = preset.fps;
-        captureBitrate = preset.bitrate;
-      }
+      const { width: captureWidth, height: captureHeight, fps: captureFps, bitrate: captureBitrate } = captureParams();
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
@@ -754,13 +763,43 @@
     autoAdaptNotificationTimeout = setTimeout(() => { autoAdaptNotification = ''; }, 4000);
   }
 
-  // React to manual preset changes — only notify on actual changes while sharing.
+  // React to manual preset changes while sharing: apply the new settings to
+  // the LIVE capture (resolution/fps constraints + encoder ceiling). This
+  // used to only show a toast and silently keep the old bitrate until the
+  // host restarted the share, which made mid-session preset changes (and
+  // A/B comparisons) meaningless.
   let lastNotifiedPreset = qualityPreset;
   $effect(() => {
-    if (qualityPreset !== lastNotifiedPreset && isSharing) {
-      showAutoAdaptNotification(t('room.presetChanged', { preset: presetLabel(qualityPreset) }));
-    }
-    lastNotifiedPreset = qualityPreset;
+    const preset = qualityPreset;
+    if (preset === lastNotifiedPreset) return;
+    const sharing = isSharing;
+    lastNotifiedPreset = preset;
+    if (!sharing) return;
+    const { width, height, fps, bitrate } = captureParams();
+    currentMaxBitrate = bitrate;
+    startHealthMonitor(bitrate);
+    void (async () => {
+      try {
+        await sfuClient?.updateVideoSettings({ maxBitrate: bitrate, width, height, frameRate: fps });
+        showAutoAdaptNotification(t('room.presetAppliedLive', { preset: presetLabel(preset) }));
+      } catch {
+        showAutoAdaptNotification(t('room.presetChanged', { preset: presetLabel(preset) }));
+      }
+    })();
+  });
+
+  // contentHint ('detail' vs 'motion') is a live property of the track —
+  // apply toggle changes to a running share immediately. Sharing video
+  // content with 'detail' keeps the encoder prioritizing sharpness over
+  // smoothness, so the switch matters mid-session.
+  let lastAppliedHint = contentHintMode;
+  $effect(() => {
+    const hint = contentHintMode;
+    if (hint === lastAppliedHint) return;
+    lastAppliedHint = hint;
+    if (!isSharing) return;
+    const track = localStream?.getVideoTracks()[0];
+    if (track) track.contentHint = hint;
   });
 
   function toggleFullscreen() {

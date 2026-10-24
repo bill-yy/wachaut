@@ -355,6 +355,10 @@ export class SfuClient {
         // SVC-on-VP9 is dead) and markedly sharper than VP8 for text at the
         // same bitrate — the quality-first mode. One full-resolution encode,
         // no layers (the SFU's keyframe refresher keeps static screens crisp).
+        // The explicit maxBitrate matters: without it the sender has no
+        // ceiling from us and Chrome falls back to its internal VP9 default
+        // (~2-2.5 Mbps at 1080p), silently halving the preset's budget.
+        encodings = [{ maxBitrate }];
         codec = this.#findCodec("video/VP9");
       } else if (this.#videoMode === "vp8-simulcast") {
         encodings = [
@@ -732,13 +736,75 @@ export class SfuClient {
    * the transport. Used by the health monitor to reduce quality when the
    * connection degrades and restore it when it recovers.
    */
-  setMaxBitrate(bitrate: number): void {
-    if (!this.#producer) return;
+  /**
+   * Raise/lower the live video encoder's bitrate ceiling. mediasoup-client's
+   * Producer has no such method — this previously called one that doesn't
+   * exist and the catch swallowed the TypeError, so auto-adapt never changed
+   * anything. Go through the underlying RTCRtpSender's encodings, which is
+   * what the encoder actually reads.
+   */
+  async setMaxBitrate(bitrate: number): Promise<void> {
+    const sender = this.#videoSender();
+    if (!sender) return;
     try {
-      this.#producer.setMaxBitrate(bitrate);
+      const params = sender.getParameters();
+      if (!params.encodings?.length) params.encodings = [{}];
+      // Keep the ladder shape produce() created (simulcast rungs keep their
+      // scale factors): top rung gets the new ceiling, lower rungs keep the
+      // ¼/½ proportions of it.
+      if (params.encodings.length > 1) {
+        params.encodings[0]!.maxBitrate = Math.round(bitrate / 4);
+        params.encodings[1]!.maxBitrate = Math.round(bitrate / 2);
+        for (let i = 2; i < params.encodings.length; i++) {
+          params.encodings[i]!.maxBitrate = bitrate;
+        }
+      } else {
+        params.encodings[0]!.maxBitrate = bitrate;
+      }
+      await sender.setParameters(params);
       devlog("[sfu] Producer bitrate set to", bitrate);
     } catch (err) {
       console.error("[sfu] Failed to set bitrate:", err);
+    }
+  }
+
+  /**
+   * Apply a quality-preset change to the LIVE share without re-picking the
+   * source: capture resolution/fps via track.applyConstraints, encoder
+   * ceiling via setMaxBitrate. Throws when there is no live producer so the
+   * caller can fall back to "applies on restart" messaging.
+   */
+  async updateVideoSettings(opts: {
+    maxBitrate?: number;
+    width?: number;
+    height?: number;
+    frameRate?: number;
+  }): Promise<void> {
+    const producer = this.#producer;
+    const track = producer?.track;
+    if (!producer || producer.closed || !track) {
+      throw new Error("no live video producer");
+    }
+    if (opts.width || opts.height || opts.frameRate) {
+      await track.applyConstraints({
+        ...(opts.width ? { width: { ideal: opts.width } } : {}),
+        ...(opts.height ? { height: { ideal: opts.height } } : {}),
+        ...(opts.frameRate ? { frameRate: { ideal: opts.frameRate } } : {}),
+      });
+    }
+    if (opts.maxBitrate) await this.setMaxBitrate(opts.maxBitrate);
+    devlog("[sfu] Live video settings applied:", opts);
+  }
+
+  /** The RTCRtpSender carrying the screen video track, if connected. */
+  #videoSender(): RTCRtpSender | null {
+    try {
+      const pc = this.#sendTransport?._handler?._pc;
+      const track = this.#producer?.track;
+      if (!pc || !track) return null;
+      return pc.getSenders().find((s: RTCRtpSender) => s.track === track) ?? null;
+    } catch {
+      return null;
     }
   }
 

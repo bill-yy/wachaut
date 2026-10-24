@@ -172,10 +172,12 @@
 		</button>
 	</div>
 
-	<!-- ── Actions: compartir/detener + calidad + emotes ── -->
-	<div class="shrink-0 space-y-2 border-b border-[var(--border)] p-4 pb-safe">
-		{#if !sharing}
-			<!-- Quality settings: collapsible, compact -->
+		<!-- ── Actions: compartir/detener + calidad + emotes ── -->
+		<div class="shrink-0 space-y-2 border-b border-[var(--border)] p-4 pb-safe">
+			<!-- Quality settings: reachable before AND during a share — preset
+			     changes apply live to the running stream (capture constraints +
+			     encoder ceiling), so hiding the panel while sharing would make
+			     the live-apply path unusable. -->
 			<button
 				onclick={onToggleSettings}
 				aria-expanded={showSettings}
@@ -183,7 +185,7 @@
 			>
 				<Settings class="h-3.5 w-3.5" aria-hidden="true" />
 				{t('room.quality')}
-				<span class="ml-auto text-[var(--text-subtle)]">{qualityPreset === 'custom' ? t('room.presetCustom') : presets[qualityPreset]?.label ?? '—'}</span>
+				<span class="ml-auto text-[10px] text-[var(--text-subtle)]">{qualityPreset === 'custom' ? t('room.presetCustom') : presets[qualityPreset]?.label ?? '—'}</span>
 				<ChevronDown class={`h-3.5 w-3.5 text-[var(--text-subtle)] transition-transform ${showSettings ? 'rotate-180' : ''}`} aria-hidden="true" />
 			</button>
 
@@ -200,31 +202,32 @@
 				/>
 			{/if}
 
-			<!-- Compartir: protagonista -->
-			<button
-				onclick={onShare}
-				class="gradient-brand flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-[filter,transform] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
-			>
-				<Share2 class="h-4 w-4" aria-hidden="true" />
-				{t('room.shareButton')}
-			</button>
-		{:else}
-			<Button variant="danger" onclick={onStop} class="w-full" size="lg">
-				<StopCircle class="h-4 w-4" aria-hidden="true" />
-				{t('room.stopShare')}
-			</Button>
+			{#if !sharing}
+				<!-- Compartir: protagonista -->
+				<button
+					onclick={onShare}
+					class="gradient-brand flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold text-black shadow-glow transition-[filter,transform] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+				>
+					<Share2 class="h-4 w-4" aria-hidden="true" />
+					{t('room.shareButton')}
+				</button>
+			{:else}
+				<Button variant="danger" onclick={onStop} class="w-full" size="lg">
+					<StopCircle class="h-4 w-4" aria-hidden="true" />
+					{t('room.stopShare')}
+				</Button>
 
-			<!-- Emotes (only when sharing) -->
-			<div class="pt-1">
-				<EmotePicker
-					favorites={favoriteEmojis}
-					open={showEmotePicker}
-					onSend={onSendReaction}
-					onToggle={onToggleEmotePicker}
-					onClose={onCloseEmotePicker}
-				/>
-			</div>
-		{/if}
+				<!-- Emotes (only when sharing) -->
+				<div class="pt-1">
+					<EmotePicker
+						favorites={favoriteEmojis}
+						open={showEmotePicker}
+						onSend={onSendReaction}
+						onToggle={onToggleEmotePicker}
+						onClose={onCloseEmotePicker}
+					/>
+				</div>
+			{/if}
 
 		<Button variant="ghost" onclick={onLeave} size="md" class="w-full !text-[var(--text-subtle)]">
 			<ArrowLeft class="h-3.5 w-3.5" aria-hidden="true" />

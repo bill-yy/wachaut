@@ -257,6 +257,7 @@ const es = {
 	'room.cmdStatsViewer': 'Estado: {status} | Resolución: {resolution} | FPS: {fps} | Bitrate: {bitrate}',
 	'room.cmdKickSent': 'Solicitud de expulsión enviada para {viewerId}',
 	'room.presetChanged': 'Calidad cambiada a {preset}. Aplicará al reiniciar la compartición.',
+	'room.presetAppliedLive': 'Calidad actualizada a {preset} en la retransmisión en curso.',
 	'room.viewerJoined': '{name} se unió a la sala.',
 	'room.viewerLeft': '{name} salió de la sala.',
 
@@ -676,6 +677,7 @@ const en: Dict = {
 	'room.cmdStatsViewer': 'Status: {status} | Resolution: {resolution} | FPS: {fps} | Bitrate: {bitrate}',
 	'room.cmdKickSent': 'Kick request sent for {viewerId}',
 	'room.presetChanged': 'Quality changed to {preset}. Applies when you restart sharing.',
+	'room.presetAppliedLive': 'Quality updated to {preset} on the live stream.',
 	'room.viewerJoined': '{name} joined the room.',
 	'room.viewerLeft': '{name} left the room.',
 
