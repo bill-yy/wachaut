@@ -30,7 +30,7 @@ export class SfuClient {
   #stream: MediaStream | null = null;
   #iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
   /** Video mode negotiated with the SFU at join time (SFU_VIDEO_MODE env). */
-  #videoMode: "vp8-single" | "vp8-simulcast" | "vp9-svc" = "vp8-single";
+  #videoMode: "vp8-single" | "vp8-simulcast" | "vp9-svc" | "vp9-single" = "vp8-single";
   /** Consumer id of the (single) screen-video stream — the quality selector's target. */
   #videoConsumerId: string | null = null;
   /** Stashed join params so we can re-emit join-room on every reconnect. */
@@ -70,14 +70,14 @@ export class SfuClient {
   }
 
   /** Video mode negotiated with the SFU ("vp8-single" until the SFU says otherwise). */
-  get videoMode(): "vp8-single" | "vp8-simulcast" | "vp9-svc" {
+  get videoMode(): "vp8-single" | "vp8-simulcast" | "vp9-svc" | "vp9-single" {
     return this.#videoMode;
   }
 
   /** True when the negotiated producer is layered (SVC/simulcast) and the
    *  viewer quality selector is meaningful. */
   get isLayered(): boolean {
-    return this.#videoMode !== "vp8-single";
+    return this.#videoMode === "vp8-simulcast" || this.#videoMode === "vp9-svc";
   }
 
   /** Consumer id of the screen-video stream (null until the host produces). */
@@ -313,7 +313,11 @@ export class SfuClient {
     //  - "vp8-single"    — proven default: one VP8 encode, bitrate from preset.
     //  - "vp8-simulcast" — three VP8 encodings (¼, ½, full): the VALIDATED
     //                      layered path (spike 2026-10-21: media flows E2E).
-    //  - "vp9-svc"       — one VP9 encode with L3T3 SVC layers. MEASUREDED
+    //  - "vp9-single"    — one full-resolution VP9 encode: quality-first
+    //                      (VP9 is markedly sharper than VP8 for text at the
+    //                      same bitrate). No layers — weak viewers rely on
+    //                      BWE drops instead of a smaller layer.
+    //  - "vp9-svc"       — one VP9 encode with L3T3 SVC layers. MEASURED
     //                      DEAD on current Chromium (155/156 Win, headless,
     //                      headed and system Chrome): the encoder produces
     //                      0 bytes / 0 frames, silently, while VP9 without
@@ -345,6 +349,12 @@ export class SfuClient {
           /* caps sanitation is best-effort */
         }
         encodings = [{ scalabilityMode: "L3T3", maxBitrate }];
+        codec = this.#findCodec("video/VP9");
+      } else if (this.#videoMode === "vp9-single") {
+        // Plain VP9: validated to encode fine in current Chrome (only
+        // SVC-on-VP9 is dead) and markedly sharper than VP8 for text at the
+        // same bitrate — the quality-first mode. One full-resolution encode,
+        // no layers (the SFU's keyframe refresher keeps static screens crisp).
         codec = this.#findCodec("video/VP9");
       } else if (this.#videoMode === "vp8-simulcast") {
         encodings = [

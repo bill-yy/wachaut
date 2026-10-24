@@ -225,8 +225,11 @@ while (Date.now() - start < SECONDS * 1000) {
 // ── Verdict ─────────────────────────────────────────────────────────────
 const out = lastHostStats.filter((s) => s.dir === 'out').sort((a, b) => (b.frames || 0) - (a.frames || 0))[0];
 const inn = lastViewerStats.filter((s) => s.dir === 'in').sort((a, b) => (b.frames || 0) - (a.frames || 0))[0];
-const hostSending = !!out && out.bytes > 100_000;
-const viewerReceiving = !!inn && inn.bytes > 100_000;
+// Frames-based too: the headless fake screen can render mostly-STATIC
+// content (low bytes while frames still flow — the exact case the SFU's
+// keyframe refresher serves), which shouldn't fail the gate.
+const hostSending = !!out && (out.bytes > 100_000 || (out.frames || 0) > 60);
+const viewerReceiving = !!inn && (inn.bytes > 100_000 || (inn.frames || 0) > 60);
 console.log('\n[spike] ── VEREDICTO ──');
 console.log(`  host enviando RTP    : ${hostSending ? '✅' : '❌'} (${out ? `${Math.round(out.bytes / 1024)}KB, ${out.frames} frames encoded, pc=${out.pc}` : 'sin stats'})`);
 console.log(`  viewer recibiendo RTP: ${viewerReceiving ? '✅' : '❌'} (${inn ? `${Math.round(inn.bytes / 1024)}KB, ${inn.frames} frames decoded${inn.decoder ? ', decoder=' + inn.decoder : ''}, pc=${inn.pc}` : 'sin stats'})`);

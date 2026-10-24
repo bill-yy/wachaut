@@ -28,9 +28,11 @@ const NUM_WORKERS = parseInt(process.env.NUM_WORKERS || String(os.cpus().length)
  * re-encode. Flippable per environment with a redeploy — the client bundle
  * reads the mode at join time, so no rebuild is needed to change it.
  */
-export type VideoMode = 'vp8-single' | 'vp8-simulcast' | 'vp9-svc';
+export type VideoMode = 'vp8-single' | 'vp8-simulcast' | 'vp9-svc' | 'vp9-single';
 export function parseVideoMode(raw: string | undefined): VideoMode {
-  return raw === 'vp9-svc' || raw === 'vp8-simulcast' ? raw : 'vp8-single';
+  return raw === 'vp9-svc' || raw === 'vp8-simulcast' || raw === 'vp9-single'
+    ? raw
+    : 'vp8-single';
 }
 const SFU_VIDEO_MODE: VideoMode = parseVideoMode(process.env.SFU_VIDEO_MODE);
 
@@ -1057,6 +1059,68 @@ async function main(): Promise<void> {
       else if (alive.length !== list.length) joinFails.set(ip, alive);
     }
   }, 5 * 60 * 1000);
+
+  // ── Static-content keyframe refresher ──────────────────────────────
+  // VP8 stops sending frames while the shared screen is static, so the
+  // last frozen frame — often an inter-frame captured mid-motion — stays
+  // on viewers' screens forever, visibly blocky (measured live: a static
+  // 1080p share served 0.2 fps at ~170 kbps with mushy text). Watch each
+  // live video producer's outbound bytes: when they stall, periodically
+  // request a keyframe — this mediasoup exposes it on the CONSUMER (the
+  // PLI it fires upstream refreshes every consumer of the stream) — so
+  // the frozen frame re-renders crisp; when motion resumes after a stall,
+  // force one immediately (the first deltas would otherwise ride a stale
+  // reference). No consumers → nobody is watching → no refresh needed.
+  const KEYFRAME_SWEEP_MS = 5_000;
+  const keyframeWatch = new Map<string, { lastBytes: number; idleSweeps: number }>();
+  const requestProducerKeyFrame = (room: any, producerId: string): Promise<void> | null => {
+    for (const p of room.peers.values()) {
+      for (const c of p.consumers.values()) {
+        if (!c.closed && c.producerId === producerId) return c.requestKeyFrame();
+      }
+    }
+    return null;
+  };
+  setInterval(() => {
+    for (const room of rooms.values()) {
+      for (const peer of room.peers.values()) {
+        for (const producer of peer.producers) {
+          if (producer.kind !== 'video' || producer.closed) continue;
+          void (async () => {
+            try {
+              const stats = await producer.getStats();
+              const outbound: any = stats.find((r: any) => r.type === 'outbound-rtp');
+              if (!outbound || typeof outbound.byteCount !== 'number') return;
+              const prev =
+                keyframeWatch.get(producer.id) ??
+                { lastBytes: outbound.byteCount, idleSweeps: 0 };
+              const grew = outbound.byteCount - prev.lastBytes;
+              let wantKeyframe = false;
+              if (grew < 2048) {
+                prev.idleSweeps++;
+                // Static for ≥2 sweeps → refresh the frozen frame every
+                // ~15s while idle (one 1080p VP8 keyframe is a brief burst).
+                wantKeyframe = prev.idleSweeps >= 2 && prev.idleSweeps % 3 === 0;
+              } else if (prev.idleSweeps > 0) {
+                // Motion resumed after a stall → clean keyframe now.
+                prev.idleSweeps = 0;
+                wantKeyframe = true;
+              } else {
+                prev.idleSweeps = 0;
+              }
+              if (wantKeyframe) await requestProducerKeyFrame(room, producer.id);
+              prev.lastBytes = outbound.byteCount;
+              keyframeWatch.set(producer.id, prev);
+            } catch {
+              /* producer closed mid-sweep — next pass skips it */
+            }
+          })();
+        }
+      }
+    }
+    // Watchers of dead producers are skipped above; bound the map anyway.
+    if (keyframeWatch.size > 500) keyframeWatch.clear();
+  }, KEYFRAME_SWEEP_MS);
 
   // Graceful shutdown — close routers/workers so clients aren't hard-disconnected.
   let shuttingDown = false;
