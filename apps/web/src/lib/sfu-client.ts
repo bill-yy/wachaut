@@ -786,11 +786,18 @@ export class SfuClient {
       throw new Error("no live video producer");
     }
     if (opts.width || opts.height || opts.frameRate) {
-      await track.applyConstraints({
-        ...(opts.width ? { width: { ideal: opts.width } } : {}),
-        ...(opts.height ? { height: { ideal: opts.height } } : {}),
-        ...(opts.frameRate ? { frameRate: { ideal: opts.frameRate } } : {}),
-      });
+      try {
+        await track.applyConstraints({
+          ...(opts.width ? { width: { ideal: opts.width } } : {}),
+          ...(opts.height ? { height: { ideal: opts.height } } : {}),
+          ...(opts.frameRate ? { frameRate: { ideal: opts.frameRate } } : {}),
+        });
+      } catch (e) {
+        // Resolution/fps negotiation can legitimately fail mid-capture
+        // (device hiccup, unsupported combo). It must not abort the switch:
+        // the bitrate ceiling below still applies on its own.
+        devwarn("[sfu] live capture constraints not applied:", e);
+      }
     }
     if (opts.maxBitrate) await this.setMaxBitrate(opts.maxBitrate);
     devlog("[sfu] Live video settings applied:", opts);

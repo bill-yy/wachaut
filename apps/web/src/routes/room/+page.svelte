@@ -253,10 +253,15 @@
   // Quality Settings
   let qualityPreset = $state('normal');
   let showSettings = $state(false);
+  // Normal/Alta capture at the SCREEN'S NATIVE resolution: any ideal width/
+  // height makes Chrome downscale before encoding (2K → 1920×1080), and the
+  // viewer then upscales back — a lossy double resample that crushed text on
+  // high-res hosts no matter the codec, bitrate or fps. Only Baja caps (720p,
+  // the bandwidth saver); custom caps at whatever the user picked.
   const presets = $state<Record<string, QualityPreset>>({
     low: { label: t('room.presetLow'), resolution: { width: 1280, height: 720 }, fps: 15, bitrate: 1_500_000, desc: t('room.presetLowDesc') },
-    normal: { label: t('room.presetNormal'), resolution: { width: 1920, height: 1080 }, fps: 30, bitrate: 4_500_000, desc: t('room.presetNormalDesc') },
-    high: { label: t('room.presetHigh'), resolution: { width: 1920, height: 1080 }, fps: 60, bitrate: 8_000_000, desc: t('room.presetHighDesc') }
+    normal: { label: t('room.presetNormal'), native: true, fps: 30, bitrate: 4_500_000, desc: t('room.presetNormalDesc') },
+    high: { label: t('room.presetHigh'), native: true, fps: 60, bitrate: 8_000_000, desc: t('room.presetHighDesc') }
   });
 
   // Safe label lookup that handles the 'custom' preset (not in the presets map).
@@ -266,8 +271,9 @@
 
   // Capture parameters for the currently selected preset. Shared by
   // startSharing and the live preset-change effect so the two paths can
-  // never drift apart.
-  function captureParams(): { width: number; height: number; fps: number; bitrate: number } {
+  // never drift apart. width/height are undefined on native presets —
+  // the caller must then NOT constrain the capture size at all.
+  function captureParams(): { width?: number; height?: number; fps: number; bitrate: number } {
     if (qualityPreset === 'custom') {
       return {
         height: customRes,
@@ -278,8 +284,8 @@
     }
     const preset = presets[qualityPreset];
     return {
-      width: preset.resolution.width,
-      height: preset.resolution.height,
+      width: preset.resolution?.width,
+      height: preset.resolution?.height,
       fps: preset.fps,
       bitrate: preset.bitrate,
     };
@@ -676,11 +682,19 @@
       // Build capture constraints from preset or custom settings.
       const { width: captureWidth, height: captureHeight, fps: captureFps, bitrate: captureBitrate } = captureParams();
 
+      // No width/height on native presets (see presets above): only frameRate
+      // is constrained, so Chrome hands us the screen at its physical size.
+      const videoConstraints: MediaTrackConstraints = {
+        frameRate: { ideal: captureFps },
+      };
+      if (captureWidth && captureHeight) {
+        videoConstraints.width = { ideal: captureWidth };
+        videoConstraints.height = { ideal: captureHeight };
+      }
+
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: captureWidth },
-          height: { ideal: captureHeight },
-          frameRate: { ideal: captureFps },
+          ...videoConstraints,
           // @ts-expect-error — cursor is valid for getDisplayMedia but not in TS types
           cursor: 'always',
         },

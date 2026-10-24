@@ -29,6 +29,11 @@ async function readSenderState(page) {
               scale: e.scaleResolutionDownBy ?? null,
               svc: e.scalabilityMode ?? null,
             })),
+            // The constraints APPLIED to the capture track: any width/height
+            // here means Chrome is resampling the screen before encoding
+            // (the 2K-crushed-to-1080p disease). Native presets must leave
+            // them empty.
+            constraints: sender.track.getConstraints(),
             trackSettings: sender.track.getSettings(),
           };
         }
@@ -83,17 +88,41 @@ const before = await readSenderState(page);
 console.log('[1] producer up (default preset "Normal"):');
 console.log('    codec:', JSON.stringify(before.codecs));
 console.log('    encodings:', JSON.stringify(before.encodings));
+console.log('    track constraints:', JSON.stringify(before.constraints), '← must NOT contain width/height (native capture)');
 console.log('    track:', JSON.stringify({ w: before.trackSettings.width, h: before.trackSettings.height, fps: before.trackSettings.frameRate }));
+
+// Poll until the video sender's top-rung maxBitrate reaches `bps` (encodings
+// updates are async and can lag the click by a beat). Returns false on timeout
+// so the verdict can tell a missed click from a failed apply.
+async function waitForMaxBitrate(page, bps, ms = 10_000) {
+  return page
+    .waitForFunction(
+      (target) => {
+        for (const pc of window.__pcs || []) {
+          for (const s of pc.getSenders()) {
+            if (s.track?.kind === 'video') {
+              const enc = (s.getParameters().encodings || []);
+              return enc.at(-1)?.maxBitrate === target;
+            }
+          }
+        }
+        return false;
+      },
+      bps,
+      { timeout: ms, polling: 500 },
+    )
+    .then(() => true)
+    .catch(() => false);
+}
 
 // Open the quality panel WHILE SHARING (impossible before the sidebar fix).
 const toggle = page.locator('button[aria-expanded]', { hasText: /Calidad|Quality/ }).first();
-await toggle.click({ timeout: 5_000 });
+await toggle.click({ timeout: 5_000, force: true });
 const alta = page.locator('button', { hasText: /Alta calidad|High quality/ }).first();
 await alta.waitFor({ state: 'visible', timeout: 5_000 });
+await alta.scrollIntoViewIfNeeded().catch(() => {});
 await alta.click();
-
-// Give the async live-apply (applyConstraints + setParameters) a beat.
-await page.waitForTimeout(2_000);
+const altaApplied = await waitForMaxBitrate(page, 8_000_000);
 
 const after = await readSenderState(page);
 console.log('[2] after clicking "Alta calidad" mid-share:');
@@ -104,13 +133,30 @@ const beforeMax = before.encodings.at(-1)?.maxBitrate;
 const afterMax = after.encodings.at(-1)?.maxBitrate;
 console.log(`[3] maxBitrate: ${beforeMax} → ${afterMax}`);
 
+// [4] Capped preset still constrains: "Liviano" must apply a 720p cap live.
+const baja = page.locator('button', { hasText: /Liviano|Light/ }).first();
+await baja.waitFor({ state: 'visible', timeout: 5_000 });
+await baja.scrollIntoViewIfNeeded().catch(() => {});
+await baja.click();
+const bajaApplied = await waitForMaxBitrate(page, 1_500_000);
+const bajaState = await readSenderState(page);
+console.log('[4] after clicking "Liviano" mid-share:');
+console.log('    applied:', bajaApplied);
+console.log('    encodings:', JSON.stringify(bajaState.encodings));
+console.log('    track constraints:', JSON.stringify(bajaState.constraints), '← must contain width/height (720p cap)');
+
+const noSizeConstraints =
+  !before.constraints.width && !before.constraints.height;
+const cappedConstraints =
+  !!bajaState.constraints.width && !!bajaState.constraints.height;
+
 let verdict = 'FALLO';
-if (beforeMax === 4_500_000 && afterMax === 8_000_000) {
-  verdict = 'GATE SUPERADO — vp9-single nace con techo del preset y el cambio aplica en vivo';
-} else if (afterMax === 8_000_000) {
-  verdict = 'GATE SUPERADO — live-apply OK (techo inicial inesperado: ' + beforeMax + ')';
-} else if (beforeMax && afterMax && afterMax !== beforeMax) {
-  verdict = `PARCIAL — cambió (${beforeMax} → ${afterMax}) pero no a 8M`;
+if (altaApplied && bajaApplied && noSizeConstraints && cappedConstraints) {
+  verdict = 'GATE SUPERADO — captura nativa en Normal/Alta, cap 720p en Liviano, preset aplica en vivo';
+} else if (altaApplied && noSizeConstraints) {
+  verdict = `GATE SUPERADO — nativo + live-apply OK (revisar Liviano: applied=${bajaApplied} cap=${cappedConstraints})`;
+} else if (afterMax !== beforeMax) {
+  verdict = `PARCIAL — nativo=${noSizeConstraints} alta=${altaApplied} liviano=${bajaApplied}`;
 }
 console.log(`VEREDICTO: ${verdict}`);
 
