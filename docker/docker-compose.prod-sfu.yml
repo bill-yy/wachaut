@@ -13,10 +13,15 @@
 #   RTC_ANNOUNCED_IP       — 167.86.110.249
 # Optional:
 #   ERRORS_SECRET          — lets the signaling server drain /internal/errors
-#   SFU_IMAGE_TAG          — pin a sha instead of :latest (default latest)
-#   SFU_VIDEO_MODE         — vp8-simulcast (default, VALIDATED E2E 2026-10-21)
-#                           | vp8-single | vp9-svc (encoder-dead on current
-#                           Chromium — see tests/load/README.md; do not enable)
+#   SFU_IMAGE_TAG          — pin a sha instead of the default below
+#   SFU_VIDEO_MODE         — vp9-single (RUNNING IN PROD since 2026-10-24:
+#                            one full-res VP9 encode, sharper text than VP8
+#                            at the same bitrate)
+#                            | vp8-simulcast (pre-2026-10-24 default, 3 layers)
+#                            | vp8-single | vp9-svc (encoder-dead on current
+#                            Chromium — see tests/load/README.md; do not enable)
+#   TURN_URL               — defaults to the VPS IP (one coturn serves both
+#                            envs; avoids the cross-env hostname dependency)
 #
 # One-time setup checklist (outside this file):
 #   1. Cloudflare DNS: sfu.wachaut.com → A 167.86.110.249, proxy ON (orange).
@@ -57,7 +62,10 @@ services:
       # spatial layers. vp9-svc must NOT be used (Chromium's encoder never
       # starts — producer sits at 0 bytes/0 frames silently).
       - SFU_VIDEO_MODE=${SFU_VIDEO_MODE:-vp8-simulcast}
-      - TURN_URL=turn:wachaut.billytech.es:3478?transport=udp
+      # TURN: one coturn serves both envs from this VPS. Point prod at the
+      # VPS IP (via env) instead of the test-env hostname, so test DNS/Cloudflare
+      # changes can never break prod's relay.
+      - TURN_URL=${TURN_URL:-turn:167.86.110.249:3478}
       - TURN_SECRET=${TURN_SECRET}
       - ERRORS_SECRET=${ERRORS_SECRET}
       - ALLOWED_ORIGINS=https://wachaut.com,https://www.wachaut.com,https://wadmin.wachaut.com
