@@ -3,7 +3,10 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<meta name="description" content="Wachaut — Comparte tu pantalla con amigos al instante. Sin registro, sin descargas. Audio incluido y funciona en cualquier navegador." />
+		<!-- No static meta description here: every prerendered page sets its
+		     own via svelte:head, and a static one here would be served FIRST
+		     (Google keeps the first it finds). The SPA shell (room/admin/404)
+		     gets a description injected by server.mjs at serve time. -->
 
 		<!-- Icons & theme -->
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />

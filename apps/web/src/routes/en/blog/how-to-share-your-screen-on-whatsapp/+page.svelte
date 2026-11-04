@@ -42,7 +42,7 @@
 	];
 </script>
 
-<ArticleLayout locale="en" pathEs="/blog/como-compartir-pantalla-por-whatsapp" pathEn="/blog/how-to-share-your-screen-on-whatsapp" title="How to share your screen on WhatsApp (2026) — quick guide" description="WhatsApp can share a screen during video calls, but with limits. How to do it step by step, plus a no-sign-up alternative for groups of up to 20 people." h1="How to share your screen on WhatsApp" {date} faqs={faqs} extraLd={[howtoLd]}>
+<ArticleLayout locale="en" pathEs="/blog/como-compartir-pantalla-por-whatsapp" pathEn="/en/blog/how-to-share-your-screen-on-whatsapp" title="How to share your screen on WhatsApp (2026) — quick guide" description="WhatsApp can share a screen during video calls, but with limits. How to do it step by step, plus a no-sign-up alternative for groups of up to 20 people." h1="How to share your screen on WhatsApp" {date} faqs={faqs} extraLd={[howtoLd]}>
 	<p class="text-[var(--text-muted)] leading-relaxed">
 		WhatsApp is the world's most used messaging app: when you want to show something to someone — a video, a TV moment, an error on their phone — the obvious move is to open WhatsApp and send it over. But sharing your <strong class="text-[var(--text)]">screen live</strong> through WhatsApp has a catch: it lives inside the video call, drains battery, and quality suffers. Here are both ways to do it, ordered from simplest to most reliable.
 	</p>
@@ -94,6 +94,6 @@
 	</div>
 
 	<p class="pt-2 text-sm text-[var(--text-subtle)]">
-		Looking for alternatives? See <a href="/en/blog/free-online-screen-sharing/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">free online screen sharing</a> for the full comparison. And if you wonder what we do with your data, read how we handle <a href="/en/privacidad/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">privacy</a>.
+		Looking for alternatives? See <a href="/en/blog/free-online-screen-sharing/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">free online screen sharing</a> for the full comparison, or <a href="/en/blog/discord-alternatives-for-screen-sharing/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">Discord alternatives for screen sharing</a> if that's where you're coming from. And if you wonder what we do with your data, read how we handle <a href="/en/privacidad/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">privacy</a>.
 	</p>
 </ArticleLayout>

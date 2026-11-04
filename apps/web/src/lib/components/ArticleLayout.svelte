@@ -96,7 +96,7 @@
 <div class="relative min-h-screen bg-app">
 	<nav class="mx-auto flex max-w-3xl items-center justify-between px-4 py-5">
 		<a href={locale === 'es' ? '/' : '/en/'} aria-label="Wachaut"><Brand size="md" /></a>
-		<a href={locale === 'es' ? pairPath : pathEs} class="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]">
+		<a href={locale === 'es' ? `${pairPath}/` : `${pathEs}/`} class="rounded-full border border-[var(--border)] px-3 py-1 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]">
 			{locale === 'es' ? 'EN' : 'ES'}
 		</a>
 	</nav>

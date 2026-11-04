@@ -9,6 +9,12 @@
 
 	const posts = [
 		{
+			href: '/blog/alternativas-a-discord-para-compartir-pantalla/',
+			title: 'Alternativas a Discord para compartir pantalla',
+			description: 'Sin cuentas ni instalaciones para tus espectadores: cuándo usar Wachaut, Zoom, Meet o Jitsi según el caso.',
+			lang: 'Comparativa',
+		},
+		{
 			href: '/blog/como-compartir-pantalla-por-whatsapp/',
 			title: 'Cómo compartir la pantalla por WhatsApp',
 			description: 'Paso a paso en videollamada nativa y con enlace instantáneo hasta para 20 espectadores.',
@@ -44,7 +50,7 @@
 		<a
 			href="/en/blog/"
 			class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] px-3.5 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]"
-			aria-label="Switch to English"
+			aria-label="EN — Switch to English"
 			translate="no"
 		>EN</a>
 	</nav>

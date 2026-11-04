@@ -119,6 +119,6 @@
 	</div>
 
 	<p class="pt-2 text-sm text-[var(--text-subtle)]">
-		Ver también: <a href="/blog/como-compartir-pantalla-por-whatsapp/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">cómo compartir pantalla por WhatsApp</a>.
+		Ver también: <a href="/blog/como-compartir-pantalla-por-whatsapp/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">cómo compartir pantalla por WhatsApp</a> y <a href="/blog/alternativas-a-discord-para-compartir-pantalla/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">alternativas a Discord para compartir pantalla</a>.
 	</p>
 </ArticleLayout>

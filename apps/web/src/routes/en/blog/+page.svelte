@@ -8,6 +8,12 @@
 
 	const posts = [
 		{
+			href: '/en/blog/discord-alternatives-for-screen-sharing/',
+			title: 'Discord alternatives for screen sharing',
+			description: 'No accounts or installs for your viewers: when to use Wachaut, Zoom, Meet or Jitsi.',
+			lang: 'Comparison',
+		},
+		{
 			href: '/en/blog/how-to-share-your-screen-on-whatsapp/',
 			title: 'How to share your screen on WhatsApp',
 			description: 'Step by step inside the native video call, plus the instant-link way for up to 20 viewers.',
@@ -43,7 +49,7 @@
 		<a
 			href="/blog/"
 			class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] px-3.5 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]"
-			aria-label="Cambiar a español"
+			aria-label="ES — Cambiar a español"
 			translate="no"
 		>ES</a>
 	</nav>

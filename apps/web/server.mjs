@@ -2,8 +2,11 @@
  * Static file server for the Wachaut web build.
  *
  * Routing rules:
+ *  - Host www.wachaut.com → 308 to the apex host (single canonical hostname).
  *  - Exact files (assets, og.png, robots.txt, sitemap.xml) → served as-is.
- *  - Prerendered directory pages (/contacto/, /privacidad/) → their index.html.
+ *  - Prerendered directory pages (/contacto/, /privacidad/) → served only on
+ *    their trailing-slash URL; the slash-less variant 308s to it (both used
+ *    to return 200 with the same file, splitting search signals).
  *  - SPA routes (/room/**, /admin/**) → the prerendered landing shell
  *    (index.html) so the client router can hydrate; these are client-only.
  *  - Everything else → 404.html (which for crawlers is a soft-404 page).
@@ -96,6 +99,32 @@ function injectLiveOg(html, info, roomUrl) {
   return html.replace('</head>', `${tags}</head>`);
 }
 
+// ── SPA shell description ───────────────────────────────────────────────
+// app.html carries no meta description so prerendered pages don't ship a
+// duplicate (generic + their own) — the shell gets one injected here, its
+// HTML being final for crawlers.
+const SHELL_DESCRIPTION =
+  'Wachaut — Comparte tu pantalla con amigos al instante. Sin registro, sin descargas. Audio incluido y funciona en cualquier navegador.';
+
+let shellWithDescriptionCache;
+function shellWithDescription() {
+  if (!shellWithDescriptionCache) {
+    const raw = readFileSync(join(ROOT, '404.html'), 'utf-8');
+    const meta = `<meta name="description" content="${escapeHtml(SHELL_DESCRIPTION)}"/>`;
+    shellWithDescriptionCache = raw.replace('</head>', `${meta}</head>`);
+  }
+  return shellWithDescriptionCache;
+}
+
+function sendHtml(res, html, status = 200) {
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    ...SECURITY_HEADERS,
+  });
+  res.end(html);
+}
+
 // ── Security headers ────────────────────────────────────────────────────
 // The Fastify API sets its own headers via helmet; this static server had
 // none at all. Notes on the CSP:
@@ -135,11 +164,14 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), display-capture=(self), geolocation=()',
 };
 
-/** Cache policy: hashed bundles are immutable forever; everything else 1h. */
+/** Cache policy: hashed bundles and self-hosted fonts are immutable forever
+ *  (font files are versioned by filename: bump the name when the font
+ *  changes); everything else 1h. */
 function cacheControlFor(filePath) {
   const ext = extname(filePath);
   if (ext === '.html') return 'no-cache';
   if (filePath.includes('/_app/immutable/')) return 'public, max-age=31536000, immutable';
+  if (ext === '.woff2') return 'public, max-age=31536000, immutable';
   return 'public, max-age=3600';
 }
 
@@ -156,7 +188,16 @@ function sendFile(res, filePath, status = 200, extraHeaders = {}) {
 
 createServer(async (req, res) => {
   try {
-    const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const reqUrl = new URL(req.url, 'http://x');
+    // One canonical hostname: www.wachaut.com serves the same build, so
+    // without this redirect Google indexes both hosts as duplicates.
+    const host = String(req.headers.host || '');
+    if (host.startsWith('www.')) {
+      res.writeHead(308, { Location: `https://${host.slice(4)}${reqUrl.pathname}${reqUrl.search}` });
+      res.end();
+      return;
+    }
+    const pathname = decodeURIComponent(reqUrl.pathname);
     // Normalize and confine to ROOT (blocks ../ traversal).
     const safe = normalize(pathname).replace(/^([/\\])+/, '');
     const target = join(ROOT, safe);
@@ -166,9 +207,15 @@ createServer(async (req, res) => {
       sendFile(res, target);
       return;
     }
-    // Prerendered directory page: /contacto/ → contacto/index.html.
+    // Prerendered directory page: /contacto/ → contacto/index.html. The
+    // slash-less URL redirects (relative Location) so only one form is 200.
     const dirIndex = join(target, 'index.html');
     if (target.startsWith(ROOT) && existsSync(dirIndex)) {
+      if (!pathname.endsWith('/')) {
+        res.writeHead(308, { Location: `${pathname}/${reqUrl.search}` });
+        res.end();
+        return;
+      }
       sendFile(res, dirIndex);
       return;
     }
@@ -179,16 +226,10 @@ createServer(async (req, res) => {
       const info = await fetchRoomInfo(roomMatch[1]);
       if (info?.exists) {
         try {
-          const shell = readFileSync(join(ROOT, '404.html'), 'utf-8');
           // og:url uses the public host the requester asked for (www vs apex).
           const host = String(req.headers.host || '').replace(/[^a-zA-Z0-9.-]/g, '');
           const roomUrl = host ? `https://${host}${pathname}` : '';
-          res.writeHead(200, {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-cache',
-            ...SECURITY_HEADERS,
-          });
-          res.end(injectLiveOg(shell, info, roomUrl));
+          sendHtml(res, injectLiveOg(shellWithDescription(), info, roomUrl));
           return;
         } catch { /* fall through to the plain shell */ }
       }
@@ -198,11 +239,11 @@ createServer(async (req, res) => {
     // causes a hydration mismatch (client expects the admin/room route) which
     // breaks rendering — the shell hydrates cleanly into any route.
     if (isSpaRoute(pathname)) {
-      sendFile(res, join(ROOT, '404.html'));
+      sendHtml(res, shellWithDescription());
       return;
     }
     // Unknown → soft-404 page (404 status so crawlers drop it).
-    sendFile(res, join(ROOT, '404.html'), 404);
+    sendHtml(res, shellWithDescription(), 404);
   } catch {
     res.writeHead(500);
     res.end('Internal error');

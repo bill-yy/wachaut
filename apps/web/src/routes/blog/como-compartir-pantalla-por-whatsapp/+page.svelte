@@ -94,6 +94,6 @@
 	</div>
 
 	<p class="pt-2 text-sm text-[var(--text-subtle)]">
-		¿Buscas más opciones? En <a href="/blog/compartir-pantalla-online-gratis/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">compartir pantalla online gratis</a> comparamos las alternativas. Y si dudas de qué hacemos con tus datos, lee cómo gestionamos <a href="/privacidad/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">privacidad</a>.
+		¿Buscas más opciones? Si vienes de Discord, mira las <a href="/blog/alternativas-a-discord-para-compartir-pantalla/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">alternativas a Discord para compartir pantalla</a>; y en <a href="/blog/compartir-pantalla-online-gratis/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">compartir pantalla online gratis</a> comparamos todas las herramientas. Y si dudas de qué hacemos con tus datos, lee cómo gestionamos <a href="/privacidad/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">privacidad</a>.
 	</p>
 </ArticleLayout>

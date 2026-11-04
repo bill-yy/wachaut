@@ -27,7 +27,7 @@
 	];
 </script>
 
-<ArticleLayout locale="en" pathEs="/blog/compartir-pantalla-online-gratis" pathEn="/blog/free-online-screen-sharing" title="Free online screen sharing: which tool to use (2026 comparison)" description="Honest comparison of free screen sharing tools (Wachaut, Zoom, Meet, Discord, AnyDesk): sign-up, installs, limits and when to use each one." h1="Free online screen sharing: which tool should you pick?" {date} faqs={faqs}>
+<ArticleLayout locale="en" pathEs="/blog/compartir-pantalla-online-gratis" pathEn="/en/blog/free-online-screen-sharing" title="Free online screen sharing: which tool to use (2026 comparison)" description="Honest comparison of free screen sharing tools (Wachaut, Zoom, Meet, Discord, AnyDesk): sign-up, installs, limits and when to use each one." h1="Free online screen sharing: which tool should you pick?" {date} faqs={faqs}>
 	<p class="text-[var(--text-muted)] leading-relaxed">
 		There are more ways than ever to share a screen — and at the same time, more limits than ever on the "free" versions. The right tool depends on three questions: <strong class="text-[var(--text)]">will they make you sign up?, does anything need installing?, how many people will connect?</strong> Here's the comparison with real usage in mind, no marketing.
 	</p>
@@ -119,6 +119,6 @@
 	</div>
 
 	<p class="pt-2 text-sm text-[var(--text-subtle)]">
-		See also: <a href="/en/blog/how-to-share-your-screen-on-whatsapp/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">how to share your screen on WhatsApp</a>.
+		See also: <a href="/en/blog/how-to-share-your-screen-on-whatsapp/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">how to share your screen on WhatsApp</a> and <a href="/en/blog/discord-alternatives-for-screen-sharing/" class="text-[var(--brand)] underline decoration-[var(--brand)]/40 underline-offset-2">Discord alternatives for screen sharing</a>.
 	</p>
 </ArticleLayout>
