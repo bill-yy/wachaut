@@ -170,7 +170,7 @@
 			<a
 				href={otherHref}
 				class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] px-3.5 text-xs font-bold text-[var(--text-muted)] transition-colors hover:border-[var(--brand)]/50 hover:text-[var(--brand)]"
-				aria-label={locale === 'es' ? 'Switch to English' : 'Cambiar a español'}
+				aria-label={locale === 'es' ? `${otherLabel} — Switch to English` : `${otherLabel} — Cambiar a español`}
 				translate="no"
 			>
 				{otherLabel}
@@ -319,14 +319,20 @@
 		<!-- Step dots -->
 		<div class="mb-6 flex justify-center gap-2">
 			{#each onboardingSteps as _, i (i)}
+				<!-- 24×24 hitbox; the visible dot lives on the inner span (target-size). -->
 				<button
-					class="h-2 rounded-full transition-[width,background-color] duration-300 {i === onboardingStep
-						? 'w-8 gradient-brand'
-						: 'w-2 bg-[var(--border)]'}"
+					class="flex h-6 min-w-6 items-center justify-center rounded-full"
 					aria-label="{L['landing.onboardingStep']} {i + 1} {L['landing.onboardingOf']} {onboardingSteps.length}{i === onboardingStep ? ` (${L['landing.onboardingCurrent']})` : ''}"
 					aria-current={i === onboardingStep ? 'step' : undefined}
 					onclick={() => (onboardingStep = i)}
-				></button>
+				>
+					<span
+						aria-hidden="true"
+						class="block h-2 rounded-full transition-[width,background-color] duration-300 {i === onboardingStep
+							? 'w-8 gradient-brand'
+							: 'w-2 bg-[var(--border)]'}"
+					></span>
+				</button>
 			{/each}
 		</div>
 

@@ -33,6 +33,13 @@ const PAGES = [
     changefreq: 'monthly',
     lastmod: '2026-10-15',
   },
+  {
+    es: '/blog/alternativas-a-discord-para-compartir-pantalla/',
+    en: '/en/blog/discord-alternatives-for-screen-sharing/',
+    priority: 0.8,
+    changefreq: 'monthly',
+    lastmod: '2026-11-04',
+  },
 ];
 
 function urlEntry({ es, en, priority, changefreq, lastmod }) {

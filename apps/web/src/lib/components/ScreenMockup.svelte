@@ -74,7 +74,7 @@
 
 					<!-- Floating video controls -->
 					<div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-black/60 px-3 py-2 backdrop-blur-md">
-						<button type="button" tabindex="-1" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger)] text-white" aria-label={L['mockup.stopShort']}>
+						<button type="button" tabindex="-1" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--danger-strong)] text-white" aria-label={L['mockup.stopShort']}>
 							<StopCircle class="h-4 w-4" />
 						</button>
 						<button type="button" tabindex="-1" class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text)]" aria-label={L['mockup.fullscreen']}>
@@ -105,7 +105,7 @@
 				</div>
 
 				<!-- Main action -->
-				<button type="button" tabindex="-1" class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger)] py-2.5 text-xs font-semibold text-white transition-all" aria-label={L['mockup.stop']}>
+				<button type="button" tabindex="-1" class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--danger-strong)] py-2.5 text-xs font-semibold text-white transition-all" aria-label={L['mockup.stop']}>
 					<StopCircle class="h-4 w-4" /> {L['mockup.stop']}
 				</button>
 
@@ -124,9 +124,9 @@
 							</div>
 						</div>
 						<div class="flex gap-2">
-							<div class="h-5 w-5 shrink-0 rounded-full bg-[var(--color-blue-600)]"></div>
+							<div class="h-5 w-5 shrink-0 rounded-full bg-[var(--color-blue-500)]"></div>
 							<div>
-								<p class="text-[9px] font-medium text-[var(--color-blue-600)]">Luis</p>
+								<p class="text-[9px] font-medium text-[var(--color-blue-500)]">Luis</p>
 								<p class="text-[10px] text-[var(--text-muted)]">{L['mockup.zoom']}</p>
 							</div>
 						</div>

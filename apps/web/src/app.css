@@ -136,6 +136,9 @@
   --success: #4ade80;
   --warning: #ffb300;
   --danger: #f87171;
+  /* Filled danger surfaces carrying white text/icons: #f87171 fails AA
+     contrast (2.8:1); this red keeps the identity at 4.8:1. */
+  --danger-strong: #dc2626;
   color-scheme: dark;
 }
 

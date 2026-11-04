@@ -144,7 +144,7 @@
 	<!-- Top-left overlays -->
 	<div class="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2" style="top: max(0.75rem, env(safe-area-inset-top));">
 		<!-- LIVE badge: custom, matches HostHeader style -->
-		<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger)]/90 px-2.5 py-1 text-xs font-bold text-white max-md:backdrop-blur-none md:backdrop-blur-sm">
+		<span class="flex items-center gap-1.5 rounded-full bg-[var(--danger-strong)]/90 px-2.5 py-1 text-xs font-bold text-white max-md:backdrop-blur-none md:backdrop-blur-sm">
 			<span class="relative flex h-1.5 w-1.5" aria-hidden="true">
 				<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
 				<span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-white"></span>

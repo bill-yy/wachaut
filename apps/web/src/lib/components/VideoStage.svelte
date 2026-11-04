@@ -145,7 +145,7 @@
 			{#if recording}
 				<button
 					onclick={onStopRecording}
-					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger)]/90 px-3 transition-[background-color,transform] hover:bg-[var(--danger)] active:scale-95"
+					class="flex h-11 items-center gap-2 rounded-xl bg-[var(--danger-strong)]/90 px-3 transition-[background-color,transform] hover:bg-[var(--danger-strong)] active:scale-95"
 					title={t('room.stopRecording')}
 					aria-label={t('room.stopRecording')}
 				>
@@ -167,7 +167,7 @@
 
 			<button
 				onclick={onStopSharing}
-				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger)]/90 transition-[background-color,transform] hover:bg-[var(--danger)] active:scale-95"
+				class="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--danger-strong)]/90 transition-[background-color,transform] hover:bg-[var(--danger-strong)] active:scale-95"
 				title={t('room.stopSharing')}
 				aria-label={t('room.stopSharing')}
 			>
