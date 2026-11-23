@@ -381,6 +381,33 @@ export function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ha, hb);
 }
 
+export type HostClaim = 'reclaim' | 'invalid-secret' | 'room-exists';
+
+/**
+ * Decide what a host join on an EXISTING room means. Pure (exported for
+ * unit tests) — the caller applies it.
+ *
+ * The host secret is the only authority to take the host slot: it is handed
+ * solely to the socket that created the room. It counts whether or not the
+ * previous host socket has been reaped yet. A host whose network path
+ * changed (Wi-Fi handoff, VPN, sleep/wake) reconnects seconds BEFORE the
+ * server's ping timeout declares the old socket dead; demanding an armed
+ * grace timer there answered the real host "Room already exists" and the
+ * room was closed 30s later with the viewers in it (prod SFU log, 2026-11-21
+ * 10:15 and 11:05).
+ */
+export function resolveHostClaim(
+  room: { hostSecret: string; hostDisconnectTimer?: unknown },
+  hostSecret: unknown
+): HostClaim {
+  const presented = typeof hostSecret === 'string' && hostSecret.length > 0;
+  if (presented && safeEqual(hostSecret, room.hostSecret)) return 'reclaim';
+  // Within the grace window a secret-less join is a reclaim that failed to
+  // prove ownership; on a live room it is simply not the host.
+  if (room.hostDisconnectTimer || presented) return 'invalid-secret';
+  return 'room-exists';
+}
+
 // Failed-join limiter: after 5 failed PIN / host-secret attempts within 5
 // minutes an IP is rejected outright, mirroring the signaling server's join
 // limiter. Only failures count — successful joins don't accumulate.
@@ -432,25 +459,33 @@ io.on('connection', (socket) => {
       let hostReclaiming = false;
       if (role === 'host') {
         if (room) {
-          // Host reconnecting within the grace period: rebind to the new socket.
           // The claimant must present the host secret handed only to the
           // creator — otherwise any viewer (who knows roomId+PIN) could
-          // hijack the host slot and its live producers.
-          if (room.hostDisconnectTimer) {
-            if (!hostSecret || !safeEqual(String(hostSecret), room.hostSecret)) {
-              recordJoinFail(joinFails, clientIp, Date.now());
-              callback?.({ error: 'Invalid host secret' });
-              return;
-            }
-            clearTimeout(room.hostDisconnectTimer);
-            room.hostDisconnectTimer = undefined;
-            room.hostSocketId = socket.id;
-            hostReclaiming = true;
-            console.log(`[sfu] Host reconnected to room ${roomId}, grace timer cancelled`);
-          } else {
-            callback?.({ error: 'Room already exists' });
+          // hijack the host slot and its live producers. Valid even when the
+          // previous host socket is not reaped yet (see resolveHostClaim).
+          const claim = resolveHostClaim(room, hostSecret);
+          if (claim !== 'reclaim') {
+            // Only a failed proof of ownership counts against the IP: a
+            // secret-less join on a live room is just "not the host", and
+            // the real host's own retries must never lock the IP out.
+            if (claim === 'invalid-secret') recordJoinFail(joinFails, clientIp, Date.now());
+            console.warn(`[sfu] join-room rejected: ${claim === 'invalid-secret' ? 'invalid host secret' : 'room already exists'} (${roomId})`);
+            callback?.({ error: claim === 'invalid-secret' ? 'Invalid host secret' : 'Room already exists' });
             return;
           }
+          const graceArmed = !!room.hostDisconnectTimer;
+          if (graceArmed) {
+            clearTimeout(room.hostDisconnectTimer);
+            room.hostDisconnectTimer = undefined;
+          }
+          // Rebind the room to the new socket. The previous one is either
+          // dead (grace timer was armed) or not reaped yet — its peer is
+          // stale in both cases, since the reclaiming client re-produces on
+          // a transport of its own.
+          retireHostPeer(room, room.hostSocketId);
+          room.hostSocketId = socket.id;
+          hostReclaiming = true;
+          console.log(`[sfu] Host reconnected to room ${roomId}${graceArmed ? ', grace timer cancelled' : ' (previous socket not reaped yet)'}`);
         } else {
           // Enforce hard limits before creating a new room.
           if (rooms.size >= MAX_ROOMS) {
@@ -498,57 +533,25 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // On host reclaim, rebind the existing peer (with its live producers and
-      // transports) to the new socket instead of creating an empty one. This
-      // is what makes the reclaim seamless: the producers never died, so
-      // viewers' consumers keep flowing.
-      if (hostReclaiming) {
-        // Find the existing host peer (keyed by the OLD socket.id, which no
-        // longer has a socket lookup entry — see the disconnect handler).
-        let existingHostPeer: Peer | undefined;
-        for (const [, p] of room.peers) {
-          if (p.role === 'host') { existingHostPeer = p; break; }
-        }
-        if (existingHostPeer) {
-          // Re-key the peer in room.peers under the new socket.id and update
-          // its id/socketId so subsequent handler lookups work.
-          for (const [key, p] of room.peers) {
-            if (p === existingHostPeer) room.peers.delete(key);
-          }
-          existingHostPeer.id = socket.id;
-          existingHostPeer.socketId = socket.id;
-          room.peers.set(socket.id, existingHostPeer);
-          socketToRoom.set(socket.id, roomId);
-          socketToPeer.set(socket.id, existingHostPeer);
-          socket.join(roomId);
-          room.lastActivityAt = new Date();
-          console.log(`[sfu] Host peer rebound to new socket ${socket.id}, producers preserved: ${existingHostPeer.producers.length}`);
-        } else {
-          // No existing peer to rebind (e.g. server restarted) — fall through
-          // to the create-peer branch so the host can re-produce.
-          hostReclaiming = false;
-        }
-      }
+      // Create the peer. A reclaiming host gets a fresh one too: its previous
+      // peer was retired above, and the client re-produces on a transport of
+      // its own after every reconnect (nothing relies on the old producers).
+      const peer: Peer = {
+        id: socket.id,
+        socketId: socket.id,
+        displayName,
+        role,
+        roomId,
+        producers: [],
+        consumers: new Map(),
+      };
 
-      if (!hostReclaiming) {
-        // Create peer (normal first-join path for host or viewer)
-        const peer: Peer = {
-          id: socket.id,
-          socketId: socket.id,
-          displayName,
-          role,
-          roomId,
-          producers: [],
-          consumers: new Map(),
-        };
+      room.peers.set(socket.id, peer);
+      room.lastActivityAt = new Date();
+      socketToRoom.set(socket.id, roomId);
+      socketToPeer.set(socket.id, peer);
 
-        room.peers.set(socket.id, peer);
-        room.lastActivityAt = new Date();
-        socketToRoom.set(socket.id, roomId);
-        socketToPeer.set(socket.id, peer);
-
-        socket.join(roomId);
-      }
+      socket.join(roomId);
 
       // Collect ALL existing producers for the new peer
       const existingProducers: Array<{ producerId: string; kind: string; peerId: string }> = [];
@@ -874,7 +877,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Disconnect ─────────────────────────────────────────────────────
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason: string) => {
     const roomId = socketToRoom.get(socket.id);
     const peer = socketToPeer.get(socket.id);
 
@@ -901,7 +904,10 @@ io.on('connection', (socket) => {
       // lost. The socket→peer/socket→room maps are cleared (the old socket.id
       // is dead) but the Peer entry stays in room.peers so closeRoom() can
       // still clean it up if the grace timer fires.
-      console.log(`[sfu] Host disconnected from ${roomId}, starting ${HOST_RECONNECT_GRACE_MS}ms grace timer`);
+      // The reason tells a deliberate teardown (client namespace disconnect:
+      // the host left or reloaded) from a network drop (transport close /
+      // ping timeout) — the room closes the same way either way.
+      console.log(`[sfu] Host disconnected from ${roomId} (${reason}), starting ${HOST_RECONNECT_GRACE_MS}ms grace timer`);
       socketToRoom.delete(socket.id);
       socketToPeer.delete(socket.id);
       // Notify viewers so they enter the "reconnecting" state. (Their consumer
@@ -911,6 +917,11 @@ io.on('connection', (socket) => {
       room.hostDisconnectTimer = setTimeout(() => {
         const currentRoom = rooms.get(roomId);
         if (currentRoom) {
+          // Tell whoever is still in the room. The signaling server normally
+          // does, but its copy of the room can outlive this one (host
+          // reclaimed there while this socket stayed dead) — then nobody
+          // would tell the viewers and they'd sit on a dead stream.
+          io.to(roomId).emit('room:closed');
           closeRoom(currentRoom);
           console.log(`[sfu] Room ${roomId} closed (host did not reconnect)`);
         }
@@ -919,19 +930,7 @@ io.on('connection', (socket) => {
     }
 
     // ── Viewer disconnect: full teardown as before ──────────────────────
-    for (const producer of peer.producers) {
-      for (const [, p] of room.peers) {
-        for (const [cId, consumer] of p.consumers) {
-          if (consumer.producerId === producer.id) {
-            consumer.close();
-            p.consumers.delete(cId);
-          }
-        }
-      }
-      producer.close();
-    }
-    peer.sendTransport?.close();
-    peer.recvTransport?.close();
+    teardownPeerMedia(room, peer);
     room.peers.delete(socket.id);
     socket.to(roomId).emit('peer-left', { peerId: socket.id, displayName: peer.displayName });
     room.lastActivityAt = new Date();
@@ -943,15 +942,58 @@ io.on('connection', (socket) => {
 
 /** Tear down a room completely: close all peers' resources + router, delete it. */
 function closeRoom(room: Room): void {
-  for (const [, p] of room.peers) {
-    p.sendTransport?.close();
-    p.recvTransport?.close();
-    for (const prod of p.producers) prod.close();
-    for (const [, c] of p.consumers) c.close();
-  }
+  for (const [, p] of room.peers) teardownPeerMedia(room, p);
   if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
   room.router.close();
   rooms.delete(room.id);
+}
+
+/**
+ * Close a peer's media: every consumer the room built from its producers,
+ * then its producers, transports and own consumers. Idempotent (mediasoup's
+ * close() is a no-op on an already-closed object).
+ */
+function teardownPeerMedia(room: Room, peer: Peer): void {
+  for (const producer of peer.producers) {
+    for (const [, p] of room.peers) {
+      for (const [consumerId, consumer] of p.consumers) {
+        if (consumer.producerId === producer.id) {
+          consumer.close();
+          p.consumers.delete(consumerId);
+        }
+      }
+    }
+    producer.close();
+  }
+  peer.producers.length = 0;
+  peer.sendTransport?.close();
+  peer.recvTransport?.close();
+  for (const [, consumer] of peer.consumers) consumer.close();
+  peer.consumers.clear();
+}
+
+/**
+ * Retire a room's previous host registration on a host reclaim: the old
+ * socket (dead, or not reaped yet) must not act on the room anymore, and
+ * its peer is stale — the reclaiming client re-produces on a transport of
+ * its own, so keeping the old producers would leave viewers with dead
+ * consumers next to the new ones.
+ */
+function retireHostPeer(room: Room, socketId: string): void {
+  socketToRoom.delete(socketId);
+  socketToPeer.delete(socketId);
+  let peer = room.peers.get(socketId);
+  if (!peer) {
+    // The peer may be keyed under a different socket than the room records.
+    for (const [, p] of room.peers) {
+      if (p.role === 'host') { peer = p; break; }
+    }
+  }
+  if (!peer) return;
+  for (const [key, p] of room.peers) {
+    if (p === peer) room.peers.delete(key);
+  }
+  teardownPeerMedia(room, peer);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────

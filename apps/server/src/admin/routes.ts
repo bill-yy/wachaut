@@ -310,7 +310,10 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       return reply.code(404).send({ error: 'Room not found' });
     }
     if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
-    state.io.to(id).emit('room:closed');
+    // `reason` lets the host page tell moderation apart from a server
+    // shutdown (where it reconnects and re-creates the room on purpose):
+    // on an admin close it must leave instead of resurrecting the room.
+    state.io.to(id).emit('room:closed', { reason: 'admin' });
     state.rooms.delete(id);
     state.hostToRoom.delete(room.hostId);
     for (const [viewerId] of room.viewers) {

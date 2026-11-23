@@ -9,6 +9,9 @@ import {
   shouldArmDisconnectWatchdog,
   clearsDisconnectWatchdog,
   DISCONNECT_RESTART_MS,
+  HOST_REJOIN_RETRY_DELAYS_MS,
+  rejoinDelayForAttempt,
+  isTransientRejoinError,
 } from '../src/lib/reconnect-strategy.ts';
 
 // ─── Backoff schedule ─────────────────────────────────────────────────
@@ -79,4 +82,42 @@ test('DISCONNECT_RESTART_MS is between 5s and 30s (sweet spot for transient blip
   // for ages before recovery. 10s is the chosen balance.
   assert.ok(DISCONNECT_RESTART_MS >= 5000, 'must be >= 5s');
   assert.ok(DISCONNECT_RESTART_MS <= 30000, 'must be <= 30s');
+});
+
+// ─── Host SFU re-join ─────────────────────────────────────────────────
+
+test('rejoinDelayForAttempt: the documented backoff schedule', () => {
+  assert.deepEqual(HOST_REJOIN_RETRY_DELAYS_MS, [1000, 2000, 4000, 8000, 16000, 30000]);
+  assert.equal(rejoinDelayForAttempt(0), 1000);
+  assert.equal(rejoinDelayForAttempt(5), 30000);
+});
+
+test('rejoinDelayForAttempt: null once the schedule is exhausted (give up and report)', () => {
+  const last = HOST_REJOIN_RETRY_DELAYS_MS.length - 1;
+  assert.notEqual(rejoinDelayForAttempt(last), null);
+  assert.equal(rejoinDelayForAttempt(last + 1), null);
+  assert.equal(rejoinDelayForAttempt(-1), null);
+});
+
+test('Host re-join regression (prod SFU log 2026-11-21): retries outlast the ping timeout and reach into the grace window', () => {
+  // Mirrors the SFU's Socket.IO settings and HOST_RECONNECT_GRACE_MS: the
+  // previous host socket is declared dead up to pingInterval + pingTimeout
+  // after the network changed, and the room then stays reclaimable for the
+  // grace period. Retrying only inside the first window gives up too soon;
+  // a schedule longer than both would retry into a closed room.
+  const PING_INTERVAL_MS = 25_000;
+  const PING_TIMEOUT_MS = 20_000;
+  const HOST_GRACE_MS = 30_000;
+  const lastRetryAt = HOST_REJOIN_RETRY_DELAYS_MS.reduce((sum, d) => sum + d, 0);
+  assert.ok(lastRetryAt > PING_INTERVAL_MS + PING_TIMEOUT_MS, 'must still be retrying when the old socket is reaped');
+  assert.ok(lastRetryAt < PING_INTERVAL_MS + PING_TIMEOUT_MS + HOST_GRACE_MS, 'must land a retry inside the grace window');
+});
+
+test('isTransientRejoinError: only "Room already exists" is retried', () => {
+  assert.equal(isTransientRejoinError('Room already exists'), true);
+  // Permanent refusals must surface at once, not burn a minute on retries.
+  assert.equal(isTransientRejoinError('Invalid host secret'), false);
+  assert.equal(isTransientRejoinError('Room not found'), false);
+  assert.equal(isTransientRejoinError('Room is full'), false);
+  assert.equal(isTransientRejoinError('Too many attempts, try again later'), false);
 });

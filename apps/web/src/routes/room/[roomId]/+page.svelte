@@ -450,15 +450,9 @@
 			roomTitle = data?.title || '';
 		});
 
+		// From the signaling server. The SFU says so too (see connectSfu).
 		socket.on('room:closed', () => {
-			if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
-			// The broadcast ended — dedicated screen with a rating prompt
-			// instead of the generic error state.
-			status = 'ended';
-			errorMessage = '';
-			sfuClient?.disconnect();
-			sfuClient = null;
-			stopStatsPolling();
+			endBroadcast();
 		});
 
 		socket.on('disconnect', () => {
@@ -471,6 +465,17 @@
 				scheduleReconnect();
 			}
 		});
+	}
+
+	/** The broadcast is over: dedicated screen with a rating prompt instead of the generic error state. */
+	function endBroadcast() {
+		cleanupReconnect();
+		if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
+		status = 'ended';
+		errorMessage = '';
+		sfuClient?.disconnect();
+		sfuClient = null;
+		stopStatsPolling();
 	}
 
 	function disconnect() {
@@ -633,6 +638,14 @@
 				if (data && data.spatialLayer !== undefined && data.spatialLayer !== null) {
 					activeLayers = { spatial: data.spatialLayer, temporal: data.temporalLayer ?? null };
 				}
+			});
+
+			// The SFU closed the room (host gone past its grace window). The
+			// signaling server usually says so too, but not when its copy of
+			// the room was reclaimed meanwhile — then the viewer would sit on
+			// a dead stream in "live" state with nobody telling them.
+			sfuClient.on('room-closed', () => {
+				endBroadcast();
 			});
 
 			sfuClient.on('error', (msg: string) => {

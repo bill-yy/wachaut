@@ -186,6 +186,15 @@
   let copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
   let loadingTimeout: ReturnType<typeof setTimeout> | null = null;
   let cleanedUp = false;
+  // Set while WE close the room (leave / unload), so the server's
+  // room:closed echo doesn't run the "closed by an admin" path.
+  let closingRoom = false;
+  /** Tell the server the broadcast is over while the socket can still send. */
+  function closeRoomFromServer() {
+    if (!socket) return;
+    closingRoom = true;
+    if (socket.connected) socket.emit('host:close-room', { roomId });
+  }
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
@@ -199,10 +208,8 @@
       sfuClient.disconnect();
       sfuClient = null;
     }
-    if (socket) {
-      socket.emit('host:close-room', { roomId });
-      socket.disconnect();
-    }
+    closeRoomFromServer();
+    if (socket) socket.disconnect();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -312,8 +319,14 @@
   let showViewersPanel = $state(false);
 
   // Room info — try to reclaim a previous session (host refresh survival).
+  // Two host secrets travel with it: the signaling server's (reclaims the
+  // room) and the SFU's (reclaims the host slot of a room in its grace
+  // window). The SFU one used to live only in the SfuClient's memory, so a
+  // refresh lost it, the SFU answered "Invalid host secret" and the refreshed
+  // page could never share again.
   const HOST_SESSION_KEY = 'wachaut.host.session';
-  function loadHostSession(): { roomId: string; pin: string; hostSecret?: string; title?: string } | null {
+  type HostSession = { roomId: string; pin: string; hostSecret?: string; sfuHostSecret?: string; title?: string };
+  function loadHostSession(): HostSession | null {
     try {
       const raw = sessionStorage.getItem(HOST_SESSION_KEY);
       if (!raw) return null;
@@ -322,8 +335,8 @@
     } catch { /* ignore */ }
     return null;
   }
-  function saveHostSession(rid: string, p: string, secret?: string) {
-    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p, hostSecret: secret, title: roomTitle })); } catch { /* ignore */ }
+  function saveHostSession(rid: string, p: string, secret?: string, sfuSecret: string = sfuHostSecret) {
+    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId: rid, pin: p, hostSecret: secret, sfuHostSecret: sfuSecret || undefined, title: roomTitle })); } catch { /* ignore */ }
   }
   function clearHostSession() {
     try { sessionStorage.removeItem(HOST_SESSION_KEY); } catch { /* ignore */ }
@@ -334,6 +347,7 @@
   /** Public room title (shown to viewers and in share-link previews). */
   let roomTitle = $state(savedSession?.title || '');
   let hostSecret = $state(savedSession?.hostSecret || '');
+  let sfuHostSecret = $state(savedSession?.sfuHostSecret || '');
   function generatePin(): string {
     const arr = new Uint32Array(1);
     crypto.getRandomValues(arr);
@@ -481,7 +495,7 @@
       socket.emit('host:set-title', { roomId, title: roomTitle.trim() || undefined });
     }
     // keep the refresh-survival session in sync
-    try { sessionStorage.setItem(HOST_SESSION_KEY, JSON.stringify({ roomId, pin, hostSecret: hostSecret || undefined, title: roomTitle })); } catch { /* ignore */ }
+    saveHostSession(roomId, pin, hostSecret || undefined);
   }
 
   function addSystemMessage(text: string) {
@@ -571,7 +585,12 @@
           if (!sfuClient) {
             const sfuUrl = import.meta.env.VITE_SFU_URL || 'wss://sfu-wachaut.billytech.es';
             sfuClient = new SfuClient(sfuUrl);
-            sfuClient.on('error', (msg: string) => devlog('[sfu]', msg));
+            // A re-join the SFU refused for good. This was a dev-only log: in
+            // production the page looked healthy while no media could flow.
+            sfuClient.on('error', (msg: string) => {
+              console.error('[sfu]', msg);
+              if (isSharing) toast.error(t('room.sfuRejoinFail'));
+            });
             sfuClient.on('peer-joined', (d: any) => devlog('[sfu] peer-joined:', d));
             sfuClient.on('peer-left', (d: any) => devlog('[sfu] peer-left:', d));
             // After an SFU socket reconnect, the host's old producers may be
@@ -591,14 +610,60 @@
                   });
               }
             });
-            sfuClient.joinRoom(roomId, pin, SENDER_HOST, 'host')
-              .then(() => devlog('[sfu] joined room'))
-              .catch((err: unknown) => devlog('[sfu] join failed:', err));
+            // Keep the stored SFU secret current: after a refresh the page
+            // can only reclaim the host slot with the one the SFU holds now.
+            sfuClient.on('host-secret', (secret: string) => {
+              sfuHostSecret = secret;
+              saveHostSession(roomId, pin, hostSecret || undefined);
+            });
+            // The SFU's secret comes back on the first join only, so hand
+            // over the stored one: after a refresh the room is still in its
+            // grace window and only its creator may reclaim the host slot.
+            const client = sfuClient;
+            client.joinRoom(roomId, pin, SENDER_HOST, 'host', sfuHostSecret || undefined)
+              .then(() => {
+                devlog('[sfu] joined room');
+                // The page may have been left while the join was in flight.
+                if (sfuClient !== client) return;
+                saveHostSession(roomId, pin, hostSecret || undefined);
+              })
+              .catch((err: unknown) => {
+                // Nothing on this page can share until the SFU lets us in.
+                if (sfuClient !== client) return;
+                console.error('[sfu] join failed:', err);
+                captureClientError(err, { component: 'host.joinSfu', roomId });
+                const message = t('room.sfuJoinFail');
+                error = message;
+                setTimeout(() => { if (error === message) error = ''; }, 8000);
+              });
           }
         }
         loading = false; // Room is ready — no artificial delay
         saveHostSession(roomId, pin, hostSecret || undefined);
       });
+    });
+
+    // Closed by an admin from the panel. The page used to ignore this: it
+    // kept "sharing" into a deleted room and resurrected the same id on the
+    // next connect or reload, so a moderator had to close the room twice
+    // (prod log, 2026-11-21 21:35). Other `room:closed` sources (a server
+    // shutdown, the idle reap) carry no reason and keep the old behaviour:
+    // reconnect and re-create the room so the shareable link stays valid.
+    socket.on('room:closed', (data: any) => {
+      if (closingRoom || data?.reason !== 'admin') return;
+      closingRoom = true;
+      stopSharing();
+      clearHostSession();
+      connected = false;
+      if (sfuClient) {
+        sfuClient.disconnect();
+        sfuClient = null;
+      }
+      if (socket) socket.disconnect();
+      showLeaveModal = false;
+      showRating = false;
+      toast.info(t('room.closedByAdmin'));
+      goto('/');
     });
 
     socket.on('disconnect', () => {
@@ -894,6 +959,9 @@
   function leaveRoom() {
     stopSharing();
     clearHostSession();
+    // Say goodbye while the socket can still send: viewers are told at once
+    // instead of waiting out the 30s host-reconnect grace.
+    closeRoomFromServer();
     if (socket) socket.disconnect();
     if (roomId && !hasRated(roomId)) {
       showRating = true; // finishLeave() runs on submit/skip

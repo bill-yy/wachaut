@@ -192,6 +192,9 @@ const es = {
 	'room.inviteCopied': '¡Invitación copiada!',
 	'room.copyFail': 'No se pudo copiar al portapapeles',
 	'room.connError': 'Error de conexión',
+	'room.sfuJoinFail': 'No se pudo conectar con el servidor de vídeo. Vuelve a cargar la página en unos segundos.',
+	'room.sfuRejoinFail': 'No se pudo reanudar la retransmisión. Vuelve a compartir la pantalla.',
+	'room.closedByAdmin': 'La sala ha sido cerrada por un administrador.',
 
 	// ── Sala host: componentes ───────────────────────────────────────
 	'room.titlePlaceholder': 'Título de la sala (opcional)',
@@ -613,6 +616,9 @@ const en: Dict = {
 	'room.inviteCopied': 'Invite copied!',
 	'room.copyFail': 'Could not copy to clipboard',
 	'room.connError': 'Connection error',
+	'room.sfuJoinFail': 'Could not reach the video server. Reload the page in a few seconds.',
+	'room.sfuRejoinFail': 'Could not resume the broadcast. Share your screen again.',
+	'room.closedByAdmin': 'The room was closed by an administrator.',
 
 	// ── Host room: components ───────────────────────────────────────
 	'room.titlePlaceholder': 'Room title (optional)',

@@ -55,3 +55,30 @@ export function clearsDisconnectWatchdog(iceConnectionState: string): boolean {
     iceConnectionState,
   );
 }
+
+// ─── Host SFU re-join ───────────────────────────────────────────────────
+
+/**
+ * Backoff for a host re-join the SFU answers with "Room already exists".
+ *
+ * That answer means the SFU still holds the previous host socket: its death
+ * is only detected by ping timeout (up to pingInterval + pingTimeout ≈ 45s
+ * after the network changed), while the client reconnects within seconds.
+ * The schedule must reach past that lag and into the 30s grace window that
+ * follows it, so the re-join lands once the room is reclaimable instead of
+ * the page sitting on a socket that is in no room (61s of retries here).
+ */
+export const HOST_REJOIN_RETRY_DELAYS_MS = [
+  1000, 2000, 4000, 8000, 16000, 30000,
+];
+
+/** True for the SFU re-join error that is worth retrying. */
+export function isTransientRejoinError(message: string): boolean {
+  return message === "Room already exists";
+}
+
+/** Delay before the next re-join attempt, or null once the schedule is exhausted. */
+export function rejoinDelayForAttempt(attempt: number): number | null {
+  if (attempt < 0 || attempt >= HOST_REJOIN_RETRY_DELAYS_MS.length) return null;
+  return HOST_REJOIN_RETRY_DELAYS_MS[attempt];
+}

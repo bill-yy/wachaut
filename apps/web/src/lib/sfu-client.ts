@@ -9,6 +9,7 @@
 import { io, type Socket } from "socket.io-client";
 import { devlog, devwarn } from "./utils/devlog";
 import { captureClientError } from "./error-report";
+import { isTransientRejoinError, rejoinDelayForAttempt } from "./reconnect-strategy";
 
 // Lazy-loaded mediasoup-client module (assigned on first use).
 let mediasoupModule: typeof import("mediasoup-client") | null = null;
@@ -22,8 +23,14 @@ export class SfuClient {
   #audioProducer: any = null;
   #consumers: Map<string, any> = new Map();
   #url: string;
-  /** SFU host-claim secret (received on room creation, re-sent on reconnect). */
+  /**
+   * SFU host-claim secret: received on room creation, or restored by the
+   * caller after a page refresh. Re-sent on every reconnect — without it the
+   * SFU refuses to hand back the host slot of a room in its grace window.
+   */
   #hostSecret = "";
+  /** Pending deferred re-join (see HOST_REJOIN_RETRY_DELAYS_MS). */
+  #rejoinTimer: ReturnType<typeof setTimeout> | null = null;
   #listeners: Map<string, Function[]> = new Map();
   #rtpCapabilities: any = null;
   #pendingConsumers: Array<any> = [];
@@ -107,21 +114,30 @@ export class SfuClient {
     });
   }
 
+  /**
+   * Join a room. `hostSecret` is the SFU host-claim secret restored by the
+   * caller (page refresh): it proves this is the room's host from the very
+   * first join, so a room still in its grace window is reclaimed instead of
+   * refused ("Invalid host secret" — which left the host unable to share).
+   */
   async joinRoom(
     roomId: string,
     pin: string,
     displayName: string,
     role: "host" | "viewer",
+    hostSecret?: string,
   ): Promise<{ rtpCapabilities: any; peers: any[] }> {
     return new Promise((resolve, reject) => {
       this.#socket = io(this.#url, {
         transports: ["websocket"],
       });
+      if (hostSecret) this.#hostSecret = hostSecret;
       // Stash params so we can re-emit join-room on every reconnect (Socket.IO
       // auto-reconnect fires `connect` again, but the original promise is
       // already settled — we still need the SFU to re-add us to the room).
       this.#joinParams = { roomId, pin, displayName, role };
       let firstJoin = true;
+      let rejoinAttempt = 0;
 
       const sendJoin = () => {
         if (!this.#socket || !this.#joinParams) return;
@@ -134,12 +150,41 @@ export class SfuClient {
           { roomId, pin, displayName, role, hostSecret: this.#hostSecret || undefined },
           async (response: any) => {
             if (response.error) {
-              if (firstJoin) reject(new Error(response.error));
-              else this.#emit("error", `Re-join failed: ${response.error}`);
+              if (firstJoin) {
+                reject(new Error(response.error));
+                return;
+              }
+              // The socket is back but the SFU refused the re-join. "Room
+              // already exists" is transient: the SFU still holds the
+              // previous host socket (ping timeout lags a network change), so
+              // retry on the backoff schedule instead of giving up.
+              if (isTransientRejoinError(response.error) && this.#socket?.connected) {
+                const delay = rejoinDelayForAttempt(rejoinAttempt);
+                if (delay !== null) {
+                  rejoinAttempt++;
+                  devwarn(`[sfu] re-join deferred ${delay}ms: ${response.error}`);
+                  if (this.#rejoinTimer) clearTimeout(this.#rejoinTimer);
+                  this.#rejoinTimer = setTimeout(() => {
+                    if (this.#socket?.connected) sendJoin();
+                  }, delay);
+                  return;
+                }
+              }
+              // Final refusal. Reported and surfaced: this used to be a bare
+              // event the page only dev-logged, so a broadcast whose media
+              // was dead looked healthy to everyone — the error panel included.
+              this.#report(new Error(response.error), "rejoin");
+              this.#emit("error", `Re-join failed: ${response.error}`);
               return;
             }
+            rejoinAttempt = 0;
 
-            if (response.hostSecret) this.#hostSecret = response.hostSecret;
+            // A new room means a new secret (e.g. the previous one expired
+            // during a long outage): let the page persist the current one.
+            if (response.hostSecret) {
+              this.#hostSecret = response.hostSecret;
+              this.#emit("host-secret", this.#hostSecret);
+            }
             this.#rtpCapabilities = response.rtpCapabilities;
             // Video mode negotiated per deployment (SFU_VIDEO_MODE): the
             // produce() call below shapes its encodings accordingly.
@@ -196,12 +241,25 @@ export class SfuClient {
 
       this.#socket.on("connect", () => {
         devlog("[sfu] socket connected");
+        // A fresh connection runs its own re-join schedule.
+        if (this.#rejoinTimer) {
+          clearTimeout(this.#rejoinTimer);
+          this.#rejoinTimer = null;
+        }
+        rejoinAttempt = 0;
         sendJoin();
       });
 
       this.#socket.on("disconnect", (reason) => {
         devlog("[sfu] socket disconnected:", reason);
         this.#emit("disconnected", reason);
+      });
+
+      // The SFU closed the room (host gone past the grace window). Viewers
+      // must hear it from here too: the signaling server usually says so as
+      // well, but not when its copy of the room outlived the SFU's.
+      this.#socket.on("room:closed", () => {
+        this.#emit("room-closed");
       });
 
       this.#socket.on("peer-joined", (data) => {
@@ -665,12 +723,22 @@ export class SfuClient {
     // The viewer's quality selector targets the video consumer's layers.
     if (consumer.kind === "video") this.#videoConsumerId = consumer.id;
 
-    // Clean up when the host stops producing or the transport closes.
-    consumer.on("producerclose", () => {
-      this.#consumers.delete(consumer.id);
-      this.#stream?.removeTrack(consumer.track);
-      devlog("[sfu] Consumer closed (producerclose):", consumer.id);
-    });
+    // One live consumer per kind. A second one of the same kind means the
+    // host re-produced (it does after every reconnect) and the SFU retired
+    // the previous producer: drop that track. Nothing else will —
+    // mediasoup-client never emits `producerclose` (its Consumer only emits
+    // transportclose / trackended), so the dead track used to stay on the
+    // stream next to the new one, and a browser that renders the FIRST video
+    // track kept showing the frozen picture.
+    for (const [id, existing] of this.#consumers) {
+      if (id !== consumer.id && existing.kind === consumer.kind) {
+        this.#consumers.delete(id);
+        this.#stream?.removeTrack(existing.track);
+        devlog("[sfu] Consumer replaced:", id);
+      }
+    }
+
+    // Clean up when the transport closes.
     consumer.on("transportclose", () => {
       this.#consumers.delete(consumer.id);
       devlog("[sfu] Consumer closed (transportclose):", consumer.id);
@@ -885,6 +953,10 @@ export class SfuClient {
     if (this.#turnRefreshTimer) {
       clearInterval(this.#turnRefreshTimer);
       this.#turnRefreshTimer = null;
+    }
+    if (this.#rejoinTimer) {
+      clearTimeout(this.#rejoinTimer);
+      this.#rejoinTimer = null;
     }
     this.#joinParams = null;
     this.stopProducing();
