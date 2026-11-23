@@ -9,6 +9,7 @@
   import { goto } from '$app/navigation';
   import {
     getErrors, getErrorDetail, setErrorStatus, deleteErrorGroup, getConnections,
+    downloadDiagnosticsExport,
     type AdminErrorGroup, type AdminErrorDetail, type AdminConnections, type ErrorStatus,
   } from '$lib/admin';
   import { adminSession } from '$lib/admin-session.svelte';
@@ -19,7 +20,7 @@
   import Pill from '$lib/components/Pill.svelte';
   import Spinner from '$lib/components/Spinner.svelte';
   import { toast } from '$lib/stores/toast.svelte';
-  import { RefreshCw, Trash2, WifiOff, TrendingUp } from 'lucide-svelte';
+  import { RefreshCw, Trash2, WifiOff, TrendingUp, Download } from 'lucide-svelte';
 
   let groups = $state<AdminErrorGroup[]>([]);
   let total = $state(0);
@@ -34,6 +35,15 @@
 
   let confirmDelete = $state<AdminErrorGroup | null>(null);
   let deleteBusy = $state(false);
+
+  // Diagnostics export: one JSON file with everything, untruncated. The two
+  // optional columns are off by default — they are the only personal data
+  // the export can carry.
+  let exportOpen = $state(false);
+  let exportDays = $state<7 | 30 | 90 | 0>(30);
+  let exportVisitorIds = $state(false);
+  let exportComments = $state(false);
+  let exportBusy = $state(false);
 
   let connections = $state<AdminConnections | null>(null);
   // Range for the connection-reliability panel (API accepts 1..30).
@@ -122,6 +132,24 @@
     }
   }
 
+  async function runExport() {
+    exportBusy = true;
+    try {
+      await downloadDiagnosticsExport({
+        days: exportDays,
+        includeVisitorIds: exportVisitorIds,
+        includeComments: exportComments,
+      });
+      toast.success('Diagnóstico exportado');
+      exportOpen = false;
+    } catch (err: any) {
+      if (err.message === 'Session expired') goto('/admin');
+      else toast.error(err?.message || 'Error');
+    } finally {
+      exportBusy = false;
+    }
+  }
+
   function formatAgo(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr + 'Z').getTime();
     const mins = Math.floor(diff / 60000);
@@ -164,9 +192,15 @@
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
   <h1 class="text-lg font-bold text-[var(--text)]">Errores y conexiones</h1>
-  <Button variant="ghost" size="sm" onclick={() => void load()} aria-label="Refrescar">
-    <RefreshCw size={14} aria-hidden="true" />
-  </Button>
+  <div class="flex items-center gap-1">
+    <Button variant="secondary" size="sm" onclick={() => (exportOpen = true)}>
+      <Download size={14} aria-hidden="true" />
+      Exportar diagnóstico
+    </Button>
+    <Button variant="ghost" size="sm" onclick={() => void load()} aria-label="Refrescar">
+      <RefreshCw size={14} aria-hidden="true" />
+    </Button>
+  </div>
 </div>
 
 {#if loading}
@@ -435,4 +469,54 @@
       </div>
     </div>
   {/if}
+</Modal>
+
+<!-- Diagnostics export -->
+<Modal open={exportOpen} label="Exportar diagnóstico" title="Exportar diagnóstico" onClose={() => { if (!exportBusy) exportOpen = false; }}>
+  <div class="space-y-4">
+    <p class="text-sm leading-relaxed text-[var(--text-muted)]">
+      Un archivo JSON con lo que muestra este panel, sin truncamientos: cada grupo de errores con
+      <strong class="text-[var(--text)]">todos</strong> sus eventos, las pérdidas de conexión, la actividad de las salas,
+      el tráfico diario, las valoraciones y el estado del servidor. Pensado para pasárselo a un desarrollador o a un asistente.
+    </p>
+
+    <div>
+      <p class="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Periodo</p>
+      <div class="flex overflow-hidden rounded-lg border border-[var(--border)]" role="group" aria-label="Periodo del diagnóstico">
+        {#each [[7, '7 días'], [30, '30 días'], [90, '90 días'], [0, 'Todo']] as [value, label]}
+          <button
+            onclick={() => (exportDays = value as 7 | 30 | 90 | 0)}
+            class="px-3 py-1.5 text-xs {exportDays === value ? 'bg-[var(--brand)]/15 text-[var(--brand)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'}"
+            aria-pressed={exportDays === value}
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="space-y-2">
+      <label class="flex cursor-pointer items-start gap-2 text-xs text-[var(--text-muted)]">
+        <input type="checkbox" bind:checked={exportVisitorIds} class="mt-0.5 accent-[var(--brand)]" />
+        <span>Incluir identificadores de visitante <span class="text-[var(--text-subtle)]">(permiten seguir a una misma persona entre eventos)</span></span>
+      </label>
+      <label class="flex cursor-pointer items-start gap-2 text-xs text-[var(--text-muted)]">
+        <input type="checkbox" bind:checked={exportComments} class="mt-0.5 accent-[var(--brand)]" />
+        <span>Incluir comentarios de las valoraciones <span class="text-[var(--text-subtle)]">(texto libre que puede contener datos personales)</span></span>
+      </label>
+    </div>
+
+    <p class="text-xs leading-relaxed text-[var(--text-subtle)]">
+      Nunca incluye contraseñas ni secretos, cuentas de administración, mensajes de contacto ni direcciones IP.
+      Cada exportación queda registrada en la auditoría.
+    </p>
+
+    <div class="flex justify-end gap-2">
+      <Button variant="ghost" onclick={() => (exportOpen = false)} disabled={exportBusy}>Cancelar</Button>
+      <Button loading={exportBusy} onclick={() => void runExport()}>
+        <Download size={14} aria-hidden="true" />
+        Descargar JSON
+      </Button>
+    </div>
+  </div>
 </Modal>

@@ -215,31 +215,58 @@ export function getAnalytics(params: AnalyticsQueryParams = {}): Promise<AdminAn
 }
 
 /**
- * Download a CSV export of one analytics section. The endpoint needs the
- * Authorization header, so a plain <a href> won't do — fetch as blob and
- * trigger a browser download.
+ * Fetch a file endpoint that needs the Authorization header (a plain
+ * <a href> can't send it) and trigger the browser download.
  */
-export async function downloadAnalyticsExport(section: string, params: AnalyticsQueryParams = {}): Promise<void> {
-  const qs = new URLSearchParams({ section });
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value));
-  }
+async function downloadAuthorized(path: string, fallbackName: string, failure: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(`${API_BASE}/analytics/export?${qs}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new ApiError('No se pudo exportar el CSV', res.status, null);
+  if (!res.ok) throw new ApiError(failure, res.status, null);
   const disposition = res.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="([^"]+)"/);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = match?.[1] || `wachaut_${section}.csv`;
+  a.download = match?.[1] || fallbackName;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Download a CSV export of one analytics section. */
+export function downloadAnalyticsExport(section: string, params: AnalyticsQueryParams = {}): Promise<void> {
+  const qs = new URLSearchParams({ section });
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') qs.set(key, String(value));
+  }
+  return downloadAuthorized(`/analytics/export?${qs}`, `wachaut_${section}.csv`, 'No se pudo exportar el CSV');
+}
+
+// ── Diagnostics export ────────────────────────────────────────────────
+
+export interface DiagnosticsExportOptions {
+  /** Days back from now; 0 = everything still retained. */
+  days: number;
+  /** Visitor identifiers: lets a reader follow one visitor across events. */
+  includeVisitorIds?: boolean;
+  /** The free-text comments of feedback entries. */
+  includeComments?: boolean;
+}
+
+/**
+ * Download the diagnostics bundle (JSON): every error group with all its
+ * events, connection drops, room activity, traffic, feedback and the
+ * server's state — untruncated, unlike the panel's views.
+ */
+export function downloadDiagnosticsExport(opts: DiagnosticsExportOptions): Promise<void> {
+  const qs = new URLSearchParams({ days: String(opts.days) });
+  if (opts.includeVisitorIds) qs.set('visitors', 'true');
+  if (opts.includeComments) qs.set('comments', 'true');
+  return downloadAuthorized(`/export?${qs}`, 'wachaut-diagnostico.json', 'No se pudo exportar el diagnóstico');
 }
 
 // ── Security + audit ─────────────────────────────────────────────────

@@ -18,6 +18,7 @@
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import geoip from 'geoip-country';
+import { cpus, loadavg } from 'node:os';
 import {
   signToken, verifyToken, verifyPassword,
   findUserByUsername, findUserById, listUsers,
@@ -32,6 +33,7 @@ import { notifyAdmin, mailerStatus } from '../mailer.js';
 import { findViewerInRoom, removeViewer } from '../room-store.js';
 import { queryAnalytics, parseAnalyticsQuery, exportAnalyticsCsv, AnalyticsQueryError } from '../analytics.js';
 import { queryFeedback } from '../feedback.js';
+import { buildDiagnosticsExport } from './export.js';
 import { db, getSetting, setSetting } from '../db.js';
 
 // ── Rate limiting for login attempts (in-memory, per IP) ─────────────
@@ -156,6 +158,14 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     return reply.code(403).send({ error: `Only superadmins can ${action}` });
   };
 
+  /** Live SFU /health, or null when it cannot be reached. */
+  const fetchSfuHealth = async (): Promise<unknown> => {
+    try {
+      const res = await fetch(`${state.sfuHealthUrl}/health`, { signal: AbortSignal.timeout(2000) });
+      return res.ok ? await res.json() : null;
+    } catch { return null; /* SFU unreachable */ }
+  };
+
   // ── POST /login (no auth required) ───────────────────────────────
   app.post('/api/admin/login', {
     schema: {
@@ -246,11 +256,7 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
     }
 
     // Fetch SFU health.
-    let sfuHealth: any = null;
-    try {
-      const res = await fetch(`${state.sfuHealthUrl}/health`, { signal: AbortSignal.timeout(2000) });
-      if (res.ok) sfuHealth = await res.json();
-    } catch { /* SFU unreachable */ }
+    const sfuHealth = await fetchSfuHealth();
 
     const openErrors = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE status != 'resolved'").get() as { n: number }).n;
     const errors24h = (db.prepare("SELECT COUNT(*) as n FROM error_groups WHERE last_seen >= datetime('now', '-1 day')").get() as { n: number }).n;
@@ -643,6 +649,59 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
       },
       events,
     };
+  });
+
+  // ── GET /export — diagnostics bundle (JSON download) ───────────────
+  // Everything the panel shows about reliability in one file, untruncated
+  // (see admin/export.ts for what it contains and what it never does).
+  app.get('/api/admin/export', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          days: { type: 'integer', minimum: 0, maximum: 90, default: 30 },
+          visitors: { type: 'boolean', default: false },
+          comments: { type: 'boolean', default: false },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = (req as any).adminUser;
+    const { days, visitors, comments } = req.query as { days: number; visitors: boolean; comments: boolean };
+
+    const system = {
+      uptime_seconds: Math.round(process.uptime()),
+      memory_rss_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      node: process.version,
+      platform: `${process.platform} ${process.arch}`,
+      cpu_count: cpus().length,
+      load_average: loadavg().map((n) => Math.round(n * 100) / 100),
+      rooms: state.rooms.size,
+      socket_connections: state.io.engine.clientsCount,
+      maintenance: maintenanceMode,
+      sfu: await fetchSfuHealth(),
+      mail: mailerStatus(),
+      // Env overrides with the defaults of index.ts, so the telemetry can be
+      // read without the source at hand.
+      tuning: {
+        host_reconnect_grace_ms: Number(process.env.HOST_RECONNECT_GRACE_MS) || 30_000,
+        room_idle_ttl_ms: Number(process.env.ROOM_IDLE_TTL_MS) || 14_400_000,
+        max_connections_per_ip: Number(process.env.MAX_CONNECTIONS_PER_IP) || 8,
+        error_events_retention_days: 60,
+        connection_events_retention_days: 90,
+      },
+    };
+
+    const bundle = buildDiagnosticsExport(db, { days, includeVisitorIds: visitors, includeComments: comments }, system);
+    // A bulk export of error and telemetry data: leave a trail of what was taken.
+    auditLog(user.userId, user.username, `diagnostics_export:${days}d${visitors ? '+visitors' : ''}${comments ? '+comments' : ''}`, req.ip, lookupCountry(req.ip));
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    return reply
+      .type('application/json; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="wachaut-diagnostico-${stamp}.json"`)
+      .send(JSON.stringify(bundle, null, 2));
   });
 
   // ── Contact messages: list / mark read / delete ────────────────────
