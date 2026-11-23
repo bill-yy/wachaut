@@ -71,9 +71,22 @@ export function cleanupErrorRateLimits(nowMs: number = Date.now()): void {
 
 // ── Fingerprinting ───────────────────────────────────────────────────
 
+/**
+ * Vite names every bundled file with a content hash that changes on each
+ * deploy (`_app/immutable/nodes/1.DENzJYvz.js`). Left in, the same bug from
+ * the same line of code opened a new group per deploy: one push failure made
+ * 10 groups in the first diagnostics export (39 days). Fold the hash.
+ */
+const BUNDLED_FILE = /(_app\/immutable\/(?:[^/\s.)]+\/)*[^/\s.)]*?)\.?[A-Za-z0-9_-]{8}(?=\.svelte\.js(?![\w-])|\.js(?![\w-]))/g;
+
+/** Bundled file names with their per-deploy hash replaced (`nodes/1.<chunk>.js`). */
+export function foldBundleHash(text: string): string {
+  return text.replace(BUNDLED_FILE, '$1.<chunk>');
+}
+
 /** Normalize a message so the same bug with different data shares a group. */
 export function normalizeMessage(message: string): string {
-  return message
+  return foldBundleHash(message)
     // UUIDs (full or truncated) and long hex runs first, so their digits
     // don't survive as separate numbers.
     .replace(/\b[0-9a-f]{4,}(?:-[0-9a-f]{3,})*\b/gi, '<id>')
@@ -90,9 +103,21 @@ function normalizeStack(stack: string | undefined | null): string | null {
   return stack
     .split('\n')
     .slice(0, 6)
-    .map((line) => line.replace(/\?.*$/, '').replace(/:\d+:\d+/, ':line'))
+    .map(normalizeStackLine)
     .join('\n')
     .slice(0, 4000) || null;
+}
+
+function normalizeStackLine(line: string): string {
+  const trimmed = line.replace(/\?.*$/, '').replace(/:\d+:\d+/, ':line');
+  if (!trimmed.includes('/_app/immutable/')) return trimmed;
+  // Bundled client code: the minifier renames the function on every build
+  // (`at d (…nodes/26.CP_Os8Gb.js)`), and a new route renumbers every route
+  // chunk (nodes/24 and nodes/26 for the same page in the diagnostics
+  // export), so neither can group either.
+  return foldBundleHash(trimmed)
+    .replace(/(_app\/immutable\/nodes\/)\d+(?=\.)/, '$1<n>')
+    .replace(/^(\s*at\s+)[^(]+\(/, '$1(');
 }
 
 function fingerprintOf(source: string, component: string, message: string, stack: string | null): string {

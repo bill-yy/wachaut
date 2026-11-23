@@ -1,10 +1,20 @@
+<script module lang="ts">
+	/**
+	 * The load-time attempt runs on every visit of the room page, so a browser
+	 * whose push service is unreachable fails it each time (one host produced
+	 * 25 "Registration failed - push service error" errors in 39 days). That
+	 * is one condition, not a bug here: a warning, reported once per session.
+	 */
+	let silentFailureReported = false;
+</script>
+
 <script lang="ts">
 	/**
 	 * Host opt-in for push notifications ("a viewer joined") — shown in the
 	 * room sidebar. Hidden when unsupported. Failure messages are specific
 	 * per cause (blocked permission vs browser push-service unreachable),
 	 * auto-attempts on load are silent, and failures are reported to the
-	 * error tracker so they show up in the admin panel.
+	 * error tracker as warnings so they show up in the admin panel.
 	 */
 	import { t } from '$lib/i18n/index.svelte';
 	import type { DictKey } from '$lib/i18n/dict';
@@ -85,9 +95,16 @@
 		} catch (err) {
 			if (Notification.permission === 'denied') state = 'denied';
 			else state = 'idle';
-			// Always report (server logs + admin error panel), toast only on
-			// explicit user action — never for the silent load-time attempt.
-			captureClientError(new Error(`push opt-in failed: ${err instanceof Error ? err.message : String(err)}`));
+			// Report (server logs + admin error panel), toast only on explicit
+			// user action — never for the silent load-time attempt.
+			const report = !silent || !silentFailureReported;
+			if (silent) silentFailureReported = true;
+			if (report) {
+				captureClientError(
+					new Error(`push opt-in failed: ${err instanceof Error ? err.message : String(err)}`),
+					{ component: 'push.optIn', severity: 'warning' },
+				);
+			}
 			if (!silent) toast.error(t(failureKey(err)));
 		}
 	}

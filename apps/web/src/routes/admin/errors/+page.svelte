@@ -225,8 +225,14 @@
       <p class="mt-2 text-2xl font-bold text-[var(--brand)]">{total}</p>
     </Card>
     <Card class="p-4">
-      <p class="text-xs font-medium text-[var(--text-muted)]">Cortes de host (7d)</p>
+      <p class="text-xs font-medium text-[var(--text-muted)]">Cortes de host ({connDays}d)</p>
       <p class="mt-2 text-2xl font-bold text-[var(--brand)]">{connections?.kpis.hostDrops ?? '—'}</p>
+      <p class="mt-1 text-[0.65rem] text-[var(--text-subtle)]" title="Solo cuentan los cortes de red con espectadores mirando">
+        por red, con viewers
+      </p>
+      <p class="text-[0.65rem] text-[var(--text-subtle)]">
+        {connections?.kpis.hostCleanLeaves ?? 0} salidas limpias · {connections?.kpis.hostServerRestarts ?? 0} reinicios del server
+      </p>
     </Card>
     <Card class="p-4">
       <p class="text-xs font-medium text-[var(--text-muted)]">Hosts recuperados</p>
@@ -238,7 +244,7 @@
       {/if}
     </Card>
     <Card class="p-4">
-      <p class="text-xs font-medium text-[var(--text-muted)]">Viewers por red (7d)</p>
+      <p class="text-xs font-medium text-[var(--text-muted)]">Viewers por red ({connDays}d)</p>
       <p class="mt-2 text-2xl font-bold text-[var(--brand)]">{connections?.kpis.viewerNetworkDrops ?? '—'}</p>
       {#if connections && connections.kpis.viewerNetworkDrops > 0}
         <p class="mt-1 flex items-center gap-1 text-[0.65rem] text-[var(--text-subtle)]">

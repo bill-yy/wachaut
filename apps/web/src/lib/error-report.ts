@@ -5,6 +5,7 @@
  */
 
 import { getAnalyticsIds } from './tracker.svelte';
+import { shouldReloadForStaleChunk } from './stale-chunk';
 
 const THROTTLE_MS = 30_000;
 const MAX_PER_SESSION = 20;
@@ -78,4 +79,24 @@ export function installGlobalErrorHandlers(): void {
   window.addEventListener('unhandledrejection', (event) => {
     captureClientError(event.reason || 'unhandled rejection', { component: 'unhandledrejection' });
   });
+
+  // A chunk from the previous build: the tab was open across a deploy (see
+  // lib/stale-chunk.ts). Reported first — the request outlives the reload —
+  // and as a warning: it is worth seeing next to the deploy that caused it.
+  window.addEventListener('vite:preloadError', () => {
+    captureClientError(new Error('lazy chunk failed to load'), {
+      component: 'stale-chunk',
+      severity: 'warning',
+    });
+    if (shouldReloadForStaleChunk(safeSessionStorage())) window.location.reload();
+  });
+}
+
+/** sessionStorage, or null where the browser withholds it (blocked cookies). */
+function safeSessionStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
 }

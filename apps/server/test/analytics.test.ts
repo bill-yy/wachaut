@@ -248,6 +248,28 @@ test('exportAnalyticsCsv: sections produce CSV with headers; unknown section thr
   assert.throws(() => exportAnalyticsCsv('nope', parseAnalyticsQuery({ days: 7 })), AnalyticsQueryError);
 });
 
+// ── Connection reliability (same rule as /api/admin/connections) ─────
+
+test('queryAnalytics: a host drop is a network cut that people were watching', () => {
+  db.prepare('DELETE FROM connection_events').run();
+  const insert = db.prepare(
+    `INSERT INTO connection_events (ts, room_id, role, cause, detail, duration_ms, recovered, recovery_ms, viewers_affected)
+     VALUES (datetime('now'), 'rel-room', ?, ?, ?, 60000, ?, 2000, ?)`
+  );
+  insert.run('host', 'network', 'ping timeout', 1, 2); // the drop that mattered, recovered
+  insert.run('host', 'clean', 'client namespace disconnect', 0, 2);
+  insert.run('host', 'server', 'server shutting down', 0, 2);
+  insert.run('host', 'network', 'transport close', 0, 0); // nobody was watching
+  insert.run('viewer', 'network', 'transport error', 0, null);
+
+  const r = queryAnalytics(parseAnalyticsQuery({ days: 7 })).reliability;
+  assert.equal(r.hostDrops, 1, 'clean leaves, restarts and unwitnessed blips are not drops');
+  assert.equal(r.hostRecovered, 1);
+  assert.equal(r.recoveryRatePct, 100);
+  assert.equal(r.viewerDrops, 1);
+  assert.equal(r.viewerNetworkDrops, 1);
+});
+
 // ── Teardown ─────────────────────────────────────────────────────────
 
 test('teardown: close app and remove temp db', async () => {

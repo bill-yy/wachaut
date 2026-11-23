@@ -422,9 +422,13 @@ export function deleteErrorGroup(id: number): Promise<{ success: boolean }> {
 
 export interface AdminConnections {
   kpis: {
+    /** Network cuts of a broadcast people were watching (not leaves, restarts or unwitnessed blips). */
     hostDrops: number;
     hostRecoveredPct: number | null;
     avgRecoveryMs: number | null;
+    /** Absent on servers that predate the hostDrops definition above. */
+    hostCleanLeaves?: number;
+    hostServerRestarts?: number;
     viewerNetworkDrops: number;
     viewerCleanLeaves: number;
     viewerRecovered: number;

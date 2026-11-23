@@ -57,6 +57,18 @@ function clearLoginAttempts(ip: string): void {
   loginAttempts.delete(ip);
 }
 
+/**
+ * Give back the attempt charged to a request that turned out not to be one.
+ * Used for the first step of a 2FA login (right password, code still to
+ * come): every request is charged on arrival, before anything is known.
+ */
+function refundLoginAttempt(ip: string): void {
+  const entry = loginAttempts.get(ip);
+  if (!entry) return;
+  entry.count -= 1;
+  if (entry.count <= 0) loginAttempts.delete(ip);
+}
+
 /** Drop expired entries — called from the 5-minute sweeper in index.ts. */
 export function cleanupLoginAttempts(nowMs: number = Date.now()): void {
   for (const [ip, entry] of loginAttempts) {
@@ -209,9 +221,17 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
 
     // Second factor: TOTP code or a one-time recovery code.
     if (user.totp_enabled) {
+      if (!code) {
+        // First step of every 2FA login: the password is right and the code
+        // comes next. This is not a failed attempt. It used to be audited
+        // and mailed as one (43 false "2FA failed" entries in the first five
+        // weeks) and it spent a rate-limit attempt, so three logins inside
+        // ten minutes locked the owner out as a "brute force".
+        refundLoginAttempt(ip);
+        return reply.code(401).send({ error: '2FA code required', totpRequired: true });
+      }
       const secret = user.totp_secret;
-      const codeOk = (code && secret && verifyTotp(secret, code))
-        || (code && consumeRecoveryCode(user.id, code));
+      const codeOk = (secret && verifyTotp(secret, code)) || consumeRecoveryCode(user.id, code);
       if (!codeOk) {
         auditLog(user.id, user.username, 'login_totp_failed', ip, country);
         notifyAdmin('security', `Código 2FA incorrecto: ${user.username}`, [
@@ -612,9 +632,21 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
   }, async (req: FastifyRequest) => {
     const { days } = req.query as { days: number };
 
+    // A host drop that mattered: the network cut a broadcast people were
+    // watching. Clean leaves and server restarts are not drops, and a cut
+    // with nobody watching is not one either. Counting every host
+    // disconnect (159 in the first diagnostics export: 50 clean leaves,
+    // 36 server restarts, 73 network cuts) put a "25 % recovered" on the
+    // panel for what was mostly the host closing the tab; 7 of them are
+    // drops by this rule.
     const hostDrops = db.prepare(
-      "SELECT COUNT(*) as n, SUM(recovered) as recovered, AVG(recovery_ms) as avg_recovery FROM connection_events WHERE role = 'host' AND ts >= datetime('now', ?)"
+      "SELECT COUNT(*) as n, SUM(recovered) as recovered, AVG(recovery_ms) as avg_recovery FROM connection_events WHERE role = 'host' AND cause = 'network' AND viewers_affected > 0 AND ts >= datetime('now', ?)"
     ).get(`-${days} days`) as { n: number; recovered: number | null; avg_recovery: number | null };
+    const hostCauses = db.prepare(
+      "SELECT cause, COUNT(*) as n FROM connection_events WHERE role = 'host' AND ts >= datetime('now', ?) GROUP BY cause"
+    ).all(`-${days} days`) as { cause: string; n: number }[];
+    const hostCauseMap: Record<string, number> = { network: 0, clean: 0, server: 0 };
+    for (const row of hostCauses) hostCauseMap[row.cause] = row.n;
 
     const viewerDrops = db.prepare(
       "SELECT cause, COUNT(*) as n FROM connection_events WHERE role = 'viewer' AND ts >= datetime('now', ?) GROUP BY cause"
@@ -646,6 +678,9 @@ export function registerAdminRoutes(app: FastifyInstance, state: ServerState) {
         hostDrops: hostDrops.n || 0,
         hostRecoveredPct: hostDrops.n ? Math.round(((hostDrops.recovered || 0) / hostDrops.n) * 100) : null,
         avgRecoveryMs: hostDrops.avg_recovery != null ? Math.round(hostDrops.avg_recovery) : null,
+        // Every other host disconnect in range, by cause.
+        hostCleanLeaves: hostCauseMap.clean,
+        hostServerRestarts: hostCauseMap.server,
         viewerNetworkDrops: causeMap.network || 0,
         viewerCleanLeaves: causeMap.clean || 0,
         viewerRecovered,

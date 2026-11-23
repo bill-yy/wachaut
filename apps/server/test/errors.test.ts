@@ -17,7 +17,7 @@ const routesModule = await import('../src/admin/routes.ts');
 const { registerAdminRoutes } = routesModule;
 const { mapDisconnectReason, recordDisconnect, recordHostRecovery } = await import('../src/connection-telemetry.ts');
 const { db } = await import('../src/db.ts');
-const { normalizeMessage } = await import('../src/errors.ts');
+const { normalizeMessage, foldBundleHash } = await import('../src/errors.ts');
 const Fastify = (await import('fastify')).default;
 
 const { test } = await import('node:test');
@@ -108,6 +108,52 @@ test('normalizeMessage strips volatile data', () => {
   const a = normalizeMessage('User 47 not found in room 51f2a2bd-1a4b-434e');
   const b = normalizeMessage('User 993 not found in room 0f9e8d7c-6b5a-4321');
   assert.equal(a, b);
+});
+
+test('normalizeMessage folds the per-deploy chunk hash, and nothing else', () => {
+  const chunk = (hash: string) => `Failed to fetch dynamically imported module: https://wachaut.com/_app/immutable/nodes/1.${hash}.js`;
+  assert.equal(normalizeMessage(chunk('CxZpTux8')), normalizeMessage(chunk('DENzJYvz')));
+  // Anonymous chunks, named chunks, Svelte chunks.
+  const frame = (file: string) => `at d (https://wachaut.com/_app/immutable/${file}:1:2)`;
+  assert.equal(foldBundleHash(frame('chunks/BX0W-0dz.js')), 'at d (https://wachaut.com/_app/immutable/chunks/.<chunk>.js:1:2)');
+  assert.equal(foldBundleHash(frame('chunks/index.BxX9r7h0.js')), 'at d (https://wachaut.com/_app/immutable/chunks/index.<chunk>.js:1:2)');
+  assert.equal(foldBundleHash(frame('chunks/PushOptIn.DF4R2TVy.svelte.js')), 'at d (https://wachaut.com/_app/immutable/chunks/PushOptIn.<chunk>.svelte.js:1:2)');
+  // Server paths, query strings and names without a hash are left alone.
+  const plain = 'cannot read /app/apps/server/src/worker.js?x=1 in _app/immutable.js';
+  assert.equal(foldBundleHash(plain), plain);
+});
+
+test('grouping: a deploy does not split one bug into one group per build', () => {
+  db.prepare('DELETE FROM error_groups').run();
+  db.prepare('DELETE FROM error_events').run();
+  // The same line of the same component after two deploys: Vite renamed the
+  // chunk and the minifier the function (first diagnostics export: 10 groups
+  // for one push failure).
+  const report = (frame: string) => {
+    const err = new Error('push opt-in failed: Registration failed - push service error');
+    err.stack = `Error: push opt-in failed: Registration failed - push service error\n${frame}\n    at async t (https://wachaut.com/_app/immutable/chunks/BX0W-0dz.js:1:5)`;
+    captureError(err, { source: 'web', component: 'push.optIn', severity: 'warning' });
+  };
+  report('    at d (https://wachaut.com/_app/immutable/nodes/26.CP_Os8Gb.js:1:234)');
+  report('    at xQ.<anonymous> (https://wachaut.com/_app/immutable/nodes/27.aB3-dEfG.js:1:98)');
+
+  const groups = db.prepare("SELECT * FROM error_groups WHERE component = 'push.optIn'").all() as any[];
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].count, 2);
+  assert.equal(groups[0].severity, 'warning');
+  assert.equal(
+    groups[0].sample_stack,
+    'Error: push opt-in failed: Registration failed - push service error\n' +
+      '    at (https://wachaut.com/_app/immutable/nodes/<n>.<chunk>.js:line)\n' +
+      '    at (https://wachaut.com/_app/immutable/chunks/.<chunk>.js:line)',
+  );
+
+  // Frames that are not bundled code keep their function name: it is stable.
+  const native = new Error('worker died');
+  native.stack = 'Error: worker died\n    at recordRoomEvent (/app/apps/server/src/index.ts:120:15)';
+  captureError(native, { source: 'server', component: 'worker.native' });
+  const kept = db.prepare("SELECT sample_stack FROM error_groups WHERE component = 'worker.native'").get() as any;
+  assert.equal(kept.sample_stack, 'Error: worker died\n    at recordRoomEvent (/app/apps/server/src/index.ts:line)');
 });
 
 test('server-side captureError dedups into the same store and reopens resolved groups', () => {
@@ -221,15 +267,23 @@ test('admin: connections endpoint returns KPIs and events', async () => {
   recordDisconnect({ roomId: 'kpi-room', role: 'host', reason: 'ping timeout', durationMs: 60_000, viewersAffected: 2 });
   recordHostRecovery('kpi-room');
   recordDisconnect({ roomId: 'kpi-room', role: 'viewer', reason: 'transport error', durationMs: 10_000 });
+  // Not drops: the host leaving on purpose, a server restart, and a network
+  // blip nobody was watching (prod, first five weeks: 140 of the 159 host
+  // disconnects had no viewers at all).
+  recordDisconnect({ roomId: 'kpi-room', role: 'host', reason: 'client namespace disconnect', durationMs: 70_000, viewersAffected: 2 });
+  recordDisconnect({ roomId: 'kpi-room', role: 'host', reason: 'server shutting down', durationMs: 80_000, viewersAffected: 2 });
+  recordDisconnect({ roomId: 'kpi-alone', role: 'host', reason: 'transport close', durationMs: 5_000 });
 
   const auth = { authorization: `Bearer ${token}` };
   const res = await app.inject({ method: 'GET', url: '/api/admin/connections?days=7', headers: auth });
   assert.equal(res.statusCode, 200);
   const body = res.json();
-  assert.ok(body.kpis.hostDrops >= 1);
+  assert.equal(body.kpis.hostDrops, 1, 'only the network drop with viewers counts as a host drop');
   assert.equal(body.kpis.hostRecoveredPct, 100);
+  assert.ok(body.kpis.hostCleanLeaves >= 1, 'clean leaves are reported on their own');
+  assert.ok(body.kpis.hostServerRestarts >= 1, 'server restarts are reported on their own');
   assert.ok(body.kpis.viewerNetworkDrops >= 1);
-  assert.ok(Array.isArray(body.events) && body.events.length >= 2);
+  assert.ok(Array.isArray(body.events) && body.events.length >= 5, 'every event is still listed');
 });
 
 // ── Rate limiting (LAST — locks the shared test IP) ─────────────────

@@ -442,12 +442,14 @@ export function queryAnalytics(daysOrQuery: number | AnalyticsQuery): any {
     WHERE ${roomEventWhere(q, joinsParams, "event_type = 'viewer_joined'")} LIMIT 1
   `).get(...joinsParams) as { joins: number; roomsWithViewers: number } | undefined;
 
-  // Connection reliability in range (from disconnect telemetry).
+  // Connection reliability in range (from disconnect telemetry). A host
+  // drop is one that mattered: the network cut a broadcast people were
+  // watching — the same rule as /api/admin/connections.
   const relParams: unknown[] = [];
   const rel = db.prepare(`
     SELECT
-      SUM(CASE WHEN role = 'host' THEN 1 ELSE 0 END) as hostDrops,
-      SUM(CASE WHEN role = 'host' AND recovered = 1 THEN 1 ELSE 0 END) as hostRecovered,
+      SUM(CASE WHEN role = 'host' AND cause = 'network' AND viewers_affected > 0 THEN 1 ELSE 0 END) as hostDrops,
+      SUM(CASE WHEN role = 'host' AND cause = 'network' AND viewers_affected > 0 AND recovered = 1 THEN 1 ELSE 0 END) as hostRecovered,
       AVG(CASE WHEN role = 'host' AND recovered = 1 THEN recovery_ms END) as avgRecoveryMs,
       SUM(CASE WHEN role = 'viewer' THEN 1 ELSE 0 END) as viewerDrops,
       SUM(CASE WHEN role = 'viewer' AND cause = 'network' THEN 1 ELSE 0 END) as viewerNetworkDrops,

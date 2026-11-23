@@ -377,6 +377,43 @@ test('full 2FA lifecycle: setup → enable → code required at login → recove
   assert.equal(plain.statusCode, 200, 'login works without a code after disabling');
 });
 
+test('2FA login: asking for the code is not a failed attempt', async () => {
+  const countAudit = (action: string) =>
+    (db.prepare('SELECT COUNT(*) as n FROM admin_audit_log WHERE action = ?').get(action) as { n: number }).n;
+
+  // Prod audit, first five weeks: 43 "login_totp_failed" entries, exactly
+  // one before every successful login — the code prompt itself, logged as
+  // a failed 2FA (and mailed as one).
+  createUser('twofastep', PW_TOTP, 'admin');
+  const first = await login('twofastep', PW_TOTP);
+  const setup = await app.inject({ method: 'POST', url: '/api/admin/totp/setup', headers: authed(first.token!) });
+  const enable = await app.inject({
+    method: 'POST', url: '/api/admin/totp/enable',
+    headers: authed(first.token!), payload: { code: totpCode(setup.json().secret) },
+  });
+  assert.equal(enable.statusCode, 200);
+
+  const failedBefore = countAudit('login_totp_failed');
+
+  // Four password-only requests: each is just the first step of a login.
+  for (let i = 0; i < 4; i++) {
+    const res = await login('twofastep', PW_TOTP);
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.totpRequired, true);
+  }
+  assert.equal(countAudit('login_totp_failed'), failedBefore, 'the code prompt is not audited as a failed 2FA');
+
+  // A wrong code still is — and still spends a rate-limit attempt.
+  const wrong = await login('twofastep', PW_TOTP, '000000');
+  assert.equal(wrong.statusCode, 401);
+  assert.equal(countAudit('login_totp_failed'), failedBefore + 1, 'a wrong code is audited');
+
+  // Under the old accounting the five requests above were five charged
+  // attempts, and this sixth one came back as a 429.
+  const ok = await login('twofastep', PW_TOTP, totpCode(setup.json().secret));
+  assert.equal(ok.statusCode, 200, 'code prompts must not count towards the lockout');
+});
+
 // ── Audit + stats ────────────────────────────────────────────────────
 
 test('audit endpoint paginates and filters by action', async () => {

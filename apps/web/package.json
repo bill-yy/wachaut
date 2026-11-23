@@ -12,7 +12,7 @@
     "lint": "prettier --check . && eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import ./test/register-fakes.mjs --import tsx --test test/*.test.ts"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "5.5.4",

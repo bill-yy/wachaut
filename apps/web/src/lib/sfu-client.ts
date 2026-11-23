@@ -138,6 +138,75 @@ export class SfuClient {
       this.#joinParams = { roomId, pin, displayName, role };
       let firstJoin = true;
       let rejoinAttempt = 0;
+      /** One report per outage: socket.io retries every few seconds while the SFU is down. */
+      let connectErrorReported = false;
+
+      // The success half of the join answer. It awaits (the mediasoup bundle
+      // loads on first use), so the page can disconnect the client meanwhile
+      // — the room closed, the viewer left. From there on there is no socket
+      // and nobody waiting: every step re-checks instead of building on null.
+      const applyJoin = async (response: any) => {
+        if (!this.#socket) return;
+        rejoinAttempt = 0;
+
+        // A new room means a new secret (e.g. the previous one expired
+        // during a long outage): let the page persist the current one.
+        if (response.hostSecret) {
+          this.#hostSecret = response.hostSecret;
+          this.#emit("host-secret", this.#hostSecret);
+        }
+        this.#rtpCapabilities = response.rtpCapabilities;
+        // Video mode negotiated per deployment (SFU_VIDEO_MODE): the
+        // produce() call below shapes its encodings accordingly.
+        this.#videoMode = response.videoMode || "vp8-single";
+
+        // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
+        if (
+          Array.isArray(response.iceServers) &&
+          response.iceServers.length > 0
+        ) {
+          // Replace (don't accumulate) TURN entries on reconnect to avoid
+          // duplicates; keep STUN entries.
+          const stun = this.#iceServers.filter((s) => !s.username);
+          this.#iceServers = [...stun, ...response.iceServers];
+          devlog(
+            "[sfu] TURN credentials received via join-room:",
+            response.iceServers.length,
+            "server(s)",
+          );
+          // Start periodic refresh so creds never expire mid-broadcast.
+          this.#startTurnRefresh();
+        }
+
+        const device = await this.#ensureDevice();
+        if (!device.loaded) {
+          await device.load({
+            routerRtpCapabilities: response.rtpCapabilities,
+          });
+        }
+        if (!this.#socket) return;
+
+        // Send our RTP capabilities to the SFU for proper codec negotiation.
+        const peerCaps = device.rtpCapabilities;
+        this.#socket.emit("rtp-capabilities", {
+          rtpCapabilities: peerCaps,
+        });
+
+        if (firstJoin) {
+          devlog(
+            "[sfu] device loaded, existing producers:",
+            response.existingProducers?.length || 0,
+          );
+          this.#emit("connected");
+          firstJoin = false;
+          resolve(response);
+        } else {
+          // Reconnect: tell the host page so it can re-produce if its
+          // producers were closed during the outage.
+          devlog("[sfu] re-join completed");
+          this.#emit("reconnected", response);
+        }
+      };
 
       const sendJoin = () => {
         if (!this.#socket || !this.#joinParams) return;
@@ -148,7 +217,7 @@ export class SfuClient {
           // socket's owner created the room — required to reclaim the host
           // slot on reconnect. Viewers never have one.
           { roomId, pin, displayName, role, hostSecret: this.#hostSecret || undefined },
-          async (response: any) => {
+          (response: any) => {
             if (response.error) {
               if (firstJoin) {
                 reject(new Error(response.error));
@@ -177,64 +246,13 @@ export class SfuClient {
               this.#emit("error", `Re-join failed: ${response.error}`);
               return;
             }
-            rejoinAttempt = 0;
-
-            // A new room means a new secret (e.g. the previous one expired
-            // during a long outage): let the page persist the current one.
-            if (response.hostSecret) {
-              this.#hostSecret = response.hostSecret;
-              this.#emit("host-secret", this.#hostSecret);
-            }
-            this.#rtpCapabilities = response.rtpCapabilities;
-            // Video mode negotiated per deployment (SFU_VIDEO_MODE): the
-            // produce() call below shapes its encodings accordingly.
-            this.#videoMode = response.videoMode || "vp8-single";
-
-            // Read TURN/STUN credentials delivered via Socket.IO (no HTTP endpoint).
-            if (
-              Array.isArray(response.iceServers) &&
-              response.iceServers.length > 0
-            ) {
-              // Replace (don't accumulate) TURN entries on reconnect to avoid
-              // duplicates; keep STUN entries.
-              const stun = this.#iceServers.filter((s) => !s.username);
-              this.#iceServers = [...stun, ...response.iceServers];
-              devlog(
-                "[sfu] TURN credentials received via join-room:",
-                response.iceServers.length,
-                "server(s)",
-              );
-              // Start periodic refresh so creds never expire mid-broadcast.
-              this.#startTurnRefresh();
-            }
-
-            const device = await this.#ensureDevice();
-            if (!device.loaded) {
-              await device.load({
-                routerRtpCapabilities: response.rtpCapabilities,
-              });
-            }
-
-            // Send our RTP capabilities to the SFU for proper codec negotiation.
-            const peerCaps = device.rtpCapabilities;
-            this.#socket!.emit("rtp-capabilities", {
-              rtpCapabilities: peerCaps,
+            // An ack callback runs outside any await chain: a throw in there
+            // surfaced as an unhandled rejection and left the join pending
+            // forever (spinner, no error). Route it to the join instead.
+            applyJoin(response).catch((err) => {
+              if (firstJoin) reject(err instanceof Error ? err : new Error(String(err)));
+              else this.#report(err, "join");
             });
-
-            if (firstJoin) {
-              devlog(
-                "[sfu] device loaded, existing producers:",
-                response.existingProducers?.length || 0,
-              );
-              this.#emit("connected");
-              firstJoin = false;
-              resolve(response);
-            } else {
-              // Reconnect: tell the host page so it can re-produce if its
-              // producers were closed during the outage.
-              devlog("[sfu] re-join completed");
-              this.#emit("reconnected", response);
-            }
           },
         );
       };
@@ -247,6 +265,7 @@ export class SfuClient {
           this.#rejoinTimer = null;
         }
         rejoinAttempt = 0;
+        connectErrorReported = false;
         sendJoin();
       });
 
@@ -276,10 +295,18 @@ export class SfuClient {
 
       this.#socket.on("connect_error", (err) => {
         console.error("[sfu] socket error:", err);
-        this.#report(err, "socket-connect");
-        // Only reject the initial join promise; on later reconnect attempts
-        // socket.io will keep retrying and emit `connect` again.
-        if (firstJoin) reject(err);
+        // A failed initial join is reported by the page (host.joinSfu /
+        // viewer.connectSfu) with room context — reporting here too only
+        // duplicated it. Later ones mean the SFU went away under a live
+        // session (a deploy restarts it): one warning per outage, not one
+        // per retry — these were 95 of the 153 errors in the diagnostics
+        // export.
+        if (firstJoin) {
+          reject(err);
+        } else if (!connectErrorReported) {
+          connectErrorReported = true;
+          this.#report(err, "socket-connect", "warning");
+        }
       });
     });
   }
@@ -295,6 +322,9 @@ export class SfuClient {
       await device.load({ routerRtpCapabilities: this.#rtpCapabilities });
     }
     if (!device.loaded) throw new Error("Device not loaded");
+    // The page disconnected the client while the bundle loaded: the share was
+    // abandoned, and a transport created now would never be closed.
+    if (!this.#socket) return;
 
     // A previous produce() on this client (the host re-produced after an SFU
     // reconnect) leaves its transport behind: close it rather than leaking
@@ -303,6 +333,8 @@ export class SfuClient {
     this.#sendTransport = null;
 
     const transportParams = await this.#createTransport("prod");
+    // Same across the round trip.
+    if (!transportParams || !this.#socket) return;
     this.#sendTransport = device.createSendTransport({
       id: transportParams.id,
       iceParameters: transportParams.iceParameters,
@@ -646,22 +678,37 @@ export class SfuClient {
 
     this.#stream = new MediaStream();
 
+    // The page disconnected the client while the bundle loaded (the room
+    // closed as this viewer joined): nothing left to receive into — an empty
+    // stream keeps the contract (disconnect() also dropped the one above).
+    const socket = this.#socket;
+    if (!socket) return new MediaStream();
+
     // Register new-consumer listener BEFORE creating transport
-    this.#socket!.on("new-consumer", async (data: any) => {
+    socket.on("new-consumer", async (data: any) => {
       devlog("[sfu] new-consumer received:", data.kind, data.consumerId);
-      if (this.#recvTransport) {
-        const consumer = await this.#handleNewConsumer(data);
-        if (consumer && this.#stream) {
-          this.#stream.addTrack(consumer.track);
-          this.#emit("stream-ready", this.#stream);
+      // A socket handler runs outside any await chain: a throw in there
+      // surfaced as an unhandled rejection and the track simply never came.
+      try {
+        if (this.#recvTransport) {
+          const consumer = await this.#handleNewConsumer(data);
+          if (consumer && this.#stream) {
+            this.#stream.addTrack(consumer.track);
+            this.#emit("stream-ready", this.#stream);
+          }
+        } else {
+          this.#pendingConsumers.push(data);
         }
-      } else {
-        this.#pendingConsumers.push(data);
+      } catch (err) {
+        this.#report(err, "consume");
       }
     });
 
     // Create receive transport
     const transportParams = await this.#createTransport("cons");
+    // Disconnected across the round trip: a transport created now would never
+    // be closed (disconnect() already ran).
+    if (!transportParams || !this.#socket) return new MediaStream();
     this.#recvTransport = device.createRecvTransport({
       id: transportParams.id,
       iceParameters: transportParams.iceParameters,
@@ -721,7 +768,10 @@ export class SfuClient {
   }
 
   async #handleNewConsumer(data: any): Promise<any> {
-    if (!this.#recvTransport) return null;
+    // No socket: the page disconnected the client while the transport was
+    // being created — the resume below used to throw on it.
+    const socket = this.#socket;
+    if (!this.#recvTransport || !socket) return null;
 
     devlog("[sfu] Creating consumer for", data.kind, "id:", data.consumerId);
 
@@ -731,6 +781,12 @@ export class SfuClient {
       kind: data.kind,
       rtpParameters: data.rtpParameters,
     });
+    // Disconnected meanwhile: the page's disconnect() closed the transport and
+    // with it this consumer — don't put the dead one back on the map.
+    if (this.#socket !== socket) {
+      consumer.close();
+      return null;
+    }
 
     this.#consumers.set(consumer.id, consumer);
     // The viewer's quality selector targets the video consumer's layers.
@@ -772,7 +828,7 @@ export class SfuClient {
 
     // Resume consumer — use callback to wait for server confirmation
     await new Promise<void>((resolve) => {
-      this.#socket!.emit(
+      socket.emit(
         "resume-consumer",
         { consumerId: consumer.id },
         (res: any) => {
@@ -792,9 +848,16 @@ export class SfuClient {
     return consumer;
   }
 
+  /**
+   * Ask the SFU for a transport. Resolves null when the page disconnected the
+   * client before or while the SFU answered — the socket is gone by then, so
+   * the caller must not build a transport on it.
+   */
   async #createTransport(direction: "prod" | "cons"): Promise<any> {
+    const socket = this.#socket;
+    if (!socket) return null;
     return new Promise((resolve, reject) => {
-      this.#socket!.emit("create-transport", { direction }, (res: any) => {
+      socket.emit("create-transport", { direction }, (res: any) => {
         if (res?.error) {
           console.error("[sfu] create-transport error:", res.error);
           this.#report(new Error(String(res.error)), `create-transport-${direction}`);
@@ -806,7 +869,7 @@ export class SfuClient {
             "iceCandidates:",
             res.iceCandidates?.length || 0,
           );
-          resolve(res);
+          resolve(this.#socket ? res : null);
         }
       });
     });

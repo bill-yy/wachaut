@@ -812,8 +812,14 @@
       isMuted = false;
       // Report with the error name in the component so permission denials
       // (browser-level, expected sometimes) group separately from real
-      // capture failures (bugs).
-      captureClientError(e, { component: `host.startSharing.${e?.name || 'unknown'}`, roomId });
+      // capture failures (bugs) — and as a warning: the host closed the
+      // picker or the OS withheld capture; nothing here is broken. All nine
+      // NotAllowedErrors in the diagnostics export were plain dismissals.
+      captureClientError(e, {
+        component: `host.startSharing.${e?.name || 'unknown'}`,
+        roomId,
+        severity: e?.name === 'NotAllowedError' ? 'warning' : 'error',
+      });
       if (e?.name === 'NotAllowedError') {
         toast.error(t('room.permissionDenied'));
       } else {
@@ -896,11 +902,19 @@
   function toggleFullscreen() {
     if (!videoContainer) return;
     if (document.fullscreenElement) {
-      document.exitFullscreen();
+      document.exitFullscreen().catch(() => {});
       isFullscreen = false;
-    } else {
-      videoContainer.requestFullscreen();
+      return;
+    }
+    // Browsers without the Fullscreen API on elements (iOS Safari, Firefox
+    // on iOS): the native video fullscreen is the only path. Calling the
+    // missing function used to throw.
+    if (typeof videoContainer.requestFullscreen === 'function') {
+      videoContainer.requestFullscreen().catch(() => {});
       isFullscreen = true;
+    } else {
+      (videoPreview as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)
+        ?.webkitEnterFullscreen?.();
     }
   }
 

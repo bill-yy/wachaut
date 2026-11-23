@@ -62,7 +62,13 @@
     return `${PAD.left},${base} ${pointsFor(key)} ${x(data.length - 1)},${base}`;
   }
 
-  const gridLines = $derived([0.25, 0.5, 0.75, 1].map((f) => Math.round(maxValue * f)));
+  // Distinct values only: with a small maximum the rounding makes the lines
+  // collide ([1, 2, 2, 3] for a max of 3) and Svelte throws each_key_duplicate,
+  // which took the whole Analítica page down whenever a selected metric
+  // peaked at 3 or less.
+  const gridLines = $derived(
+    [...new Set([0.25, 0.5, 0.75, 1].map((f) => Math.round(maxValue * f)))].sort((a, b) => a - b)
+  );
 
   // X tick labels: at most ~6, evenly spaced.
   const tickIdx = $derived(
@@ -110,7 +116,7 @@
     </defs>
 
     <!-- horizontal grid -->
-    {#each gridLines as v (v)}
+    {#each gridLines as v, gi (gi)}
       <line x1={PAD.left} x2={W - PAD.right} y1={y(v)} y2={y(v)} stroke="var(--border)" stroke-width="1" />
       <text x={PAD.left - 6} y={y(v) + 4} text-anchor="end" font-size="12" fill="var(--text-subtle)">
         {v >= 10000 ? `${Math.round(v / 1000)}k` : v}
@@ -118,7 +124,7 @@
     {/each}
 
     <!-- x tick labels -->
-    {#each tickIdx as i (i)}
+    {#each tickIdx as i, k (k)}
       {#if data[i]}
         <text x={x(i)} y={H - 8} text-anchor="middle" font-size="12" fill="var(--text-subtle)">
           {label(String(data[i].bucket))}

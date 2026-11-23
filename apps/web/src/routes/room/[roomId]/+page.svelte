@@ -572,15 +572,22 @@
 
 	function toggleFullscreen() {
 		if (!videoContainer) return;
-		if (!document.fullscreenElement) {
-			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(() => {
-				// iOS Safari rejects element fullscreen: fall back to the
-				// native video fullscreen (the primary landscape path there).
-				const v = videoEl as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-				v?.webkitEnterFullscreen?.();
-			});
-		} else {
+		if (document.fullscreenElement) {
 			document.exitFullscreen().then(() => { isFullscreen = false; }).catch(() => {});
+			return;
+		}
+		// iOS Safari and Firefox on iOS have no Fullscreen API on elements:
+		// the native video fullscreen is the only path there (and the
+		// landscape one). Calling the missing function used to throw
+		// "requestFullscreen is not a function" (prod error panel).
+		const enterVideoFullscreen = () => {
+			const v = videoEl as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+			v?.webkitEnterFullscreen?.();
+		};
+		if (typeof videoContainer.requestFullscreen === 'function') {
+			videoContainer.requestFullscreen().then(() => { isFullscreen = true; }).catch(enterVideoFullscreen);
+		} else {
+			enterVideoFullscreen();
 		}
 	}
 
