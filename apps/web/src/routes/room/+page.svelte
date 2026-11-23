@@ -189,11 +189,24 @@
   // Set while WE close the room (leave / unload), so the server's
   // room:closed echo doesn't run the "closed by an admin" path.
   let closingRoom = false;
-  /** Tell the server the broadcast is over while the socket can still send. */
+  // How long to wait for the server to confirm the close before dropping
+  // the socket anyway (servers that do not confirm yet are covered by it).
+  const CLOSE_ROOM_ACK_MS = 2000;
+  /**
+   * Close the room on the server and drop the signaling socket only once the
+   * server has processed it. Frames written right before a WebSocket close()
+   * can be lost: on the test environment the close notice never arrived and
+   * viewers waited out the 30s grace timer instead of being told at once.
+   */
   function closeRoomFromServer() {
     if (!socket) return;
     closingRoom = true;
-    if (socket.connected) socket.emit('host:close-room', { roomId });
+    const signaling = socket;
+    if (signaling.connected) {
+      signaling.timeout(CLOSE_ROOM_ACK_MS).emit('host:close-room', { roomId }, () => signaling.disconnect());
+    } else {
+      signaling.disconnect();
+    }
   }
   function cleanup() {
     if (cleanedUp) return;
@@ -209,7 +222,6 @@
       sfuClient = null;
     }
     closeRoomFromServer();
-    if (socket) socket.disconnect();
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -959,10 +971,10 @@
   function leaveRoom() {
     stopSharing();
     clearHostSession();
-    // Say goodbye while the socket can still send: viewers are told at once
-    // instead of waiting out the 30s host-reconnect grace.
+    // Say goodbye while the socket is up: viewers are told at once instead of
+    // waiting out the 30s host-reconnect grace. The socket itself is dropped
+    // once the server confirms (see closeRoomFromServer).
     closeRoomFromServer();
-    if (socket) socket.disconnect();
     if (roomId && !hasRated(roomId)) {
       showRating = true; // finishLeave() runs on submit/skip
       return;

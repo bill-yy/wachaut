@@ -514,7 +514,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  onSafe(socket, 'host:close-room', ({ roomId }: { roomId: string }) => {
+  onSafe(socket, 'host:close-room', ({ roomId }: { roomId: string }, callback?: (result: { closed: boolean }) => void) => {
     const room = rooms.get(roomId);
     if (room && room.hostId === socket.id) {
       if (room.hostDisconnectTimer) {
@@ -530,7 +530,10 @@ io.on('connection', (socket) => {
       for (const [viewerId] of room.viewers) {
         viewerToRoom.delete(viewerId);
       }
+      callback?.({ closed: true });
+      return;
     }
+    callback?.({ closed: false });
   });
 
   onSafe(socket, 'host:mute', ({ roomId }: { roomId: string }) => {

@@ -296,6 +296,12 @@ export class SfuClient {
     }
     if (!device.loaded) throw new Error("Device not loaded");
 
+    // A previous produce() on this client (the host re-produced after an SFU
+    // reconnect) leaves its transport behind: close it rather than leaking
+    // a live peer connection per reconnect.
+    this.#sendTransport?.close();
+    this.#sendTransport = null;
+
     const transportParams = await this.#createTransport("prod");
     this.#sendTransport = device.createSendTransport({
       id: transportParams.id,
@@ -444,6 +450,11 @@ export class SfuClient {
       try {
         this.#producer = await this.#sendTransport.produce({
           track: videoTrack,
+          // The page owns the capture tracks (it stops them in stopSharing).
+          // By default closing a producer ends its track, so the re-produce
+          // after a reconnect — which closes the old producers and reuses the
+          // same screen — always failed with "track ended".
+          stopTracks: false,
           appData: { mediaTag: "screen-video" },
           ...(encodings ? { encodings } : {}),
           ...(codec ? { codec } : {}),
@@ -467,6 +478,7 @@ export class SfuClient {
         );
         this.#producer = await this.#sendTransport.produce({
           track: videoTrack,
+          stopTracks: false,
           appData: { mediaTag: "screen-video" },
           codec: this.#findCodec("video/VP8"),
           codecOptions: {
@@ -504,6 +516,7 @@ export class SfuClient {
     if (audioTrack) {
       this.#audioProducer = await this.#sendTransport.produce({
         track: audioTrack,
+        stopTracks: false,
         appData: { mediaTag: "screen-audio" },
         // Tab audio is stereo content: enable stereo + DTX (matches the
         // router-level Opus parameters).
